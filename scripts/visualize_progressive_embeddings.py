@@ -2,6 +2,7 @@ import argparse
 import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
+import math
 
 import numpy as np
 import torch
@@ -97,6 +98,26 @@ def plot_correlation(x: np.ndarray, y: np.ndarray, xlabel: str, ylabel: str, tit
     plt.close()
 
 
+def plot_norms_over_stages(
+    labels: List[str], mean_vals: List[float], max_vals: List[float], ylabel: str, title: str, outfile: str
+):
+    if len(mean_vals) == 0:
+        return
+    plt.figure(figsize=(max(6, 0.6 * len(labels)), 4))
+    x = np.arange(len(labels))
+    plt.plot(x, mean_vals, marker="o", label="mean")
+    if len(max_vals) == len(mean_vals):
+        plt.plot(x, max_vals, marker="s", label="max")
+    plt.xticks(x, labels, rotation=0)
+    plt.xlabel("stages")
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(outfile, dpi=150)
+    plt.close()
+
+
 def estimate_token_perplexity(logits: torch.Tensor, labels: torch.Tensor, mask: torch.Tensor) -> float:
     # logits: [B, T, V], labels: [B, T], mask: [B, T]
     log_probs = torch.log_softmax(logits[:, :-1, :], dim=-1)
@@ -108,6 +129,40 @@ def estimate_token_perplexity(logits: torch.Tensor, labels: torch.Tensor, mask: 
         return float("nan")
     ppl = torch.exp(nll.mean()).item()
     return float(ppl)
+
+
+def compute_ppl_for_text(model: AutoModelForCausalLM, tok: AutoTokenizer, device: torch.device, text: str) -> Tuple[int, float]:
+    with torch.no_grad():
+        enc = tok(text, truncation=True, padding=False, return_tensors="pt")
+        input_ids = enc["input_ids"].to(device)
+        attn = enc["attention_mask"].to(device)
+        out = model(input_ids=input_ids, attention_mask=attn)
+        ppl = estimate_token_perplexity(out.logits, input_ids, attn)
+        seq_len = int(attn.sum().item())
+    return seq_len, ppl
+
+
+def compute_distance_metrics(X: np.ndarray) -> float:
+    # Returns (initial_final_l2, trajectory_length_l2)
+    if X.shape[0] < 2:
+        return 0.0, 0.0
+    init_final = float(np.linalg.norm(X[-1] - X[0]))
+    diffs = X[1:, :] - X[:-1, :]
+    traj_len = float(np.linalg.norm(diffs, axis=1).sum())
+    return init_final, traj_len
+
+
+def compute_token_norm_stats_from_row(row: Dict[str, Any]) -> Tuple[np.ndarray, np.ndarray]:
+    # Returns (l1_per_token, l2_per_token) across all tokens in the embedding
+    # Accepts embeddings of shape [..., hidden_dim]; flattens leading dims to tokens
+    emb = torch.tensor(row["embedding"], dtype=torch.float32)
+    if emb.ndim == 1:
+        emb = emb.unsqueeze(0)
+    hidden_dim = emb.shape[-1]
+    emb2d = emb.reshape(-1, hidden_dim)
+    l2 = torch.linalg.norm(emb2d, ord=2, dim=-1).detach().cpu().numpy()
+    l1 = torch.linalg.norm(emb2d, ord=1, dim=-1).detach().cpu().numpy()
+    return l1, l2
 
 
 def maybe_compute_perplexity(
@@ -184,6 +239,37 @@ def main():
     summary_conv: List[float] = []
     summary_seq_len: List[int] = []
 
+    # Prepare optional perplexity model once
+    model_for_ppl: Optional[str] = args.perplexity_model
+    if model_for_ppl is None:
+        names = [str(r.get("model_checkpoint", "")).strip() for r in rows]
+        names = [n for n in names if n]
+        if names:
+            uniq = {}
+            for n in names:
+                uniq[n] = uniq.get(n, 0) + 1
+            model_for_ppl = max(uniq.items(), key=lambda kv: kv[1])[0]
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = None
+    tok = None
+    if model_for_ppl is not None:
+        try:
+            model = AutoModelForCausalLM.from_pretrained(model_for_ppl).to(device)
+            model.eval()
+            tok = AutoTokenizer.from_pretrained(model_for_ppl)
+            if tok.pad_token is None and tok.eos_token is not None:
+                tok.pad_token = tok.eos_token
+        except Exception:
+            model = None
+            tok = None
+
+    # Holders for cross-sample correlation analyses
+    dist_init_final_all: List[float] = []
+    ppl_all: List[float] = []
+    seq_len_all: List[int] = []
+    sid_all: List[int] = []
+
     for sid, stages in by_sid.items():
         labels = [f"L{int(s.get('stage_seq_len', -1))}" for s in stages]
         X = np.stack([flatten_embedding(s) for s in stages], axis=0)
@@ -206,6 +292,66 @@ def main():
             summary_conv.append(conv)
             summary_seq_len.append(seql)
 
+        # Per-sample distance metrics
+        for i in range(X.shape[0] - 1):
+            dist_init_final_all.append(float(np.linalg.norm(X[i + 1] - X[i])))
+
+        # Per-sample perplexity (optional)
+        if model is not None and tok is not None:
+            sample_text = None
+            for s in stages:
+                sample_text = s.get("text", None)
+                if sample_text is not None:
+                    seql, ppl = compute_ppl_for_text(model, tok, device, sample_text)
+                    if math.isnan(ppl):
+                        continue
+
+                    seq_len_all.append(seql)
+                    ppl_all.append(float(ppl))
+                    sid_all.append(int(sid))
+
+        # Per-sample token norm trajectories across stages
+        mean_l2_by_stage: List[float] = []
+        max_l2_by_stage: List[float] = []
+        mean_l1_by_stage: List[float] = []
+        max_l1_by_stage: List[float] = []
+        for s in stages:
+            try:
+                l1_tok, l2_tok = compute_token_norm_stats_from_row(s)
+                if l1_tok.size == 0 or l2_tok.size == 0:
+                    mean_l1_by_stage.append(float("nan"))
+                    max_l1_by_stage.append(float("nan"))
+                    mean_l2_by_stage.append(float("nan"))
+                    max_l2_by_stage.append(float("nan"))
+                else:
+                    mean_l1_by_stage.append(float(np.mean(l1_tok)))
+                    max_l1_by_stage.append(float(np.max(l1_tok)))
+                    mean_l2_by_stage.append(float(np.mean(l2_tok)))
+                    max_l2_by_stage.append(float(np.max(l2_tok)))
+            except Exception:
+                mean_l1_by_stage.append(float("nan"))
+                max_l1_by_stage.append(float("nan"))
+                mean_l2_by_stage.append(float("nan"))
+                max_l2_by_stage.append(float("nan"))
+
+        # Plot L2 and L1 norm trajectories for this sample
+        plot_norms_over_stages(
+            labels,
+            mean_l2_by_stage,
+            max_l2_by_stage,
+            ylabel="token L2 norm",
+            title=f"Sample {sid}: token L2 norms across stages",
+            outfile=os.path.join(out_dir, f"sid{sid}_token_norms_l2.png"),
+        )
+        plot_norms_over_stages(
+            labels,
+            mean_l1_by_stage,
+            max_l1_by_stage,
+            ylabel="token L1 norm",
+            title=f"Sample {sid}: token L1 norms across stages",
+            outfile=os.path.join(out_dir, f"sid{sid}_token_norms_l1.png"),
+        )
+
     # Correlation plots across all stages
     if len(summary_steps) > 1 and len(summary_conv) == len(summary_steps):
         plot_correlation(
@@ -226,23 +372,30 @@ def main():
             outfile=os.path.join(out_dir, "length_vs_steps.png"),
         )
 
-    # Optional: token-level perplexity on sample texts
-    model_for_ppl: Optional[str] = args.perplexity_model
-    if model_for_ppl is None:
-        # Try infer from dataset rows' model_checkpoint
-        names = [str(r.get("model_checkpoint", "")).strip() for r in rows]
-        names = [n for n in names if n]
-        if names:
-            # choose most frequent
-            uniq = {}
-            for n in names:
-                uniq[n] = uniq.get(n, 0) + 1
-            model_for_ppl = max(uniq.items(), key=lambda kv: kv[1])[0]
-    seq_lens, ppls = maybe_compute_perplexity(rows, model_for_ppl, args.perplexity_max_samples)
-    if len(seq_lens) > 1 and len(seq_lens) == len(ppls):
+    if len(ppl_all) > 1:
         plot_correlation(
-            np.array(seq_lens),
-            np.array(ppls),
+            np.array(ppl_all),
+            np.array(summary_steps[1:]),
+            xlabel="ppl",
+            ylabel="steps_taken",
+            title="PPL vs Steps",
+            outfile=os.path.join(out_dir, "ppl_vs_steps.png"),
+        )
+
+    # Optional: plots leveraging per-sample perplexities (if available)
+    if len(ppl_all) > 1 and len(ppl_all) == len(dist_init_final_all):
+        plot_correlation(
+            np.array(dist_init_final_all),
+            np.array(ppl_all),
+            xlabel="steps L2",
+            ylabel="perplexity",
+            title="Comp Embeddings L2 Distance vs Perplexity",
+            outfile=os.path.join(out_dir, "l2_dist_vs_perplexity.png"),
+        )
+    if len(seq_len_all) > 1 and len(seq_len_all) == len(ppl_all):
+        plot_correlation(
+            np.array(seq_len_all),
+            np.array(ppl_all),
             xlabel="sequence_length",
             ylabel="perplexity",
             title="Length vs Perplexity",
