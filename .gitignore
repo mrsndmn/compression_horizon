@@ -1,9 +1,15 @@
+# CI configurations
 .github/actions-runner
 
+# Cache
 __pycache__
 *.pyc
-
 .ruff_cache
 .pytest_cache
 
+# Data and artifacts
 artifacts/
+
+# Environment
+.venv
+.idea

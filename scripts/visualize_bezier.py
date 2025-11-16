@@ -1,9 +1,9 @@
 import argparse
-import torch
+
 import matplotlib.pyplot as plt
+import torch
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--params_path", type=str, required=True)
     args = parser.parse_args()

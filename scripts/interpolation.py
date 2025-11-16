@@ -1,17 +1,15 @@
 import argparse
+import math
 import os
 from typing import Any, Dict, List, Optional, Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
-import math
 import torch
 import torch.nn.functional as F
 from datasets import Dataset
-
-from transformers import AutoModelForCausalLM, AutoTokenizer
 from tqdm import tqdm
-
-import matplotlib.pyplot as plt
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 def curve_length_from_points(points: torch.Tensor) -> float:
@@ -80,7 +78,9 @@ def compute_convergence(
     input_ids: torch.Tensor,  # [B, T]
 ) -> float:
     attn_ct = torch.ones(
-        (compression_tokens.size(0), compression_tokens.size(1)), dtype=attention_mask.dtype, device=attention_mask.device
+        (compression_tokens.size(0), compression_tokens.size(1)),
+        dtype=attention_mask.dtype,
+        device=attention_mask.device,
     )
     inputs_embeds_with_ct = torch.cat([compression_tokens, inputs_embeds], dim=1)
     attention_mask_with_ct = torch.cat([attn_ct, attention_mask], dim=1)

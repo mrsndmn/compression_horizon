@@ -1,19 +1,17 @@
 import argparse
 import os
+
 import matplotlib.pyplot as plt
-
 import torch
-
-
 from scripts.interpolation import (
-    load_progressive_dataset,
-    filter_records,
     collate_stages_by_sample,
-    to_tensor_embedding,
-    tokenize_text,
     embed_tokens,
+    filter_records,
+    load_progressive_dataset,
     pick_model_name,
     prepare_model,
+    to_tensor_embedding,
+    tokenize_text,
 )
 
 
@@ -79,7 +77,9 @@ def main():
         compression_tokens = compression_tokens.unsqueeze(0)
 
         attn_ct = torch.ones(
-            (compression_tokens.size(0), compression_tokens.size(1)), dtype=attention_mask.dtype, device=attention_mask.device
+            (compression_tokens.size(0), compression_tokens.size(1)),
+            dtype=attention_mask.dtype,
+            device=attention_mask.device,
         )
         inputs_embeds_with_ct = torch.cat([compression_tokens, inputs_embeds], dim=1)
         attention_mask_with_ct = torch.cat([attn_ct, attention_mask], dim=1)
@@ -133,7 +133,9 @@ def main():
         compression_tokens = torch.rand_like(compression_tokens) * 100
 
         attn_ct = torch.ones(
-            (compression_tokens.size(0), compression_tokens.size(1)), dtype=attention_mask.dtype, device=attention_mask.device
+            (compression_tokens.size(0), compression_tokens.size(1)),
+            dtype=attention_mask.dtype,
+            device=attention_mask.device,
         )
         inputs_embeds_with_ct = torch.cat([compression_tokens, inputs_embeds], dim=1)
         attention_mask_with_ct = torch.cat([attn_ct, attention_mask], dim=1)
@@ -144,7 +146,9 @@ def main():
 
         plt.bar(range(correct_reconstruction_positions.shape[-1]), correct_reconstruction_positions.cpu()[0].float().numpy())
         figure_path = os.path.join(
-            "artifacts", "visualizations", f"correct_reconstruction_positions_random_compression_token_embedding_{sid}.png"
+            "artifacts",
+            "visualizations",
+            f"correct_reconstruction_positions_random_compression_token_embedding_{sid}.png",
         )
         plt.title(f"Correct reconstruction positions for sample {sid} with random compression token embedding")
         plt.xlabel("Token position")

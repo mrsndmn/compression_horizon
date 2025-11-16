@@ -3,13 +3,12 @@ import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 import torch
 from datasets import Dataset
 from sklearn.decomposition import PCA
-import matplotlib.pyplot as plt
-import seaborn as sns
-
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 

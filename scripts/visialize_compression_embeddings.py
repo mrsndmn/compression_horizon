@@ -4,12 +4,12 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 import torch
 from datasets import Dataset
 from sklearn.decomposition import PCA
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 
 def _short_label_from_path(path: str) -> str:
@@ -129,7 +129,7 @@ def save_metrics_csv(output_dir: str, labels: List[str], l2: np.ndarray, cos_dis
         n = len(labels)
         for i in range(n):
             for j in range(n):
-                f.write(f"{i},{j},{labels[i]},{labels[j]},{l2[i,j]:.6f},{cos_dist[i,j]:.6f}\n")
+                f.write(f"{i},{j},{labels[i]},{labels[j]},{l2[i, j]:.6f},{cos_dist[i, j]:.6f}\n")
 
 
 def main():
@@ -186,7 +186,10 @@ def main():
     sns.set(style="whitegrid")
     plot_pairwise_heatmap(l2, labels, title="Pairwise L2 distance", outfile=os.path.join(out_dir, "pairwise_l2.png"))
     plot_pairwise_heatmap(
-        cos_dist, labels, title="Pairwise cosine distance (1 - cos)", outfile=os.path.join(out_dir, "pairwise_cosine.png")
+        cos_dist,
+        labels,
+        title="Pairwise cosine distance (1 - cos)",
+        outfile=os.path.join(out_dir, "pairwise_cosine.png"),
     )
     plot_pca_scatter(embeddings, labels, outfile=os.path.join(out_dir, "pca_scatter.png"))
     baseline_index = max(0, min(int(args.baseline), len(embeddings) - 1))

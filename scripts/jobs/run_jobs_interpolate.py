@@ -2,9 +2,7 @@ import os
 
 from mls.manager.job.utils import training_job_api_from_profile
 
-
 if __name__ == "__main__":
-
     workdir = os.getcwd()
     python_path = "/workspace-SR004.nfs2/d.tarasov/envs/compression_horizon/bin/python"
 

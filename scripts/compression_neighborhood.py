@@ -1,4 +1,3 @@
-from tqdm.auto import tqdm
 import argparse
 import csv
 import math
@@ -7,14 +6,14 @@ import random
 import string
 from typing import List, Tuple
 
-import numpy as np
-import torch
-from sklearn.decomposition import PCA
-from transformers import AutoModelForCausalLM, AutoTokenizer
 import matplotlib.pyplot as plt
+import numpy as np
 import seaborn as sns
-
+import torch
 from datasets import Dataset
+from sklearn.decomposition import PCA
+from tqdm.auto import tqdm
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 def _rand_suffix(n: int = 6) -> str:
