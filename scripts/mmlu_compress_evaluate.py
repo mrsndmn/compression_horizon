@@ -19,7 +19,7 @@ from torch.optim import AdamW
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, get_scheduler
 
-from compression_horizon.train.loss import compute_hybrid_cross_entropy_and_alignment_loss
+from compression_horizon.train.loss import compute_hybrid_cross_entropy_and_alignment_loss, token_argmax_match_rate_with_prefix
 from compression_horizon.utils.launch import freeze_model_parameters, get_device, resolve_torch_dtype, set_launch_seed
 from compression_horizon.utils.tokens import count_text_characters, count_text_tokens
 
@@ -435,6 +435,255 @@ def calculate_convergence(
     return convergences
 
 
+def compress_prefixes_progressive_batch(
+    model: AutoModelForCausalLM,
+    tokenizer: AutoTokenizer,
+    texts: list[str],
+    num_compression_tokens: int = 1,
+    learning_rate: float = 1e-2,
+    max_optimization_steps_per_token: int = 1000,
+    progressive_min_seq_len: int = 1,
+    progressive_step: int = 1,
+    progressive_convergence_threshold: float = 1.0,
+    progressive_max_stages: int = 0,
+    device: Optional[torch.device] = None,
+    add_special_tokens: bool = True,
+    init_embeddings: Optional[torch.Tensor] = None,
+) -> list[dict[str, torch.Tensor | float]]:
+    """Compress text prefixes using progressive cramming: grow sequence length in stages.
+
+    Returns same interface as compress_prefixes_batch.
+    """
+    if device is None:
+        device = get_device()
+
+    model = model.to(device)
+    model.eval()
+    freeze_model_parameters(model)
+
+    batch_size = len(texts)
+    if batch_size == 0:
+        return []
+
+    tokenizer.padding_side = "right"
+
+    encoded = tokenizer(texts, padding="longest", truncation=True, return_tensors="pt", add_special_tokens=add_special_tokens)
+    input_ids = encoded["input_ids"].to(device)
+    attention_mask = encoded["attention_mask"].to(device)
+
+    with torch.no_grad():
+        token_embeddings = model.get_input_embeddings()(input_ids)
+
+    hidden_size = token_embeddings.shape[-1]
+    embedding_dtype = token_embeddings.dtype
+
+    # Per-sample compression token parameters and optimizers
+    if init_embeddings is not None:
+        init_embeds = init_embeddings.detach().clone().to(embedding_dtype).to(device)
+        per_sample_params = [torch.nn.Parameter(init_embeds.unsqueeze(0).clone()) for _ in range(batch_size)]
+    else:
+        per_sample_params = [
+            torch.nn.Parameter(
+                torch.randn([1, num_compression_tokens, hidden_size], dtype=embedding_dtype, device=device) * 0.02
+            )
+            for _ in range(batch_size)
+        ]
+    per_sample_optimizers = []
+    per_sample_schedulers = []
+    for j in range(batch_size):
+        opt = AdamW([per_sample_params[j]], lr=learning_rate)
+        sched = get_scheduler("cosine", optimizer=opt, num_warmup_steps=0, num_training_steps=max_optimization_steps_per_token)
+        per_sample_optimizers.append(opt)
+        per_sample_schedulers.append(sched)
+
+    per_sample_lengths = attention_mask.sum(dim=1).tolist()
+    max_len = int(max(per_sample_lengths))
+    seq_len = min(progressive_min_seq_len, max_len)
+
+    skipped_mask = [False] * batch_size
+    stage_index = 0
+
+    model.train()
+
+    while True:
+        sliced_input_ids = input_ids[:, :seq_len]
+        sliced_embeddings = token_embeddings[:, :seq_len, :]
+        sliced_attention_mask = attention_mask[:, :seq_len]
+
+        # Reset per-stage convergence (preserve skipped)
+        converged_mask = [skipped_mask[j] for j in range(batch_size)]
+        converged = False
+
+        for _ in range(max_optimization_steps_per_token):
+            compression_tokens = torch.cat(per_sample_params, dim=0)
+
+            # Build per-sample concatenated inputs with padding
+            united_embeds_list = []
+            united_mask_list = []
+            for i in range(batch_size):
+                s_len = int(sliced_attention_mask[i].sum().item())
+                s_embeds = sliced_embeddings[i : i + 1, :s_len]
+                s_mask = sliced_attention_mask[i : i + 1, :s_len]
+                s_comp = compression_tokens[i : i + 1]
+                united_embeds_list.append(torch.cat([s_comp, s_embeds], dim=1))
+                united_mask_list.append(
+                    torch.cat(
+                        [
+                            torch.ones((1, num_compression_tokens), dtype=s_mask.dtype, device=device),
+                            s_mask,
+                        ],
+                        dim=1,
+                    )
+                )
+
+            pad_max = max(e.shape[1] for e in united_embeds_list)
+            batch_embeds = []
+            batch_mask = []
+            for i in range(batch_size):
+                e = united_embeds_list[i]
+                m = united_mask_list[i]
+                pad = pad_max - e.shape[1]
+                if pad > 0:
+                    e = torch.cat([e, torch.zeros(1, pad, hidden_size, dtype=e.dtype, device=device)], dim=1)
+                    m = torch.cat([m, torch.zeros(1, pad, dtype=m.dtype, device=device)], dim=1)
+                batch_embeds.append(e)
+                batch_mask.append(m)
+            batch_embeds = torch.cat(batch_embeds, dim=0)
+            batch_mask = torch.cat(batch_mask, dim=0)
+
+            outputs = model(inputs_embeds=batch_embeds, attention_mask=batch_mask)
+
+            # Compute per-sample CE loss
+            total_loss = 0.0
+            for i in range(batch_size):
+                if skipped_mask[i] or converged_mask[i]:
+                    continue
+                s_len = int(sliced_attention_mask[i].sum().item())
+                sample_logits = outputs.logits[i : i + 1, : num_compression_tokens + s_len]
+                sample_ids = sliced_input_ids[i : i + 1, :s_len]
+                sample_mask = sliced_attention_mask[i : i + 1, :s_len]
+                sample_loss, _ = compute_hybrid_cross_entropy_and_alignment_loss(
+                    logits=sample_logits,
+                    input_ids=sample_ids,
+                    attention_mask=sample_mask,
+                    num_prefix_tokens=num_compression_tokens,
+                    num_alignment_layers=0,
+                    inverted_alignment=False,
+                    loss_type="cross_entropy",
+                    hybrid_alpha=None,
+                )
+                total_loss = total_loss + sample_loss
+
+            active_count = sum(1 for j in range(batch_size) if not skipped_mask[j] and not converged_mask[j])
+            if active_count == 0:
+                converged = True
+                break
+
+            loss = total_loss / active_count
+            loss.backward()
+
+            for j in range(batch_size):
+                if skipped_mask[j] or converged_mask[j]:
+                    per_sample_optimizers[j].zero_grad(set_to_none=True)
+                else:
+                    per_sample_optimizers[j].step()
+                    per_sample_schedulers[j].step()
+                    per_sample_optimizers[j].zero_grad(set_to_none=True)
+
+            # Check convergence
+            with torch.no_grad():
+                convergence_per_sample = token_argmax_match_rate_with_prefix(
+                    outputs.logits,
+                    sliced_input_ids,
+                    sliced_attention_mask,
+                    num_compression_tokens,
+                )
+                for j in range(batch_size):
+                    if not skipped_mask[j] and not converged_mask[j]:
+                        if convergence_per_sample[j].item() >= progressive_convergence_threshold:
+                            converged_mask[j] = True
+
+                if all(converged_mask[j] or skipped_mask[j] for j in range(batch_size)):
+                    converged = True
+                    break
+
+        # Mark non-converged as skipped
+        if not converged:
+            for j in range(batch_size):
+                if not skipped_mask[j] and not converged_mask[j]:
+                    skipped_mask[j] = True
+                    print(f"Sample {j} failed to converge at seq_len={seq_len}, marking as skipped.")
+
+        print(f"Stage {stage_index}: seq_len={seq_len}, converged={converged}, skipped={sum(skipped_mask)}/{batch_size}")
+
+        stage_index += 1
+        if seq_len >= max_len:
+            break
+        if progressive_max_stages > 0 and stage_index >= progressive_max_stages:
+            break
+        if all(skipped_mask):
+            print("All samples skipped. Stopping.")
+            break
+
+        seq_len = min(seq_len + progressive_step, max_len)
+
+    model.eval()
+
+    # Calculate final convergence on full sequence
+    compression_tokens = torch.cat(per_sample_params, dim=0).detach()
+
+    united_embeds_list = []
+    united_mask_list = []
+    labels_list = []
+    for i in range(batch_size):
+        s_len = int(attention_mask[i].sum().item())
+        s_embeds = token_embeddings[i : i + 1, :s_len]
+        s_mask = attention_mask[i : i + 1, :s_len]
+        s_comp = compression_tokens[i : i + 1]
+        united_embeds_list.append(torch.cat([s_comp, s_embeds], dim=1))
+        united_mask_list.append(
+            torch.cat(
+                [
+                    torch.ones((1, num_compression_tokens), dtype=s_mask.dtype, device=device),
+                    s_mask,
+                ],
+                dim=1,
+            )
+        )
+        labels_list.append(input_ids[i : i + 1, :s_len])
+
+    pad_max = max(e.shape[1] for e in united_embeds_list)
+    batch_embeds = []
+    batch_mask = []
+    batch_labels = []
+    for i in range(batch_size):
+        e = united_embeds_list[i]
+        m = united_mask_list[i]
+        lbl = labels_list[i]
+        pad = pad_max - e.shape[1]
+        if pad > 0:
+            e = torch.cat([e, torch.zeros(1, pad, hidden_size, dtype=e.dtype, device=device)], dim=1)
+            m = torch.cat([m, torch.zeros(1, pad, dtype=m.dtype, device=device)], dim=1)
+            lbl = torch.cat([lbl, torch.full((1, pad), -100, dtype=lbl.dtype, device=device)], dim=1)
+        batch_embeds.append(e)
+        batch_mask.append(m)
+        batch_labels.append(lbl)
+    batch_embeds = torch.cat(batch_embeds, dim=0)
+    batch_mask = torch.cat(batch_mask, dim=0)
+    batch_labels = torch.cat(batch_labels, dim=0)
+
+    convergences = calculate_convergence(model, batch_embeds, batch_mask, batch_labels, num_compression_tokens)
+    print("Batch convergences:", convergences)
+
+    return [
+        {
+            "compression_embedding": compression_tokens[i].detach(),
+            "convergence": convergences[i],
+        }
+        for i in range(batch_size)
+    ]
+
+
 def main():
     parser = argparse.ArgumentParser(description="Evaluate compression tokens on MMLU benchmark (generative)")
     parser.add_argument(
@@ -551,6 +800,42 @@ def main():
         "'full_prompt' compresses entire prompt per sample (warm-started from prefix compression), "
         "'random' uses random normal embeddings instead of optimized compression tokens.",
     )
+    parser.add_argument(
+        "--progressive",
+        action="store_true",
+        default=False,
+        help="Use progressive cramming compression (grow sequence length in stages).",
+    )
+    parser.add_argument(
+        "--progressive_min_seq_len",
+        type=int,
+        default=1,
+        help="Starting sequence length for progressive cramming.",
+    )
+    parser.add_argument(
+        "--progressive_step",
+        type=int,
+        default=1,
+        help="Sequence length increment per progressive stage.",
+    )
+    parser.add_argument(
+        "--progressive_convergence_threshold",
+        type=float,
+        default=1.0,
+        help="Token-level convergence threshold per progressive stage.",
+    )
+    parser.add_argument(
+        "--progressive_max_stages",
+        type=int,
+        default=0,
+        help="Max number of progressive stages (0 = no cap).",
+    )
+    parser.add_argument(
+        "--max_optimization_steps_per_token",
+        type=int,
+        default=1000,
+        help="Max optimization steps per progressive stage.",
+    )
     args = parser.parse_args()
 
     set_launch_seed(args.random_seed)
@@ -584,6 +869,10 @@ def main():
     if args.limit_samples:
         dataset = dataset.select(range(min(args.limit_samples, len(dataset))))
     print(f"Evaluating MMLU benchmark on {len(dataset)} samples")
+
+    # Append suffix for progressive mode
+    if args.progressive:
+        args.output_dir = args.output_dir + "_progressive"
 
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -679,20 +968,36 @@ def main():
                     prefix_text = format_few_shot_prefix(subj, few_shots)
                     print(f"Compressing prefix for subject: {subj}")
                     try:
-                        prefix_results = compress_prefixes_batch(
-                            model=model,
-                            tokenizer=tokenizer,
-                            texts=[prefix_text],
-                            num_compression_tokens=args.num_compression_tokens,
-                            max_steps=args.max_optimization_steps,
-                            learning_rate=args.learning_rate,
-                            loss_type=args.loss_type,
-                            hybrid_alpha=args.hybrid_alpha,
-                            num_alignment_layers=args.num_alignment_layers,
-                            inverted_alignment=args.inverted_alignment,
-                            device=device,
-                            add_special_tokens=add_special_tokens,
-                        )
+                        if args.progressive:
+                            prefix_results = compress_prefixes_progressive_batch(
+                                model=model,
+                                tokenizer=tokenizer,
+                                texts=[prefix_text],
+                                num_compression_tokens=args.num_compression_tokens,
+                                learning_rate=args.learning_rate,
+                                max_optimization_steps_per_token=args.max_optimization_steps_per_token,
+                                progressive_min_seq_len=args.progressive_min_seq_len,
+                                progressive_step=args.progressive_step,
+                                progressive_convergence_threshold=args.progressive_convergence_threshold,
+                                progressive_max_stages=args.progressive_max_stages,
+                                device=device,
+                                add_special_tokens=add_special_tokens,
+                            )
+                        else:
+                            prefix_results = compress_prefixes_batch(
+                                model=model,
+                                tokenizer=tokenizer,
+                                texts=[prefix_text],
+                                num_compression_tokens=args.num_compression_tokens,
+                                max_steps=args.max_optimization_steps,
+                                learning_rate=args.learning_rate,
+                                loss_type=args.loss_type,
+                                hybrid_alpha=args.hybrid_alpha,
+                                num_alignment_layers=args.num_alignment_layers,
+                                inverted_alignment=args.inverted_alignment,
+                                device=device,
+                                add_special_tokens=add_special_tokens,
+                            )
                         prefix_compression_cache[subj] = prefix_results[0]["compression_embedding"]
                     except Exception as e:
                         print(f"Error compressing prefix for subject {subj}: {e}")
@@ -721,21 +1026,38 @@ def main():
                 init_emb = prefix_compression_cache.get(first_subj)
 
                 try:
-                    full_results = compress_prefixes_batch(
-                        model=model,
-                        tokenizer=tokenizer,
-                        texts=batch_texts_to_compress,
-                        num_compression_tokens=args.num_compression_tokens,
-                        max_steps=args.max_optimization_steps,
-                        learning_rate=args.learning_rate,
-                        loss_type=args.loss_type,
-                        hybrid_alpha=args.hybrid_alpha,
-                        num_alignment_layers=args.num_alignment_layers,
-                        inverted_alignment=args.inverted_alignment,
-                        device=device,
-                        add_special_tokens=add_special_tokens,
-                        init_embeddings=init_emb,
-                    )
+                    if args.progressive:
+                        full_results = compress_prefixes_progressive_batch(
+                            model=model,
+                            tokenizer=tokenizer,
+                            texts=batch_texts_to_compress,
+                            num_compression_tokens=args.num_compression_tokens,
+                            learning_rate=args.learning_rate,
+                            max_optimization_steps_per_token=args.max_optimization_steps_per_token,
+                            progressive_min_seq_len=args.progressive_min_seq_len,
+                            progressive_step=args.progressive_step,
+                            progressive_convergence_threshold=args.progressive_convergence_threshold,
+                            progressive_max_stages=args.progressive_max_stages,
+                            device=device,
+                            add_special_tokens=add_special_tokens,
+                            init_embeddings=init_emb,
+                        )
+                    else:
+                        full_results = compress_prefixes_batch(
+                            model=model,
+                            tokenizer=tokenizer,
+                            texts=batch_texts_to_compress,
+                            num_compression_tokens=args.num_compression_tokens,
+                            max_steps=args.max_optimization_steps,
+                            learning_rate=args.learning_rate,
+                            loss_type=args.loss_type,
+                            hybrid_alpha=args.hybrid_alpha,
+                            num_alignment_layers=args.num_alignment_layers,
+                            inverted_alignment=args.inverted_alignment,
+                            device=device,
+                            add_special_tokens=add_special_tokens,
+                            init_embeddings=init_emb,
+                        )
                     batch_compression_embeddings = [r["compression_embedding"] for r in full_results]
                     batch_convergences = [r["convergence"] for r in full_results]
                 except Exception as e:
