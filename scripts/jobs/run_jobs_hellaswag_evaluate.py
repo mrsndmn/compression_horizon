@@ -110,6 +110,42 @@ if __name__ == "__main__":
         default=False,
         help="Disable BOS token insertion during tokenization.",
     )
+    parser.add_argument(
+        "--progressive",
+        action="store_true",
+        default=False,
+        help="Use progressive cramming compression.",
+    )
+    parser.add_argument(
+        "--progressive_min_seq_len",
+        type=int,
+        default=None,
+        help="Starting sequence length for progressive cramming. If not specified, defaults to 1.",
+    )
+    parser.add_argument(
+        "--progressive_step",
+        type=int,
+        default=None,
+        help="Sequence length increment per progressive stage. If not specified, defaults to 1.",
+    )
+    parser.add_argument(
+        "--progressive_convergence_threshold",
+        type=float,
+        default=None,
+        help="Token-level convergence threshold per progressive stage. If not specified, defaults to 1.0.",
+    )
+    parser.add_argument(
+        "--progressive_max_stages",
+        type=int,
+        default=None,
+        help="Max number of progressive stages (0 = no cap). If not specified, defaults to 0.",
+    )
+    parser.add_argument(
+        "--max_optimization_steps_per_token",
+        type=int,
+        default=None,
+        help="Max optimization steps per progressive stage. If not specified, defaults to 1000.",
+    )
     args = parser.parse_args()
     workdir = os.getcwd()
     python_path = "/workspace-SR004.nfs2/d.tarasov/envs/compression_horizon/bin/python"
@@ -172,6 +208,18 @@ if __name__ == "__main__":
             cmd_args.append("--inverted_alignment")
         if args.no_bos_token:
             cmd_args.append("--no_bos_token")
+        if args.progressive:
+            cmd_args.append("--progressive")
+            if args.progressive_min_seq_len is not None:
+                cmd_args.append(f"--progressive_min_seq_len {args.progressive_min_seq_len}")
+            if args.progressive_step is not None:
+                cmd_args.append(f"--progressive_step {args.progressive_step}")
+            if args.progressive_convergence_threshold is not None:
+                cmd_args.append(f"--progressive_convergence_threshold {args.progressive_convergence_threshold}")
+            if args.progressive_max_stages is not None:
+                cmd_args.append(f"--progressive_max_stages {args.progressive_max_stages}")
+            if args.max_optimization_steps_per_token is not None:
+                cmd_args.append(f"--max_optimization_steps_per_token {args.max_optimization_steps_per_token}")
 
         # Add random_seed if specified (non-default)
         if args.random_seed is not None and args.random_seed != 42:
@@ -215,6 +263,18 @@ if __name__ == "__main__":
             exp_suffix = f"{exp_suffix}_inv_align"
         if args.no_bos_token:
             exp_suffix = f"{exp_suffix}_nobos"
+        if args.progressive:
+            exp_suffix = f"{exp_suffix}_progressive"
+            if args.progressive_min_seq_len is not None and args.progressive_min_seq_len != 1:
+                exp_suffix = f"{exp_suffix}_minlen_{args.progressive_min_seq_len}"
+            if args.progressive_step is not None and args.progressive_step != 1:
+                exp_suffix = f"{exp_suffix}_pstep_{args.progressive_step}"
+            if args.progressive_convergence_threshold is not None and args.progressive_convergence_threshold != 1.0:
+                exp_suffix = f"{exp_suffix}_pthresh_{args.progressive_convergence_threshold}"
+            if args.progressive_max_stages is not None and args.progressive_max_stages != 0:
+                exp_suffix = f"{exp_suffix}_maxstages_{args.progressive_max_stages}"
+            if args.max_optimization_steps_per_token is not None and args.max_optimization_steps_per_token != 1000:
+                exp_suffix = f"{exp_suffix}_stepspt_{args.max_optimization_steps_per_token}"
 
         out_dir_name = f"artifacts/hellaswag_evaluation/{exp_suffix}"
         if os.path.exists(out_dir_name):
