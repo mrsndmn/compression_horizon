@@ -818,6 +818,7 @@ def compute_embedding_statistics(
 def extract_trajectory(
     dataset_path: str,
     sample_id: Optional[int] = None,
+    force: bool = False,
 ) -> Tuple[np.ndarray, List[str], Dict[str, Any], np.ndarray]:
     """Extract embedding trajectory from a dataset.
 
@@ -833,7 +834,7 @@ def extract_trajectory(
         final_embedding is the last embedding in the trajectory (for the selected sample)
     """
     cache_data, cache_file, cache_loaded = load_experiment_cache(dataset_path)
-    if cache_loaded:
+    if cache_loaded and not force:
         cached_stats = cache_data.get("stats")
         cached_traj = cache_data.get("trajectory")
         if not isinstance(cached_stats, dict) or not isinstance(cached_traj, dict):
@@ -852,6 +853,9 @@ def extract_trajectory(
         embeddings = deserialize_array(cached_embeddings)
         final_embedding = deserialize_array(cached_final_embedding)
         return embeddings, list(cached_labels), cached_stats, final_embedding
+
+    if force:
+        cache_data = {}
 
     ds = load_progressive_dataset(dataset_path)
     # Get model_checkpoint from dataset if available (for cache checking)
@@ -907,7 +911,6 @@ def extract_trajectory(
     for sid, stages in all_by_sid.items():
         # Extract embeddings for this sample (if available)
         sample_embeddings = []
-        sample_total_steps = 0
         has_embeddings = True
         for stage in stages:
             if "embedding" not in stage or stage.get("embedding") is None:
@@ -915,8 +918,10 @@ def extract_trajectory(
                 break
             emb = flatten_embedding(stage)
             sample_embeddings.append(emb)
-            steps = int(stage.get("steps_taken", 0))
-            sample_total_steps += steps
+
+        # Take steps_taken from last stage (it's already cumulative)
+        final_stage = get_final_stage(stages)
+        sample_total_steps = int(final_stage.get("steps_taken", 0)) if final_stage else 0
 
         # Compute metrics that don't require embeddings
         all_num_embeddings.append(len(stages))
@@ -972,6 +977,8 @@ def extract_trajectory(
             "std": float(np.std(values)),
             "count": int(len(values)),
         }
+
+    print("all_total_steps", len(all_total_steps), all_total_steps)
 
     stats = {
         "num_embeddings": summarize_values(all_num_embeddings),
@@ -1312,6 +1319,7 @@ def print_statistics_table(
     midrule_indicies,
     tablefmt: str = "grid",
     short: bool = False,
+    show_steps: bool = False,
 ):
     """Print a statistics table using tabulate.
 
@@ -1335,6 +1343,8 @@ def print_statistics_table(
             "Compressed Tokens",
             "Information Gain",
         ]
+    if show_steps:
+        headers.append("Steps" if short else "Steps Taken")
     if not short:
         headers += [
             "Trajectory Length",
@@ -1368,6 +1378,8 @@ def print_statistics_table(
             format_mean_std_cell(stats.get("num_embeddings"), precision=num_embeds_precision, tablefmt=tablefmt),
             format_mean_std_cell(stats.get("information_gain_from_dataset"), precision=0, tablefmt=tablefmt),
         ]
+        if show_steps:
+            row.append(format_mean_std_cell(stats.get("steps_taken"), precision=0, tablefmt=tablefmt))
         if not short:
             row += [
                 format_mean_std_cell(stats.get("trajectory_length"), precision=0, tablefmt=tablefmt),
@@ -1558,6 +1570,16 @@ def main():
         help="Print a shortened statistics table without 'Trajectory Length' and 'PCA 99%' columns.",
     )
     parser.add_argument("--midrule_indicies", nargs="+", type=int)
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force recompute all results without relying on cached data.",
+    )
+    parser.add_argument(
+        "--show_steps",
+        action="store_true",
+        help="Add a column showing mean steps taken till convergence (sum per sample, averaged across samples).",
+    )
 
     args = parser.parse_args()
 
@@ -1585,7 +1607,7 @@ def main():
     final_embeddings = []
 
     for idx, checkpoint_path in tqdm(enumerate(args.checkpoints), desc="Checkpoints", total=len(args.checkpoints)):
-        traj, labels, stats, final_emb = extract_trajectory(checkpoint_path, sample_id=args.sample_id)
+        traj, labels, stats, final_emb = extract_trajectory(checkpoint_path, sample_id=args.sample_id, force=args.force)
         trajectories.append(traj)
         labels_list.append(labels)
         statistics_list.append(stats)
@@ -1618,6 +1640,7 @@ def main():
             midrule_indicies=args.midrule_indicies,
             tablefmt=args.tablefmt,
             short=args.short,
+            show_steps=args.show_steps,
         )
 
     if args.only_stat_table:
