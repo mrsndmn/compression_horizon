@@ -203,6 +203,22 @@ PYTHONPATH=./src:. python scripts/paper/low_dimesional.py \
   --show_labels --only_stat_table --tablefmt latex
 
 
+# Fanfics
+PYTHONPATH=./src:. python scripts/paper/low_dimesional.py \
+  --checkpoints \
+      artifacts/experiments_progressive/sl_4096_pythia-1.4b_ds_fanfics_1k_limit_50_lr_0.5_batch_25/progressive_prefixes \
+      artifacts/experiments_progressive/sl_4096_pythia-1.4b_ds_fanfics_1k_limit_50_lr_0.5_loss_cosine_hybrid_1.0_align_8_batch_25/progressive_prefixes \
+      artifacts/experiments_progressive/sl_4096_pythia-1.4b_ds_fanfics_1k_limit_50_lowdim_256_lowproj_lr_0.5_batch_25/progressive_prefixes \
+      artifacts/experiments_progressive/sl_4096_pythia-1.4b_ds_fanfics_1k_limit_50_lowdim_256_lowproj_lr_0.5_loss_cosine_hybrid_1.0_align_8_batch_25/progressive_prefixes \
+      artifacts/experiments_progressive/sl_4096_SmolLM2-1.7B_ds_fanfics_1k_limit_50_lr_0.1_batch_25/progressive_prefixes \
+      artifacts/experiments_progressive/sl_4096_SmolLM2-1.7B_ds_fanfics_1k_limit_50_lr_0.1_loss_cosine_hybrid_1.0_align_8_batch_25/progressive_prefixes \
+      artifacts/experiments_progressive/sl_4096_gemma-3-4b-pt_ds_fanfics_1k_limit_50_lr_0.1_batch_10/progressive_prefixes \
+  --n_components 4 \
+  --sample_id 0 \
+  --midrule_indicies 3 7 11 \
+  --show_labels --only_stat_table --tablefmt latex
+
+
 
 
 # NO BOS token

@@ -173,12 +173,14 @@ abbreviation = {
         "cross_entropy": "CE",
     },
     "model_checkpoint": {
-        "HuggingFaceTB/SmolLM2-1.7B": "SLM2-1.7B",
+        "HuggingFaceTB/SmolLM2-1.7B": "SmolLM2-1.7B",
+        "EleutherAI/pythia-1.4b": "pythia-1.4b",
+        "unsloth/gemma-3-4b-pt": "gemma-3-4b-pt",
         "HuggingFaceTB/SmolLM2-135M": "SLM2-135M",
         "Qwen/Qwen3-4B": "Q3-4B",
         "unsloth/Llama-3.2-3B": "L3.2-3B",
         "unsloth/Llama-3.2-1B": "L3.2-1B",
-        "unsloth/Meta-Llama-3.1-8B": "L3.1-8B",
+        "unsloth/Meta-Llama-3.1-8B": "Llama-3.1-8B",
         "allenai/OLMo-1B-hf": "OLM-1B",
         "allenai/Olmo-3-1025-7B": "OLM3-7B",
     },
@@ -240,6 +242,13 @@ def aggregate_results(results_file: str) -> Optional[MMLURunSummary]:
         compressed_valid / compressed_total_pred if compressed_valid is not None and compressed_total_pred else None
     )
 
+    compression_mode = args.get("compression_mode")
+    compression_mode = {
+        "prefix_only": "few_shot",
+        "full_prompt": "full_prefix",
+        "random": "random",
+    }[compression_mode]
+
     summary = MMLURunSummary(
         run_dir=run_dir,
         run_name=run_name,
@@ -257,7 +266,7 @@ def aggregate_results(results_file: str) -> Optional[MMLURunSummary]:
         random_seed=args.get("random_seed"),
         subject=args.get("subject"),
         num_few_shot=args.get("num_few_shot"),
-        compression_mode=args.get("compression_mode"),
+        compression_mode=compression_mode,
         baseline_accuracy=baseline_accuracy,
         baseline_token_accuracy=baseline_token_accuracy,
         baseline_char_accuracy=baseline_char_accuracy,
@@ -322,14 +331,16 @@ def build_latex_table(
     metric_cols = [
         ("baseline_accuracy", "Baseline Acc"),
         ("baseline_valid_pct", "Baseline Valid"),
-        ("baseline_token_accuracy", "Baseline Tok Acc"),
+        ("baseline_token_accuracy", "Baseline Acc"),
+        # ("baseline_token_accuracy", "Baseline Token Acc"),
         ("baseline_char_accuracy", "Baseline Char Acc"),
         ("compressed_accuracy", "Compressed Acc"),
         ("compressed_valid_pct", "Compressed Valid"),
-        ("compressed_token_accuracy", "Compressed Tok Acc"),
+        ("compressed_token_accuracy", "Compressed Acc"),
+        # ("compressed_token_accuracy", "Compressed Tok Acc"),
         ("compressed_char_accuracy", "Compressed Char Acc"),
         ("accuracy_difference", "Diff"),
-        ("token_accuracy_difference", "Tok Diff"),
+        ("token_accuracy_difference", "Acc Diff"),
         ("char_accuracy_difference", "Char Diff"),
     ]
 
