@@ -111,6 +111,18 @@ if __name__ == "__main__":
         help="Disable BOS token insertion during tokenization.",
     )
     parser.add_argument(
+        "--no_intervention",
+        action="store_true",
+        default=False,
+        help="Disable intervention (no compression, baseline only).",
+    )
+    parser.add_argument(
+        "--only_full_convergence",
+        action="store_true",
+        default=False,
+        help="Only count fully converged samples in compressed metrics.",
+    )
+    parser.add_argument(
         "--progressive",
         action="store_true",
         default=False,
@@ -208,6 +220,10 @@ if __name__ == "__main__":
             cmd_args.append("--inverted_alignment")
         if args.no_bos_token:
             cmd_args.append("--no_bos_token")
+        if args.no_intervention:
+            cmd_args.append("--no_intervention")
+        if args.only_full_convergence:
+            cmd_args.append("--only_full_convergence")
         if args.progressive:
             cmd_args.append("--progressive")
             if args.progressive_min_seq_len is not None:
@@ -263,6 +279,10 @@ if __name__ == "__main__":
             exp_suffix = f"{exp_suffix}_inv_align"
         if args.no_bos_token:
             exp_suffix = f"{exp_suffix}_nobos"
+        if args.no_intervention:
+            exp_suffix = f"{exp_suffix}_nointervention"
+        if args.only_full_convergence:
+            exp_suffix = f"{exp_suffix}_onlyfullconv"
         if args.progressive:
             exp_suffix = f"{exp_suffix}_progressive"
             if args.progressive_min_seq_len is not None and args.progressive_min_seq_len != 1:

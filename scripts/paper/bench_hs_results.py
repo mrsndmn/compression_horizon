@@ -82,10 +82,13 @@ LATEX_ESCAPE_MAP = {
 def latex_escape(text: Optional[str]) -> str:
     if text is None:
         return ""
+    # Escape backslashes first so they are not affected by later replacements.
+    sentinel = "LATEXBACKSLASHSENTINEL"
+    escaped = str(text).replace("\\", sentinel)
     out = []
-    for ch in str(text):
+    for ch in escaped:
         out.append(LATEX_ESCAPE_MAP.get(ch, ch))
-    return "".join(out)
+    return "".join(out).replace(sentinel, LATEX_ESCAPE_MAP["\\"])
 
 
 def parse_run_name_for_properties(run_name: str) -> Dict[str, Optional[str]]:
@@ -174,12 +177,14 @@ abbreviation = {
         "cross_entropy": "CE",
     },
     "model_checkpoint": {
-        "HuggingFaceTB/SmolLM2-1.7B": "SLM2-1.7B",
-        "HuggingFaceTB/SmolLM2-135M": "SLM2-135M",
+        "HuggingFaceTB/SmolLM2-1.7B": "SmolLM2-1.7B",
+        "unsloth/Meta-Llama-3.1-8B": "Llama-3.1-8B",
+        "unsloth/gemma-3-4b-pt": "gemma-3-4b-pt",
+        "EleutherAI/pythia-1.4b": "pythia-1.4b",
+        # "HuggingFaceTB/SmolLM2-135M": "SLM2-135M",
         "Qwen/Qwen3-4B": "Q3-4B",
         "unsloth/Llama-3.2-3B": "L3.2-3B",
         "unsloth/Llama-3.2-1B": "L3.2-1B",
-        "unsloth/Meta-Llama-3.1-8B": "L3.1-8B",
         "allenai/OLMo-1B-hf": "OLM-1B",
         "allenai/Olmo-3-1025-7B": "OLM3-7B",
     },
@@ -279,7 +284,7 @@ def aggregate_results(results_file: str) -> Optional[HSRunSummary]:
 def to_percentage_cell(val: Optional[float]) -> str:
     if val is None:
         return ""
-    return f"{val * 100:.2f}\\%"
+    return f"{val * 100:.2f}%"
 
 
 def to_float_cell(val: Optional[float], decimals: int = 4) -> str:
@@ -365,7 +370,8 @@ def build_latex_table(
                 row.append("True" if val else "False")
             else:
                 cell = "" if val is None else str(val)
-                row.append(latex_escape(cell))
+                row.append(cell)
+                # row.append(latex_escape(cell))
         table_rows.append(row)
 
     return tabulate(table_rows, headers=headers, tablefmt=tablefmt)
