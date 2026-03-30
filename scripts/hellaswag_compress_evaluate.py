@@ -652,6 +652,8 @@ def compute_ppl_with_compression_batch(
     united_token_embeddings_list = []
     united_attention_mask_list = []
     num_compression_tokens = compression_token_embeddings[0].shape[0]
+    # assert num_compression_tokens == 1, "Only one compression token is supported for perplexity calculation"
+
     for i in range(len(full_texts)):
         seq_len = int(attention_mask[i].sum().item())
         sample_token_embeddings = token_embeddings[i : i + 1, :seq_len]  # [1, seq_len, hidden]
@@ -710,8 +712,10 @@ def compute_ppl_with_compression_batch(
         sample_logits = outputs.logits[i : i + 1, num_compression_tokens : num_compression_tokens + seq_len]
         sample_input_ids = input_ids[i : i + 1, :seq_len]  # [1, seq_len]
         sample_attention = attention_mask[i : i + 1, :seq_len]  # [1, seq_len]
+        # breakpoint()
         ppl = estimate_token_perplexity(sample_logits, sample_input_ids, sample_attention)
         if math.isnan(ppl):
+            raise ValueError(f"PPL is NaN for sample {i}")
             ppl = float("inf")
         ppls.append(ppl)
     return ppls

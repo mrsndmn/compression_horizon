@@ -513,7 +513,7 @@ def compute_ppl_with_compression_batch(
     ppls = []
     for i in range(len(contexts)):
         seq_len = attention_mask[i].sum().item()
-        sample_logits = outputs.logits[i : i + 1, num_compression_tokens - 1 : num_compression_tokens - 1 + seq_len]
+        sample_logits = outputs.logits[i : i + 1, num_compression_tokens : num_compression_tokens + seq_len]
         sample_input_ids = input_ids[i : i + 1, :seq_len]
         sample_attention = attention_mask[i : i + 1, :seq_len]
         ppl = estimate_token_perplexity(sample_logits, sample_input_ids, sample_attention)

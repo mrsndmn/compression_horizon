@@ -1358,12 +1358,14 @@ def print_statistics_table(
 
         table_name = name
         table_name = table_name.replace("sl_4096_", "")
+        table_name = table_name.replace("_ds_fanfics_1k_limit_50", "")
         table_name = table_name.replace("_ds_pg19_1k_limit_50", "")
         table_name = table_name.replace("_nobos", " \\bcancel{B}")
         table_name = table_name.replace("_lowproj", "")
         table_name = table_name.replace("Meta-", "")
         table_name = table_name.replace("_ds_pg19_loss_cosine", "")
         table_name = table_name.replace("_loss_cosine", "")
+        table_name = re.sub(r"_batch_(\d+)", r"", table_name)
         table_name = re.sub(r"_hybrid_(\d+(\.?\d+)?)", r" {\\small $\\alpha=\1$}", table_name)
         table_name = re.sub(r"_align_(\d+)", r" {\\small $L=\1$}", table_name)
         table_name = re.sub(r"_lowdim_(\d+)", r" {\\small dim=\1}", table_name)

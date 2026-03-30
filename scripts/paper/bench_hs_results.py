@@ -60,6 +60,7 @@ class HSRunSummary:
     compressed_correct: Optional[int] = None
     compressed_valid_pct: Optional[float] = None
     compressed_total: Optional[int] = None
+    counted_in_metrics_pct: Optional[float] = None
     accuracy_difference: Optional[float] = None
     token_accuracy_difference: Optional[float] = None
     char_accuracy_difference: Optional[float] = None
@@ -247,6 +248,11 @@ def aggregate_results(results_file: str) -> Optional[HSRunSummary]:
         compressed_valid / compressed_total_pred if compressed_valid is not None and compressed_total_pred else None
     )
 
+    # counted_in_metrics percentage: total_predictions (counted) / total_predictions_all (all samples)
+    compressed_counted = compressed.get("total_predictions")
+    compressed_all = compressed.get("total_predictions_all")
+    counted_in_metrics_pct = compressed_counted / compressed_all if compressed_counted is not None and compressed_all else None
+
     summary = HSRunSummary(
         run_dir=run_dir,
         run_name=run_name,
@@ -274,6 +280,7 @@ def aggregate_results(results_file: str) -> Optional[HSRunSummary]:
         compressed_correct=compressed.get("correct_predictions"),
         compressed_valid_pct=compressed_valid_pct,
         compressed_total=compressed.get("total_predictions"),
+        counted_in_metrics_pct=counted_in_metrics_pct,
         accuracy_difference=accuracy_difference,
         token_accuracy_difference=token_accuracy_difference,
         char_accuracy_difference=char_accuracy_difference,
@@ -327,6 +334,7 @@ def build_latex_table(
         ("baseline_char_accuracy", "Baseline Char Acc"),
         ("compressed_accuracy", "Compressed Acc"),
         ("compressed_valid_pct", "Compressed Valid"),
+        ("counted_in_metrics_pct", "Counted In Metrics"),
         ("compressed_token_accuracy", "Compressed Tok Acc"),
         ("compressed_char_accuracy", "Compressed Char Acc"),
         ("accuracy_difference", "Diff"),
@@ -350,6 +358,7 @@ def build_latex_table(
         "baseline_char_accuracy",
         "compressed_accuracy",
         "compressed_valid_pct",
+        "counted_in_metrics_pct",
         "compressed_token_accuracy",
         "compressed_char_accuracy",
         "accuracy_difference",
@@ -609,7 +618,7 @@ def plot_cumulative_knockout(
             color="#2563eb",
             linewidth=1.5,
             markersize=4,
-            label="Forward knockout MMLU Accuracy (layers 0..k)",
+            label="Forward knockout Accuracy (layers 0..k)",
         )
 
     if "cumulative_reconstruction" in summary:
@@ -634,7 +643,7 @@ def plot_cumulative_knockout(
     ax_fwd.set_xlabel("Number of layers knocked out (0 = Cram, L = Base)")
     ax_fwd.set_ylabel("Accuracy")
     ax_fwd.set_xlim(-0.5, num_layers + 0.5)
-    ax_fwd.set_title("Forward knockout MMLU Accuracy (layers 0..k)")
+    ax_fwd.set_title("Forward knockout Accuracy (layers 0..k)")
     ax_fwd.legend(loc="best", fontsize=8)
     ax_fwd.grid(True, alpha=0.3)
 
@@ -747,7 +756,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "max_optimization_steps, learning_rate, batch_size, dtype, loss_type, "
         "hybrid_alpha, num_alignment_layers, inverted_alignment, random_seed, "
         "baseline_accuracy, baseline_token_accuracy, baseline_char_accuracy, "
-        "compressed_accuracy, compressed_token_accuracy, compressed_char_accuracy, "
+        "compressed_accuracy, counted_in_metrics_pct, compressed_token_accuracy, compressed_char_accuracy, "
         "accuracy_difference, token_accuracy_difference, char_accuracy_difference. "
         "If not specified, all columns are included.",
     )
