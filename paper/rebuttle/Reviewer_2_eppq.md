@@ -84,6 +84,43 @@ reorganize the paper, ensuring the paper makes full use of the available page bu
  
 
 
+<!-- **Follow-up: Justification for progressive cramming** -->
+
+We appreciate the reviewer's continued engagement. We address the remaining concerns below.
+
+
+   
+ 
+
+**Why progressive cramming is necessary despite higher compute cost.**
+
+As discussed in Section 3.2, **full cramming** suffers from the *"last 1% problem"*: even at 97–99% teacher-forcing accuracy, the remaining errors concentrate at the earliest token positions. A single early-token mismatch causes autoregressive collapse - greedy convergence drops below 2%. Only **progressive cramming** reliably achieves 100% reconstruction accuracy from the compression embedding, which is a necessary condition for usable autoregressive generation.
+
+
+   
+ 
+
+**More accurate estimation of embedding capacity.**
+
+Progressive cramming achieves an Information Gain of $4391 \pm 1408$, compared to $3292 \pm 320$ for full cramming (Kuratov et al.). The higher mean indicates that full cramming underestimates the true embedding capacity. The wider standard deviation is expected: progressive cramming pushes closer to the actual capacity limit, where sample-to-sample variation naturally increases.
+
+
+   
+ 
+
+**Insights into the optimization landscape.**
+
+The progressive cramming setup allows us to trace the optimization trajectory, which revealed that it is inherently low-dimensional. This insight led to the low-rank projection technique that improves the cramming process, as demonstrated in [Table 6](https://drive.google.com/file/d/148Cxg2jOx_-MIH5XC0I-oPbwVLG0Ktiz/view?usp=sharing) (see our response to W1).
+
+
+   
+ 
+
+**50 samples**
+
+We note that Kuratov et al. (full cramming) also evaluate on 50 samples. Our experimental setup therefore follows established practice in this line of work.
+
+
 **Erratum: Downstream evaluation bug**
 
 After submission, we discovered a bug in the perplexity computation for the HellaSwag and ARC benchmarks. The compression embedding introduced an off-by-one token shift that was not accounted for during likelihood scoring, causing the near-random downstream accuracy reported in the original paper. After correction, HellaSwag accuracy under cramming ranges from 34%-38% for most models, representing a consistent but moderate drop from baseline in line with our central claim that high reconstruction accuracy does not imply preservation of downstream-relevant semantics. Corrected results are presented in [Table 7](https://drive.google.com/file/d/1DIjiTpyIqQ4xuW0k9Q7mjCOFuXUPz2YX/view?usp=sharing). See also response to Reviewer $\texttt{neRn}$, Q3.
