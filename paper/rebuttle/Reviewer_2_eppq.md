@@ -80,7 +80,15 @@ We agree that the main body can be made more substantial. In the revised version
 reorganize the paper, ensuring the paper makes full use of the available page budget.
 
 
-   
+---
+
+
+**Erratum: Downstream evaluation bug**
+
+After submission, we discovered a bug in the perplexity computation for the HellaSwag and ARC benchmarks. The compression embedding introduced an off-by-one token shift that was not accounted for during likelihood scoring, causing the near-random downstream accuracy reported in the original paper. After correction, HellaSwag accuracy under cramming ranges from 34%-38% for most models, representing a consistent but moderate drop from baseline in line with our central claim that high reconstruction accuracy does not imply preservation of downstream-relevant semantics. Corrected results are presented in [Table 7](https://drive.google.com/file/d/1DIjiTpyIqQ4xuW0k9Q7mjCOFuXUPz2YX/view?usp=sharing). See also response to Reviewer $\texttt{neRn}$, Q3.
+
+
+---
  
 
 
@@ -119,8 +127,3 @@ The progressive cramming setup allows us to trace the optimization trajectory, w
 **50 samples**
 
 We note that Kuratov et al. (full cramming) also evaluate on 50 samples. Our experimental setup therefore follows established practice in this line of work.
-
-
-**Erratum: Downstream evaluation bug**
-
-After submission, we discovered a bug in the perplexity computation for the HellaSwag and ARC benchmarks. The compression embedding introduced an off-by-one token shift that was not accounted for during likelihood scoring, causing the near-random downstream accuracy reported in the original paper. After correction, HellaSwag accuracy under cramming ranges from 34%-38% for most models, representing a consistent but moderate drop from baseline in line with our central claim that high reconstruction accuracy does not imply preservation of downstream-relevant semantics. Corrected results are presented in [Table 7](https://drive.google.com/file/d/1DIjiTpyIqQ4xuW0k9Q7mjCOFuXUPz2YX/view?usp=sharing). See also response to Reviewer $\texttt{neRn}$, Q3.
