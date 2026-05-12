@@ -21,6 +21,7 @@ dependencies = [
     "transformers>=4.57.1",
     "ripser>=0.6.4",
     "persim>=0.3.2",
+    "openai>=1.30.0",
 ]
 
 [project.scripts]

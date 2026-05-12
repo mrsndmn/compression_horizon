@@ -15,7 +15,7 @@ import os
 from typing import Optional
 
 import torch
-from datasets import load_dataset
+from datasets import load_dataset, load_from_disk
 from torch.optim import AdamW
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, get_scheduler
@@ -666,6 +666,15 @@ def main():
         default=False,
         help="Skip reverse cumulative knockout sweep (only used with --intervention).",
     )
+    parser.add_argument(
+        "--dataset_path",
+        type=str,
+        default=None,
+        help=(
+            "If set, load the (paraphrased) ARC dataset from this on-disk path via "
+            "`load_from_disk` instead of downloading 'allenai/ai2_arc' from the Hub."
+        ),
+    )
     args = parser.parse_args()
 
     # Set random seed
@@ -706,7 +715,11 @@ def main():
     # question - the question text
     # choices - dict with 'text' (list of answer texts) and 'label' (list of labels like ['A', 'B', 'C', 'D'])
     # answerKey - correct answer label (e.g., 'A', 'B', 'C', 'D')
-    dataset = load_dataset("allenai/ai2_arc", args.arc_subset, split="validation")
+    if args.dataset_path:
+        print(f"Loading ARC dataset from disk: {args.dataset_path}")
+        dataset = load_from_disk(args.dataset_path)
+    else:
+        dataset = load_dataset("allenai/ai2_arc", args.arc_subset, split="validation")
     if args.limit_samples:
         dataset = dataset.select(range(args.limit_samples))
     print(f"Evaluating ARC benchmark ({args.arc_subset}) on {len(dataset)} samples")
