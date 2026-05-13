@@ -211,7 +211,7 @@ if __name__ == "__main__":
 
         cmd_args = [
             f"--model_checkpoint {model_checkpoint}",
-            f"--arc_split {args.arc_split}",
+            f"--arc_subset {args.arc_split}",
             f"--limit_samples {limit_samples}",
             f"--num_compression_tokens {num_compression_tokens}",
             f"--max_optimization_steps {max_optimization_steps}",
