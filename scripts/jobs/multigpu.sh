@@ -44,17 +44,6 @@ echo "MASTER_ADDR $MASTER_ADDR"
 
 cd $WORKDIR
 
-# CURRENT_CONFIG_FILE=$JOBS_TMP_PROC/accelerate_${RANK}.yaml
-
-# echo "Copying multinode-template.yaml to $CURRENT_CONFIG_FILE"
-# ls -l ./configs/accelerate/multinode-template.yaml
-
-# echo "Replacing TODO with $RANK in $CURRENT_CONFIG_FILE"
-# sed -i "s/machine_rank: TODO/machine_rank: $RANK/g" $CURRENT_CONFIG_FILE
-# sed -i "s/num_processes: TODO/num_processes: $NUM_GPUS/g" $CURRENT_CONFIG_FILE
-# sed -i "s/num_machines: TODO/num_machines: $WORLD_SIZE/g" $CURRENT_CONFIG_FILE
-# sed -i "s/main_process_ip: TODO/main_process_ip: $MASTER_ADDR/g" $CURRENT_CONFIG_FILE
-# sed -i "s/main_process_port: TODO/main_process_port: $MASTER_PORT/g" $CURRENT_CONFIG_FILE
 
 ${ENV_PREFIX}/python ${ENV_PREFIX}/accelerate launch \
     --config_file ./configs/accelerate.yaml \
