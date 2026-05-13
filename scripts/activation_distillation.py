@@ -1,3 +1,4 @@
+import datetime
 import hashlib
 import json
 import os
@@ -5,6 +6,7 @@ import shutil
 import subprocess
 import sys
 
+import torch.distributed as dist
 import transformers
 from accelerate import PartialState
 from datasets import Dataset, load_dataset
@@ -162,9 +164,14 @@ if __name__ == "__main__":
     except subprocess.CalledProcessError:
         raise NvidiaSMIError("nvidia-smi is not available")
 
-    # Initialize distributed state so filesystem-mutating sections can be gated to global rank 0.
-    # PartialState is the same singleton used by Accelerator under the hood, so creating it here
-    # does not conflict with the Trainer's later Accelerator init.
+    # Init the process group with an extended timeout BEFORE PartialState so the first
+    # rank-0-only operation (tokenization cache build) can take much longer than the
+    # default 10-minute NCCL store timeout without starving the other ranks at the barrier.
+    if int(os.environ.get("WORLD_SIZE", "1")) > 1 and not dist.is_initialized():
+        dist.init_process_group(
+            backend="nccl",
+            timeout=datetime.timedelta(hours=2),
+        )
     distributed_state = PartialState()
 
     # Parse command-line arguments and defaults

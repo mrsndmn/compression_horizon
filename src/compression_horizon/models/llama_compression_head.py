@@ -26,7 +26,7 @@ class CausalLMOutputWithPastAndCompression(ModelOutput):
 
 
 class LlamaForCausalLMCompressionHead(LlamaPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
@@ -44,6 +44,22 @@ class LlamaForCausalLMCompressionHead(LlamaPreTrainedModel, GenerationMixin):
         )
 
         self.post_init()
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        # transformers>=5.8 `LlamaPreTrainedModel._init_weights` calls
+        # `init.normal_(module.weight.float(), ...)`, which fills a fp32 *copy* and leaves
+        # the real bf16/fp16 weight uninitialized (random memory → zeros or NaN). Base-model
+        # layers escape this because their weights get overwritten by the checkpoint, but our
+        # compression_head is missing from the checkpoint and triggers a second `_init_weights`
+        # pass after weight loading. Override here with an in-place init on the actual tensor.
+        if isinstance(module, nn.Linear):
+            std = getattr(self.config, "initializer_range", 0.02) or 0.02
+            nn.init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        else:
+            super()._init_weights(module)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
