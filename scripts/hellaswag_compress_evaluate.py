@@ -695,7 +695,7 @@ def main():
     else:
         dataset = load_dataset("Rowan/hellaswag", split="validation")
     if args.limit_samples:
-        dataset = dataset.select(range(args.limit_samples))
+        dataset = dataset.select(range(min(args.limit_samples, len(dataset))))
     print(f"Evaluating HellaSwag benchmark on {len(dataset)} samples")
 
     # Create output directory

@@ -721,7 +721,7 @@ def main():
     else:
         dataset = load_dataset("allenai/ai2_arc", args.arc_subset, split="validation")
     if args.limit_samples:
-        dataset = dataset.select(range(args.limit_samples))
+        dataset = dataset.select(range(min(args.limit_samples, len(dataset))))
     print(f"Evaluating ARC benchmark ({args.arc_subset}) on {len(dataset)} samples")
 
     # Create output directory
