@@ -26,6 +26,17 @@ python scripts/jobs/run_jobs_hellaswag_evaluate.py \
   --model Llama-3.1 SmolLM2-1.7B gemma-3-4b-pt EleutherAI/pythia-1.4b
 """
 
+"""
+# Sweep paraphrase temperatures for HellaSwag with Llama-3.1-8B:
+python scripts/jobs/run_jobs_hellaswag_evaluate.py \
+  --model Llama-3.1 \
+  --dataset_path 'artifacts/hellaswag_paraphrases_temps/temp_{temperature}' \
+  --temperatures 0.0,0.5,1.0,1.5,2.0 \
+  --max_optimization_steps 1000 \
+  --learning_rate 0.1 \
+  --batch_size 32
+"""
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Launch HellaSwag compression evaluation jobs.")
@@ -110,7 +121,41 @@ if __name__ == "__main__":
         default=False,
         help="Disable BOS token insertion during tokenization.",
     )
+    parser.add_argument(
+        "--dataset_path",
+        type=str,
+        default=None,
+        help=(
+            "If set, passes --dataset_path to hellaswag_compress_evaluate.py so it loads the "
+            "(paraphrased) dataset via load_from_disk instead of pulling from HF Hub. "
+            "When combined with --temperatures, this string must contain a '{temperature}' "
+            "placeholder, e.g. 'artifacts/hellaswag_paraphrases_temps/temp_{temperature}'."
+        ),
+    )
+    parser.add_argument(
+        "--temperatures",
+        type=str,
+        default=None,
+        help=(
+            "Comma-separated list of paraphrase temperatures to sweep (e.g. '0.0,0.5,1.0,1.5,2.0'). "
+            "Requires --dataset_path to contain a '{temperature}' placeholder. Each temperature "
+            "produces one job per matching model; output_dir is suffixed with '_paraphrase_t{T:.2f}'."
+        ),
+    )
     args = parser.parse_args()
+
+    # Resolve the temperature sweep (default: single pass with no temperature suffix)
+    if args.temperatures is None:
+        temperatures: list[float | None] = [None]
+    else:
+        temperatures = [float(t.strip()) for t in args.temperatures.split(",") if t.strip()]
+        if not temperatures:
+            raise SystemExit("--temperatures was given but parsed to an empty list")
+        if args.dataset_path is None or "{temperature}" not in args.dataset_path:
+            raise SystemExit(
+                "--temperatures requires --dataset_path with a '{temperature}' placeholder "
+                "(e.g. 'artifacts/hellaswag_paraphrases_temps/temp_{temperature}')"
+            )
     workdir = os.getcwd()
     python_path = "/workspace-SR004.nfs2/d.tarasov/envs/compression_horizon/bin/python"
 
@@ -141,7 +186,7 @@ if __name__ == "__main__":
             print(f"\033[33mNo models matched the filter: {args.model}\033[0m")
             sys.exit(0)
 
-    for model_checkpoint in checkpoints:
+    for model_checkpoint, temperature in ((m, t) for m in checkpoints for t in temperatures):
         exp_suffix = f"hellaswag_{model_checkpoint.split('/')[1]}"
 
         # Build command arguments with defaults
@@ -215,6 +260,16 @@ if __name__ == "__main__":
             exp_suffix = f"{exp_suffix}_inv_align"
         if args.no_bos_token:
             exp_suffix = f"{exp_suffix}_nobos"
+
+        # Resolve dataset_path for this temperature (or static) and tag the experiment
+        if args.dataset_path is not None:
+            if temperature is not None:
+                resolved_dataset_path = args.dataset_path.format(temperature=f"{temperature:.2f}")
+                exp_suffix = f"{exp_suffix}_paraphrase_t{temperature:.2f}"
+            else:
+                resolved_dataset_path = args.dataset_path
+                exp_suffix = f"{exp_suffix}_paraphrase"
+            cmd_args.append(f"--dataset_path {resolved_dataset_path}")
 
         out_dir_name = f"artifacts/hellaswag_evaluation/{exp_suffix}"
         if os.path.exists(out_dir_name):
