@@ -64,6 +64,15 @@ def output_dir_for(args: argparse.Namespace, subset: str, temperature: float) ->
     )
 
 
+def baseline_dir_for(args: argparse.Namespace, subset: str) -> str:
+    """Non-paraphrased eval output dir (no _paraphrase_t suffix)."""
+    subset_token = subset.replace("-", "_")
+    return os.path.join(
+        args.eval_root,
+        f"arc_{subset_token}_{args.model}" f"_samples_{args.samples}" f"_lr_{args.learning_rate}" f"_batch_{args.batch_size}",
+    )
+
+
 def load_baseline_accuracy(path: str) -> dict[str, float] | None:
     results_path = os.path.join(path, "results.json")
     if not os.path.isfile(results_path):
@@ -86,6 +95,7 @@ def main() -> int:
     temperatures = [float(t.strip()) for t in args.temperatures.split(",") if t.strip()]
 
     series: dict[str, list[tuple[float, dict[str, float]]]] = {s: [] for s in SUBSETS}
+    upstream_baselines: dict[str, dict[str, float]] = {}
     missing: list[str] = []
     for subset in SUBSETS:
         for temp in temperatures:
@@ -95,6 +105,13 @@ def main() -> int:
                 missing.append(f"{subset} t={temp:.2f} -> {out_dir}")
                 continue
             series[subset].append((temp, metrics))
+        # Non-paraphrased upstream baseline (rendered as a star)
+        upstream_dir = baseline_dir_for(args, subset)
+        upstream_metrics = load_baseline_accuracy(upstream_dir)
+        if upstream_metrics is not None:
+            upstream_baselines[subset] = upstream_metrics
+        else:
+            missing.append(f"{subset} UPSTREAM baseline -> {upstream_dir}")
 
     if missing:
         print("Missing or unparseable results for:", file=sys.stderr)
@@ -106,7 +123,7 @@ def main() -> int:
         return 1
 
     # Build the plot.
-    fig, ax = plt.subplots(figsize=(7, 4.5))
+    fig, ax = plt.subplots(figsize=(7.5, 4.8))
     colors = {"ARC-Challenge": "tab:red", "ARC-Easy": "tab:blue"}
     for subset, points in series.items():
         if not points:
@@ -117,7 +134,7 @@ def main() -> int:
         ax.plot(xs, ys, marker="o", label=subset, color=colors.get(subset))
         for x, y, (_, m) in zip(xs, ys, points):
             ax.annotate(
-                f"{y:.3f}\n(n={m['total_predictions']})",
+                f"{y:.3f}",
                 (x, y),
                 textcoords="offset points",
                 xytext=(0, 8),
@@ -126,9 +143,35 @@ def main() -> int:
                 color=colors.get(subset, "black"),
             )
 
+    # Upstream (non-paraphrased) baselines as stars at the leftmost x.
+    if upstream_baselines:
+        star_x = min(temperatures) - 0.15  # park stars just left of the curve start
+        for subset, metrics in upstream_baselines.items():
+            y = metrics["accuracy"]
+            ax.scatter(
+                [star_x],
+                [y],
+                marker="*",
+                s=220,
+                color=colors.get(subset, "black"),
+                edgecolor="black",
+                linewidth=0.7,
+                zorder=5,
+                label=f"{subset} upstream (no paraphrase)",
+            )
+            ax.annotate(
+                f"{y:.3f}",
+                (star_x, y),
+                textcoords="offset points",
+                xytext=(0, -14),
+                ha="center",
+                fontsize=8,
+                color=colors.get(subset, "black"),
+            )
+
     ax.set_xlabel("Paraphrase temperature")
     ax.set_ylabel("Baseline accuracy")
-    ax.set_title(f"{args.model} on ARC (paraphrased validation) — baseline accuracy vs. temperature")
+    ax.set_title(f"{args.model} on ARC (paraphrased validation)")
     ax.set_xticks(temperatures)
     ax.grid(True, linestyle=":", alpha=0.5)
     ax.legend()
