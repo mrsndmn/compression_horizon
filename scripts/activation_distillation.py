@@ -6,6 +6,7 @@ import subprocess
 import sys
 
 import transformers
+from accelerate import PartialState
 from datasets import Dataset, load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, DataCollatorForLanguageModeling
 
@@ -161,6 +162,11 @@ if __name__ == "__main__":
     except subprocess.CalledProcessError:
         raise NvidiaSMIError("nvidia-smi is not available")
 
+    # Initialize distributed state so filesystem-mutating sections can be gated to global rank 0.
+    # PartialState is the same singleton used by Accelerator under the hood, so creating it here
+    # does not conflict with the Trainer's later Accelerator init.
+    distributed_state = PartialState()
+
     # Parse command-line arguments and defaults
     hf_parser = transformers.HfArgumentParser(MyTrainingArguments)
     (training_args,) = hf_parser.parse_args_into_dataclasses()
@@ -251,10 +257,11 @@ if __name__ == "__main__":
         filtered_argv.append(token)
     cmdline_str = " ".join(filtered_argv).strip()
     cmd_hash8 = hashlib.sha1(cmdline_str.encode("utf-8")).hexdigest()[:8]
-    with open(os.path.join(output_dir, "cmd.txt"), "w", encoding="utf-8") as f:
-        f.write(cmdline_str + "\n")
-    with open(os.path.join(output_dir, "cmd_hash.txt"), "w", encoding="utf-8") as f:
-        f.write(cmd_hash8 + "\n")
+    if distributed_state.is_main_process:
+        with open(os.path.join(output_dir, "cmd.txt"), "w", encoding="utf-8") as f:
+            f.write(cmdline_str + "\n")
+        with open(os.path.join(output_dir, "cmd_hash.txt"), "w", encoding="utf-8") as f:
+            f.write(cmd_hash8 + "\n")
 
     random_seed = getattr(training_args, "random_seed", 42)
     set_launch_seed(random_seed)
@@ -283,19 +290,37 @@ if __name__ == "__main__":
     cache_dir = "artifacts/cache/tokenized_datasets"
     os.makedirs(cache_dir, exist_ok=True)
 
-    # Load or create training dataset
-    train_dataset = load_or_create_tokenized_dataset(
-        cache_dir=cache_dir,
-        dataset_name=training_args.dataset_name,
-        split="test",
-        tokenizer=tokenizer,
-        max_sequence_length=training_args.max_sequence_length,
-        model_checkpoint=training_args.model_checkpoint,
-        no_bos_token=training_args.no_bos_token,
-        limit_dataset_items=getattr(training_args, "limit_dataset_items", None),
-        offset_dataset_items=getattr(training_args, "offset_dataset_items", None),
-        cache_prefix="dataset",
-    )
+    # Load or create training dataset.
+    # On multinode, only the main process tokenizes/writes the cache; other ranks wait at the
+    # barrier and then load the already-prepared cache from shared storage.
+    train_dataset = None
+    if distributed_state.is_main_process:
+        train_dataset = load_or_create_tokenized_dataset(
+            cache_dir=cache_dir,
+            dataset_name=training_args.dataset_name,
+            split="test",
+            tokenizer=tokenizer,
+            max_sequence_length=training_args.max_sequence_length,
+            model_checkpoint=training_args.model_checkpoint,
+            no_bos_token=training_args.no_bos_token,
+            limit_dataset_items=getattr(training_args, "limit_dataset_items", None),
+            offset_dataset_items=getattr(training_args, "offset_dataset_items", None),
+            cache_prefix="dataset",
+        )
+    distributed_state.wait_for_everyone()
+    if train_dataset is None:
+        train_dataset = load_or_create_tokenized_dataset(
+            cache_dir=cache_dir,
+            dataset_name=training_args.dataset_name,
+            split="test",
+            tokenizer=tokenizer,
+            max_sequence_length=training_args.max_sequence_length,
+            model_checkpoint=training_args.model_checkpoint,
+            no_bos_token=training_args.no_bos_token,
+            limit_dataset_items=getattr(training_args, "limit_dataset_items", None),
+            offset_dataset_items=getattr(training_args, "offset_dataset_items", None),
+            cache_prefix="dataset",
+        )
 
     print("train_dataset", len(train_dataset))
     print("train_dataset", train_dataset)
@@ -306,19 +331,35 @@ if __name__ == "__main__":
         eval_seq_length = training_args.max_sequence_length * 2
         print(f"Preparing evaluation dataset with sequence length {eval_seq_length} (2x training length)...")
 
-        eval_dataset = load_or_create_tokenized_dataset(
-            cache_dir=cache_dir,
-            dataset_name=training_args.dataset_name,
-            split="test",
-            tokenizer=tokenizer,
-            max_sequence_length=eval_seq_length,
-            model_checkpoint=training_args.model_checkpoint,
-            no_bos_token=training_args.no_bos_token,
-            limit_dataset_items=getattr(training_args, "limit_dataset_items", None),
-            offset_dataset_items=getattr(training_args, "offset_dataset_items", None),
-            cache_prefix="eval_dataset",
-            fallback_length=len(train_dataset),
-        )
+        if distributed_state.is_main_process:
+            eval_dataset = load_or_create_tokenized_dataset(
+                cache_dir=cache_dir,
+                dataset_name=training_args.dataset_name,
+                split="test",
+                tokenizer=tokenizer,
+                max_sequence_length=eval_seq_length,
+                model_checkpoint=training_args.model_checkpoint,
+                no_bos_token=training_args.no_bos_token,
+                limit_dataset_items=getattr(training_args, "limit_dataset_items", None),
+                offset_dataset_items=getattr(training_args, "offset_dataset_items", None),
+                cache_prefix="eval_dataset",
+                fallback_length=len(train_dataset),
+            )
+        distributed_state.wait_for_everyone()
+        if eval_dataset is None:
+            eval_dataset = load_or_create_tokenized_dataset(
+                cache_dir=cache_dir,
+                dataset_name=training_args.dataset_name,
+                split="test",
+                tokenizer=tokenizer,
+                max_sequence_length=eval_seq_length,
+                model_checkpoint=training_args.model_checkpoint,
+                no_bos_token=training_args.no_bos_token,
+                limit_dataset_items=getattr(training_args, "limit_dataset_items", None),
+                offset_dataset_items=getattr(training_args, "offset_dataset_items", None),
+                cache_prefix="eval_dataset",
+                fallback_length=len(train_dataset),
+            )
 
         print(f"eval_dataset length: {len(eval_dataset)}")
         print(f"eval_dataset sequence length: {eval_seq_length}")
@@ -349,25 +390,30 @@ if __name__ == "__main__":
     training_artifacts = trainer.train()
     print(f"Saved compressed prefixes to: {training_artifacts}.")
 
-    # Move from experiments_in_progress to final directory after successful training
-    if output_dir_final:
-        print(f"\n{'='*80}")
-        print("Training completed successfully!")
-        print("Moving results from in-progress to final location:")
-        print(f"  From: {output_dir}")
-        print(f"  To:   {output_dir_final}")
-        print(f"{'='*80}\n")
+    # All ranks must finish training before rank 0 mutates the output directory.
+    distributed_state.wait_for_everyone()
 
-        # Ensure parent directory of final location exists
-        os.makedirs(os.path.dirname(output_dir_final), exist_ok=True)
+    # Move from experiments_in_progress to final directory after successful training.
+    # Only the main process touches the shared filesystem here; other ranks just exit.
+    if distributed_state.is_main_process:
+        if output_dir_final:
+            print(f"\n{'='*80}")
+            print("Training completed successfully!")
+            print("Moving results from in-progress to final location:")
+            print(f"  From: {output_dir}")
+            print(f"  To:   {output_dir_final}")
+            print(f"{'='*80}\n")
 
-        # If final directory already exists, remove it first
-        if os.path.exists(output_dir_final):
-            print(f"Removing existing final directory: {output_dir_final}")
-            shutil.rmtree(output_dir_final)
+            # Ensure parent directory of final location exists
+            os.makedirs(os.path.dirname(output_dir_final), exist_ok=True)
 
-        # Move the directory
-        shutil.move(output_dir, output_dir_final)
-        print(f"Successfully moved experiment results to: {output_dir_final}")
-    else:
-        print(f"Training completed. Results saved at: {output_dir}")
+            # If final directory already exists, remove it first
+            if os.path.exists(output_dir_final):
+                print(f"Removing existing final directory: {output_dir_final}")
+                shutil.rmtree(output_dir_final)
+
+            # Move the directory
+            shutil.move(output_dir, output_dir_final)
+            print(f"Successfully moved experiment results to: {output_dir_final}")
+        else:
+            print(f"Training completed. Results saved at: {output_dir}")

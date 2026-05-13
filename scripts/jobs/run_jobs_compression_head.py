@@ -11,7 +11,13 @@ if __name__ == "__main__":
         "--num_gpus",
         type=int,
         default=1,
-        help="Number of GPUs to request for the job (affects instance_type). Default: 1",
+        help="Number of GPUs per node to request for the job (affects instance_type). Default: 1",
+    )
+    parser.add_argument(
+        "--num_nodes",
+        type=int,
+        default=1,
+        help="Number of nodes (workers) for multinode training. Default: 1",
     )
     parser.add_argument(
         "--model",
@@ -196,23 +202,29 @@ if __name__ == "__main__":
         num_gpus = args.num_gpus if args.num_gpus is not None else 1
         if num_gpus < 1:
             raise ValueError(f"--num_gpus must be >= 1, got {num_gpus}")
+        num_nodes = args.num_nodes if args.num_nodes is not None else 1
+        if num_nodes < 1:
+            raise ValueError(f"--num_nodes must be >= 1, got {num_nodes}")
 
         total_batch_size = args.total_batch_size if args.total_batch_size is not None else 128
-        denom = num_gpus * per_device_train_batch_size
+        denom = num_nodes * num_gpus * per_device_train_batch_size
         if denom <= 0:
             raise ValueError(
-                f"Invalid batch sizing: num_gpus={num_gpus}, per_device_train_batch_size={per_device_train_batch_size}"
+                f"Invalid batch sizing: num_nodes={num_nodes}, num_gpus={num_gpus}, "
+                f"per_device_train_batch_size={per_device_train_batch_size}"
             )
         if total_batch_size % denom != 0:
             raise ValueError(
-                "total_batch_size must be divisible by (num_gpus * per_device_train_batch_size). "
-                f"Got total_batch_size={total_batch_size}, num_gpus={num_gpus}, per_device_train_batch_size={per_device_train_batch_size}"
+                "total_batch_size must be divisible by (num_nodes * num_gpus * per_device_train_batch_size). "
+                f"Got total_batch_size={total_batch_size}, num_nodes={num_nodes}, num_gpus={num_gpus}, "
+                f"per_device_train_batch_size={per_device_train_batch_size}"
             )
         gradient_accumulation_steps = total_batch_size // denom
         if gradient_accumulation_steps < 1:
             raise ValueError(
                 "Computed gradient_accumulation_steps < 1. "
-                f"Got total_batch_size={total_batch_size}, num_gpus={num_gpus}, per_device_train_batch_size={per_device_train_batch_size}"
+                f"Got total_batch_size={total_batch_size}, num_nodes={num_nodes}, num_gpus={num_gpus}, "
+                f"per_device_train_batch_size={per_device_train_batch_size}"
             )
         dataloader_num_workers = args.dataloader_num_workers if args.dataloader_num_workers is not None else 4
         compression_head_distill_alpha = (
@@ -288,6 +300,9 @@ if __name__ == "__main__":
         if args.num_gpus is not None and args.num_gpus != 1:
             exp_suffix = f"{exp_suffix}_ngpu_{args.num_gpus}"
 
+        if args.num_nodes is not None and args.num_nodes != 1:
+            exp_suffix = f"{exp_suffix}_nnode_{args.num_nodes}"
+
         if args.learning_rate is not None and args.learning_rate != 1e-4:
             lr_str = str(args.learning_rate).replace(".", "p").replace("-", "m")
             exp_suffix = f"{exp_suffix}_lr_{lr_str}"
@@ -333,7 +348,7 @@ if __name__ == "__main__":
             "type": "binary_exp",
             "shm_size_class": "medium",
             "base_image": "cr.ai.cloud.ru/aicloud-base-images/py3.12-torch2.7.0:0.0.41",
-            "n_workers": 1,
+            "n_workers": num_nodes,
             "processes_per_worker": 1,
         }
 
