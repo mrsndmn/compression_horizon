@@ -184,10 +184,12 @@ class BaseTrainer:
         inputs_embeds_new[:, 0:1, :] = compression_embeds
         attention_mask_new[:, 0] = 1
 
+        # Reconstruction objective: the new sequence is [compression_token, prefix_tokens],
+        # and the model is trained to autoregressively predict the *prefix tokens themselves*
+        # (matching what progressive cramming evaluates), NOT the post-prefix continuation.
         ar = torch.arange(seq_len, device=device, dtype=torch.long)
-        src_idx = p.unsqueeze(1) + ar.unsqueeze(0)
-        valid = src_idx < lengths.unsqueeze(1)
-        src_idx_safe = torch.clamp(src_idx, max=seq_len - 1)
+        valid = ar.unsqueeze(0) < p.unsqueeze(1)  # [B, T]: i < prefix_length[b]
+        src_idx_safe = ar.unsqueeze(0).expand(bsz, -1).contiguous()
 
         gathered_embeds = token_embeddings.gather(1, src_idx_safe.unsqueeze(-1).expand(-1, -1, hidden))
         gathered_ids = input_ids.gather(1, src_idx_safe)

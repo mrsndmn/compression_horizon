@@ -24,6 +24,21 @@ from compression_horizon.utils.exceptions import NvidiaSMIError
 from compression_horizon.utils.launch import resolve_torch_dtype, set_launch_seed
 
 
+def _tokenizer_fingerprint(tokenizer: AutoTokenizer) -> str:
+    """Stable 16-char fingerprint of a tokenizer's identity.
+
+    Two tokenizers that produce identical output for any input will yield the same
+    fingerprint regardless of which model directory they were loaded from. Used as the
+    tokenization-cache key so derived checkpoints share the base model's tokenized cache.
+    """
+    h = hashlib.sha256()
+    for tok, idx in sorted(tokenizer.get_vocab().items(), key=lambda kv: kv[1]):
+        h.update(f"{idx}\t{tok}\n".encode("utf-8"))
+    h.update(repr(sorted(tokenizer.special_tokens_map.items())).encode("utf-8"))
+    h.update(str(tokenizer.model_max_length).encode("utf-8"))
+    return h.hexdigest()[:16]
+
+
 def load_or_create_tokenized_dataset(
     cache_dir: str,
     dataset_name: str,
@@ -58,19 +73,23 @@ def load_or_create_tokenized_dataset(
     Returns:
         Tokenized Dataset
     """
-    # Generate cache key based on dataset parameters
+    # Generate cache key based on dataset parameters.
+    # Key off the tokenizer's identity (vocab + special tokens), NOT the model checkpoint
+    # path, so a fine-tuned checkpoint that inherits the base model's tokenizer shares the
+    # same cache as the base model.
     cache_params = {
         "dataset": dataset_name,
         "split": split,
         "limit_dataset_items": limit_dataset_items,
         "offset_dataset_items": offset_dataset_items,
         "max_sequence_length": max_sequence_length,
-        "model_checkpoint": model_checkpoint,
+        "tokenizer_fingerprint": _tokenizer_fingerprint(tokenizer),
         "no_bos_token": no_bos_token,
     }
     cache_key_json = json.dumps(cache_params, sort_keys=True, ensure_ascii=False, default=str)
     cache_key_hash = hashlib.sha256(cache_key_json.encode("utf-8")).hexdigest()[:16]
     cache_path = os.path.join(cache_dir, f"{cache_prefix}_{cache_key_hash}")
+    _ = model_checkpoint  # kept in signature for call-site compatibility; not used in key
 
     # Try to load cached tokenized dataset
     if os.path.exists(cache_path):
@@ -273,6 +292,12 @@ if __name__ == "__main__":
     random_seed = getattr(training_args, "random_seed", 42)
     set_launch_seed(random_seed)
     print(f"Random seed set to: {random_seed}")
+
+    if getattr(training_args, "detect_anomaly", False):
+        import torch
+
+        torch.autograd.set_detect_anomaly(True)
+        print("torch.autograd anomaly detection: ENABLED (slow; debug only)")
 
     torch_dtype = resolve_torch_dtype(getattr(training_args, "dtype", "float32"))
     print("torch_dtype", torch_dtype)

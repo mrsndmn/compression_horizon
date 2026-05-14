@@ -323,7 +323,21 @@ class MyTrainingArguments(TrainingArguments):
     )
     compression_head_distill_alpha: float = field(
         default=1.0,
-        metadata={"help": "Weight for distillation loss for non-selected compression embeddings."},
+        metadata={
+            "help": "Weight (alpha) for the compressed-input reconstruction loss in the compression-head training objective."
+        },
+    )
+    compression_head_distill_beta: float = field(
+        default=1.0,
+        metadata={
+            "help": "Weight (beta) for the base next-token loss in the compression-head training objective. Set <1 to deprioritize base_loss relative to after_loss."
+        },
+    )
+    detect_anomaly: bool = field(
+        default=False,
+        metadata={
+            "help": "If True, call torch.autograd.set_detect_anomaly(True) before training so the first NaN/Inf-producing op raises with a precise stack trace. Slow — debug only."
+        },
     )
     compression_head_freeze_base_model: bool = field(
         default=True,

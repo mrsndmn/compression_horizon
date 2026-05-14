@@ -113,6 +113,41 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                     opt, sched = self._build_optimizer_and_scheduler([per_sample_pca_coefficients[j]])
                     per_sample_optimizers.append(opt)
                     per_sample_schedulers.append(sched)
+            elif init_method == "compression_head_forward":
+                # Initialize the per-sample compression token by running the model's compression_head
+                # over each sample's full prefix. Requires a model with a compression_head module
+                # (e.g. LlamaForCausalLMCompressionHead). Tests whether the pretrained head provides
+                # a useful starting point for progressive cramming.
+                if not hasattr(model, "compression_head"):
+                    raise ValueError(
+                        "embedding_init_method=compression_head_forward requires a model with a "
+                        "compression_head attribute (use a LlamaForCausalLMCompressionHead checkpoint)."
+                    )
+                if num_compression_tokens != 1:
+                    raise ValueError(
+                        "embedding_init_method=compression_head_forward currently supports " "num_compression_tokens=1 only."
+                    )
+                lengths_t = full_attention_mask.sum(dim=1).to(device=device, dtype=torch.long)
+                with torch.no_grad():
+                    outs = model(
+                        input_ids=full_input_ids,
+                        attention_mask=full_attention_mask,
+                        prefix_lengths=lengths_t,
+                        use_cache=False,
+                        return_dict=True,
+                    )
+                    ch_embeds = outs.compression_embeds.detach().to(torch.float32)  # [B, 1, H]
+                initialization_embeddings = ch_embeds.detach().clone().cpu()
+                per_sample_params = [torch.nn.Parameter(ch_embeds[j : j + 1].clone().to(device)) for j in range(batch_size)]
+                per_sample_optimizers = []
+                per_sample_schedulers = []
+                for j in range(batch_size):
+                    opt, sched = self._build_optimizer_and_scheduler(
+                        [per_sample_params[j]],
+                        num_training_steps=self.args.max_optimization_steps_per_sample,
+                    )
+                    per_sample_optimizers.append(opt)
+                    per_sample_schedulers.append(sched)
             else:
                 full_init = self._init_compression_tokens(
                     batch_size,

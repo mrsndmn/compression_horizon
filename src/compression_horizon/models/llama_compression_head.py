@@ -37,10 +37,14 @@ class LlamaForCausalLMCompressionHead(LlamaPreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         hidden = config.hidden_size
+        # LayerNorm on the output keeps the compression-token embedding in a bounded range
+        # matching the scale the base model's attention layers expect for input embeddings.
+        # Prevents bf16 attention overflow once the base model is unfrozen and drifts.
         self.compression_head = nn.Sequential(
             nn.Linear(hidden, hidden),
             nn.GELU(),
             nn.Linear(hidden, hidden),
+            nn.LayerNorm(hidden),
         )
 
         self.post_init()

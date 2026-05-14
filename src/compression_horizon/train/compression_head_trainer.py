@@ -57,7 +57,7 @@ class CompressionHeadTrainer(BaseTrainer):
         train_loader = DataLoader(
             self.train_dataset,
             batch_size=args.per_device_train_batch_size,
-            shuffle=False,
+            shuffle=True,
             collate_fn=self.data_collator,
             num_workers=args.dataloader_num_workers,
             drop_last=args.dataloader_drop_last,
@@ -170,6 +170,10 @@ class CompressionHeadTrainer(BaseTrainer):
                         raise RuntimeError("NaN/Inf in compression_embeds")
 
                     compression_embeds = out.compression_embeds
+                    # Track ||compression_embeds|| as a TB scalar so we can see if the
+                    # compression-token magnitude drifts out of distribution over training.
+                    with torch.no_grad():
+                        compression_embeds_norm = compression_embeds.detach().float().norm(dim=-1).mean()
                     del out
 
                     t0 = time.perf_counter()
@@ -203,11 +207,26 @@ class CompressionHeadTrainer(BaseTrainer):
                     after_loss = out2.loss
                     if after_loss is None:
                         raise RuntimeError("Model did not return loss for compressed-input forward (labels missing?)")
+                    # Argmax match rate on the reconstructed prefix positions (labels != -100).
+                    # Mirrors progressive cramming's convergence metric — a direct proxy for
+                    # whether the compression head is learning prefix reconstruction.
+                    with torch.no_grad():
+                        shift_logits_match = out2.logits[:, :-1, :]
+                        shift_labels_match = labels_new[:, 1:]
+                        valid_mask_match = shift_labels_match.ne(-100)
+                        n_valid = valid_mask_match.sum()
+                        if n_valid.item() > 0:
+                            preds_match = shift_logits_match.argmax(dim=-1)
+                            correct_match = (preds_match == shift_labels_match) & valid_mask_match
+                            after_match_rate = correct_match.sum().float() / n_valid.float()
+                        else:
+                            after_match_rate = torch.zeros((), device=after_loss.device)
                     del out2
                     del token_embeddings, inputs_embeds_new, attention_mask_new, labels_new, compression_embeds
 
                     alpha = args.compression_head_distill_alpha
-                    loss = base_loss + after_loss * alpha
+                    beta = getattr(args, "compression_head_distill_beta", 1.0)
+                    loss = base_loss * beta + after_loss * alpha
 
                     if torch.isnan(loss) or torch.isinf(loss):
                         raise RuntimeError(f"NaN/Inf in total loss: {loss.item()}")
@@ -224,7 +243,15 @@ class CompressionHeadTrainer(BaseTrainer):
                         if accelerator.sync_gradients:
                             t0 = time.perf_counter()
                             if getattr(args, "max_grad_norm", None) is not None and args.max_grad_norm > 0:
-                                accelerator.clip_grad_norm_(params, args.max_grad_norm)
+                                grad_norm_t = accelerator.clip_grad_norm_(params, args.max_grad_norm)
+                            else:
+                                # Compute grad norm without clipping so we still log it.
+                                with torch.no_grad():
+                                    sq = torch.zeros((), device=accelerator.device)
+                                    for p in params:
+                                        if p.grad is not None:
+                                            sq = sq + p.grad.detach().float().pow(2).sum()
+                                    grad_norm_t = sq.sqrt()
 
                             optimizer.step()
 
@@ -237,22 +264,39 @@ class CompressionHeadTrainer(BaseTrainer):
                             did_step = True
                             update_step += 1
 
+                            grad_norm_d = (
+                                grad_norm_t.detach().float()
+                                if isinstance(grad_norm_t, torch.Tensor)
+                                else torch.tensor(float(grad_norm_t), device=accelerator.device)
+                            )
                             if accelerator.num_processes == 1:
                                 loss_m = float(loss.detach().item())
                                 base_m = float(base_loss.detach().item())
                                 after_m = float(after_loss.detach().item())
+                                match_m = float(after_match_rate.detach().item())
+                                grad_norm_m = float(grad_norm_d.item())
+                                ce_norm_m = float(compression_embeds_norm.item())
                             else:
                                 loss_m = float(accelerator.gather(loss.detach()).mean().item())
                                 base_m = float(accelerator.gather(base_loss.detach()).mean().item())
                                 after_m = float(accelerator.gather(after_loss.detach()).mean().item())
+                                match_m = float(accelerator.gather(after_match_rate.detach()).mean().item())
+                                grad_norm_m = float(accelerator.gather(grad_norm_d).mean().item())
+                                ce_norm_m = float(accelerator.gather(compression_embeds_norm).mean().item())
 
                             if accelerator.is_main_process:
                                 if self.writer:
                                     self.writer.add_scalar("loss/total", loss_m, self.global_step)
                                     self.writer.add_scalar("loss/base", base_m, self.global_step)
                                     self.writer.add_scalar("loss/after_compression", after_m, self.global_step)
+                                    self.writer.add_scalar("metric/after_compression_match_rate", match_m, self.global_step)
+                                    self.writer.add_scalar("metric/compression_embeds_norm", ce_norm_m, self.global_step)
+                                    self.writer.add_scalar("train/grad_norm", grad_norm_m, self.global_step)
                                     current_lr = optimizer.param_groups[0]["lr"]
                                     self.writer.add_scalar("train/learning_rate", current_lr, self.global_step)
+                                    if total_update_steps > 0:
+                                        epoch_frac = update_step * num_epochs / total_update_steps
+                                        self.writer.add_scalar("train/epoch", epoch_frac, self.global_step)
 
                                 self.global_step += 1
 

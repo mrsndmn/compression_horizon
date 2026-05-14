@@ -119,6 +119,17 @@ if __name__ == "__main__":
         help="Weight for distillation loss. Default: 1.0",
     )
     parser.add_argument(
+        "--compression_head_distill_beta",
+        type=float,
+        default=None,
+        help="Weight (beta) for base next-token loss in the compression-head objective. Default: 1.0",
+    )
+    parser.add_argument(
+        "--detect_anomaly",
+        action="store_true",
+        help="Enable torch.autograd.set_detect_anomaly(True) in the training script. Debug only - very slow.",
+    )
+    parser.add_argument(
         "--compression_head_freeze_base_model",
         type=lambda x: x.lower() in ("true", "1", "yes"),
         default=None,
@@ -230,6 +241,9 @@ if __name__ == "__main__":
         compression_head_distill_alpha = (
             args.compression_head_distill_alpha if args.compression_head_distill_alpha is not None else 1.0
         )
+        compression_head_distill_beta = (
+            args.compression_head_distill_beta if args.compression_head_distill_beta is not None else 1.0
+        )
         compression_head_freeze_base_model = (
             args.compression_head_freeze_base_model if args.compression_head_freeze_base_model is not None else True
         )
@@ -241,25 +255,31 @@ if __name__ == "__main__":
         logging_steps = args.logging_steps if args.logging_steps is not None else 50
         lr_scheduler_type = args.lr_scheduler_type if args.lr_scheduler_type is not None else "cosine_with_min_lr"
 
-        cmd_args = [
-            "--train_compression_head",
-            f"--model_checkpoint {model_checkpoint}",
-            f"--dataset_name {dataset_name}",
-            f"--limit_dataset_items {limit_dataset_items}",
-            f"--per_device_train_batch_size {per_device_train_batch_size}",
-            f"--gradient_accumulation_steps {gradient_accumulation_steps}",
-            f"--max_sequence_length {max_sequence_length}",
-            f"--learning_rate {learning_rate}",
-            f"--compression_head_distill_alpha {compression_head_distill_alpha}",
-            f"--dataloader_num_workers {dataloader_num_workers}",
-            f"--dtype {dtype}",
-            f"--num_train_epochs {num_train_epochs}",
-            f"--weight_decay {weight_decay}",
-            f"--max_grad_norm {max_grad_norm}",
-            f"--warmup_steps {warmup_steps}",
-            f"--logging_steps {int(logging_steps)}",
-            f"--lr_scheduler_type {lr_scheduler_type}",
-        ]
+        cmd_args = (
+            [
+                "--train_compression_head",
+                f"--model_checkpoint {model_checkpoint}",
+                f"--dataset_name {dataset_name}",
+                f"--limit_dataset_items {limit_dataset_items}",
+                f"--per_device_train_batch_size {per_device_train_batch_size}",
+                f"--gradient_accumulation_steps {gradient_accumulation_steps}",
+                f"--max_sequence_length {max_sequence_length}",
+                f"--learning_rate {learning_rate}",
+                f"--compression_head_distill_alpha {compression_head_distill_alpha}",
+                f"--compression_head_distill_beta {compression_head_distill_beta}",
+            ]
+            + (["--detect_anomaly"] if args.detect_anomaly else [])
+            + [
+                f"--dataloader_num_workers {dataloader_num_workers}",
+                f"--dtype {dtype}",
+                f"--num_train_epochs {num_train_epochs}",
+                f"--weight_decay {weight_decay}",
+                f"--max_grad_norm {max_grad_norm}",
+                f"--warmup_steps {warmup_steps}",
+                f"--logging_steps {int(logging_steps)}",
+                f"--lr_scheduler_type {lr_scheduler_type}",
+            ]
+        )
 
         if not compression_head_freeze_base_model:
             cmd_args.append("--compression_head_freeze_base_model False")
@@ -310,6 +330,13 @@ if __name__ == "__main__":
         if args.compression_head_distill_alpha is not None and args.compression_head_distill_alpha != 1.0:
             alpha_str = str(args.compression_head_distill_alpha).replace(".", "p")
             exp_suffix = f"{exp_suffix}_distill_{alpha_str}"
+
+        if args.compression_head_distill_beta is not None and args.compression_head_distill_beta != 1.0:
+            beta_str = str(args.compression_head_distill_beta).replace(".", "p")
+            exp_suffix = f"{exp_suffix}_beta_{beta_str}"
+
+        if args.detect_anomaly:
+            exp_suffix = f"{exp_suffix}_debug_anomaly"
 
         if args.dtype is not None and args.dtype != "bf16":
             exp_suffix = f"{exp_suffix}_dtype_{args.dtype}"
