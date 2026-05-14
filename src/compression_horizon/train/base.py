@@ -561,12 +561,13 @@ class BaseTrainer:
     def _build_optimizer_and_scheduler(self, params, num_training_steps=None, num_processes=1):
         print("number of optimized params:", sum(p.numel() for p in params))
 
-        if self.args.optim == "adamw_torch":
+        if self.args.optim in ("adamw_torch", "adamw_torch_fused"):
             optimizer = AdamW(
                 params,
                 lr=self.args.learning_rate,
                 weight_decay=self.args.weight_decay,
                 betas=(self.args.adam_beta1, self.args.adam_beta2),
+                fused=torch.cuda.is_available(),
             )
         elif self.args.optim == "sgd":
             optimizer = SGD(

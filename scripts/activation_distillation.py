@@ -50,7 +50,7 @@ def load_or_create_tokenized_dataset(
     limit_dataset_items: int | None = None,
     offset_dataset_items: int | None = None,
     cache_prefix: str = "dataset",
-    num_proc: int = 4,
+    num_proc: int = 16,
     fallback_length: int | None = None,
 ) -> Dataset:
     """

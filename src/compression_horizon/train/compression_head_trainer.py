@@ -44,7 +44,8 @@ class CompressionHeadTrainer(BaseTrainer):
         profile_every = int(os.environ.get("CH_PROFILE_EVERY", "50"))
 
         def _sync():
-            if device.type == "cuda":
+            # Sync only when profiling — otherwise we destroy CUDA stream overlap.
+            if profile and device.type == "cuda":
                 torch.cuda.synchronize()
 
         if args.compression_head_freeze_base_model:
@@ -102,6 +103,12 @@ class CompressionHeadTrainer(BaseTrainer):
                 unwrapped_model.gradient_checkpointing_disable()
             elif hasattr(model, "gradient_checkpointing_disable"):
                 model.gradient_checkpointing_disable()
+
+        if getattr(args, "torch_compile", False):
+            compile_mode = getattr(args, "torch_compile_mode", None) or "default"
+            compile_backend = getattr(args, "torch_compile_backend", None) or "inductor"
+            print(f"[torch.compile] enabling backend={compile_backend} mode={compile_mode}")
+            model = torch.compile(model, mode=compile_mode, backend=compile_backend)
 
         update_step = 0
         micro_step = 0
