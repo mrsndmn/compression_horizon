@@ -145,29 +145,36 @@ class CompressionHeadTrainer(BaseTrainer):
                     prefix_s = time.perf_counter() - t0
 
                     t0 = time.perf_counter()
+
+                    extra_params = dict()
+                    if args.compression_head_distill_beta != 0:
+                        extra_params = {"labels": labels}
+
                     out = model(
                         input_ids=input_ids,
                         attention_mask=attention_mask,
-                        labels=labels,
                         prefix_lengths=prefix_lengths,
                         use_cache=False,
                         output_hidden_states=False,
                         return_dict=True,
+                        **extra_params,
                     )
                     _sync()
                     base_loss = out.loss
-
                     if base_loss is None:
-                        raise RuntimeError("Model did not return loss (labels missing?)")
-                    if torch.isnan(base_loss) or torch.isinf(base_loss):
-                        print(f"DEBUG: NaN/Inf detected in base_loss at step {update_step}, " f"micro_step {micro_step}")
-                        raise RuntimeError(f"NaN/Inf in base_loss: {base_loss.item()}")
+                        base_loss = torch.tensor(0.0, device=input_ids.device)
+
+                    # if base_loss is None:
+                    #     raise RuntimeError("Model did not return loss (labels missing?)")
+                    # if torch.isnan(base_loss) or torch.isinf(base_loss):
+                    #     print(f"DEBUG: NaN/Inf detected in base_loss at step {update_step}, " f"micro_step {micro_step}")
+                    #     raise RuntimeError(f"NaN/Inf in base_loss: {base_loss.item()}")
 
                     if out.compression_embeds is None:
                         raise RuntimeError("Model did not return compression embeddings.")
 
-                    if torch.isnan(out.compression_embeds).any() or torch.isinf(out.compression_embeds).any():
-                        raise RuntimeError("NaN/Inf in compression_embeds")
+                    # if torch.isnan(out.compression_embeds).any() or torch.isinf(out.compression_embeds).any():
+                    #     raise RuntimeError("NaN/Inf in compression_embeds")
 
                     compression_embeds = out.compression_embeds
                     # Track ||compression_embeds|| as a TB scalar so we can see if the
@@ -225,7 +232,7 @@ class CompressionHeadTrainer(BaseTrainer):
                     del token_embeddings, inputs_embeds_new, attention_mask_new, labels_new, compression_embeds
 
                     alpha = args.compression_head_distill_alpha
-                    beta = getattr(args, "compression_head_distill_beta", 1.0)
+                    beta = args.compression_head_distill_beta
                     loss = base_loss * beta + after_loss * alpha
 
                     if torch.isnan(loss) or torch.isinf(loss):

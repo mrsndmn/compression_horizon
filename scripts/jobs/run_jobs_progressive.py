@@ -187,6 +187,7 @@ if __name__ == "__main__":
         "unsloth/gemma-3-1b-pt",
         "unsloth/gemma-3-270m",
         f"{workdir}/artifacts/experiments_compression_head/ch_head_Llama-3.2-3B-ch-pretrained_epochs_1_schedkw_min_lr=0.00005_limit_1000000_tbs_256_ngpu_8_lr_0p0005_unfrozen",
+        "artifacts/experiments_compression_head/ch_head_SmolLM2-135M_epochs_1_schedkw_min_lr=1e-5_limit_5000000_bs_8_tbs_256_ngpu_8_nnode_4_lr_0p001_beta_0p1_unfrozen",
     ]
 
     checkpoints = [c.removesuffix("/") for c in checkpoints]
