@@ -156,14 +156,25 @@ class LlamaForCausalLMCompressionHead(LlamaPreTrainedModel, GenerationMixin):
         compression_embeds_all = None
         compression_embeds = None
         if prefix_lengths is not None:
-            # Compute only the selected compression embedding to reduce memory:
-            # pick hidden_state at idx = clamp(prefix_lengths - 1) and run compression_head on [B, H].
+            # Gather hidden states at the prefix positions and run the pointwise
+            # compression_head MLP. Supports `prefix_lengths` of shape:
+            #   - [B]      -> returns compression_embeds [B, 1, H]   (legacy)
+            #   - [B, K]   -> returns compression_embeds [B, K, H]   (K positions per sample)
             bsz, seq_len, _hidden = hidden_states.shape
             device = hidden_states.device
-            idx = prefix_lengths.to(device=device).view(-1).to(torch.long).clamp_min(1) - 1  # [B]
-            idx = idx.clamp_max(seq_len - 1)
-            selected_hidden = hidden_states[torch.arange(bsz, device=device), idx]  # [B, H]
-            compression_embeds = self.compression_head(selected_hidden).unsqueeze(1)  # [B, 1, H]
+            pl = prefix_lengths.to(device=device).to(torch.long)
+            if pl.dim() == 1:
+                idx = pl.view(-1).clamp_min(1) - 1  # [B]
+                idx = idx.clamp_max(seq_len - 1)
+                selected_hidden = hidden_states[torch.arange(bsz, device=device), idx]  # [B, H]
+                compression_embeds = self.compression_head(selected_hidden).unsqueeze(1)  # [B, 1, H]
+            else:
+                k = pl.shape[1]
+                idx = pl.clamp_min(1) - 1  # [B, K]
+                idx = idx.clamp_max(seq_len - 1)
+                batch_idx = torch.arange(bsz, device=device).unsqueeze(1).expand(-1, k)  # [B, K]
+                selected_hidden = hidden_states[batch_idx, idx]  # [B, K, H]
+                compression_embeds = self.compression_head(selected_hidden)  # [B, K, H]
 
         if not return_dict:
             output = (logits,) + outputs[1:]
