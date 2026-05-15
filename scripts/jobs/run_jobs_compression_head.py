@@ -159,6 +159,18 @@ if __name__ == "__main__":
         default=None,
         help="Logging steps. Default: 50",
     )
+    parser.add_argument(
+        "--torch_compile",
+        type=lambda x: x.lower() in ("true", "1", "yes"),
+        default=None,
+        help="Enable torch.compile on the wrapped model after accelerator.prepare().",
+    )
+    parser.add_argument(
+        "--torch_compile_mode",
+        type=str,
+        default=None,
+        help="torch.compile mode: default | reduce-overhead | max-autotune | max-autotune-no-cudagraphs.",
+    )
 
     args = parser.parse_args()
     workdir = os.getcwd()
@@ -285,6 +297,12 @@ if __name__ == "__main__":
             cmd_args.append("--compression_head_freeze_base_model False")
         else:
             exp_suffix = f"{exp_suffix}_freeze_llm"
+
+        if args.torch_compile:
+            cmd_args.append("--torch_compile True")
+            if args.torch_compile_mode is not None:
+                cmd_args.append(f"--torch_compile_mode {args.torch_compile_mode}")
+            exp_suffix = f"{exp_suffix}_compile"
 
         if args.max_steps is not None:
             cmd_args.append(f"--max_steps {args.max_steps}")
