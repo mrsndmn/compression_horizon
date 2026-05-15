@@ -148,15 +148,7 @@ class CompressionHeadTrainer(BaseTrainer):
                         )
 
                     t0 = time.perf_counter()
-                    k_positions = max(1, int(getattr(args, "compression_head_num_positions", 1) or 1))
-                    if k_positions == 1:
-                        prefix_lengths = self._sample_prefix_lengths(attention_mask)  # [B]
-                    else:
-                        # Sample K independent prefix lengths per sample -> [B, K]
-                        prefix_lengths = torch.stack(
-                            [self._sample_prefix_lengths(attention_mask) for _ in range(k_positions)],
-                            dim=1,
-                        )
+                    prefix_lengths = self._sample_prefix_lengths(attention_mask)
                     prefix_s = time.perf_counter() - t0
 
                     t0 = time.perf_counter()
@@ -191,7 +183,7 @@ class CompressionHeadTrainer(BaseTrainer):
                     # if torch.isnan(out.compression_embeds).any() or torch.isinf(out.compression_embeds).any():
                     #     raise RuntimeError("NaN/Inf in compression_embeds")
 
-                    compression_embeds = out.compression_embeds  # [B, K, H] (K=1 in legacy path)
+                    compression_embeds = out.compression_embeds
                     # Track ||compression_embeds|| as a TB scalar so we can see if the
                     # compression-token magnitude drifts out of distribution over training.
                     with torch.no_grad():
@@ -200,32 +192,17 @@ class CompressionHeadTrainer(BaseTrainer):
 
                     t0 = time.perf_counter()
                     with accelerator.autocast():
-                        token_embeddings = unwrapped_model.get_input_embeddings()(input_ids)  # [B, L, H]
+                        token_embeddings = unwrapped_model.get_input_embeddings()(input_ids)
                     _sync()
                     embed_s = time.perf_counter() - t0
 
                     t0 = time.perf_counter()
-                    if k_positions > 1:
-                        # Tile inputs K times along batch dim so each (sample, position) pair
-                        # gets its own row in the second forward.
-                        input_ids_k = input_ids.repeat_interleave(k_positions, dim=0)
-                        attention_mask_k = attention_mask.repeat_interleave(k_positions, dim=0)
-                        token_embeddings_k = token_embeddings.repeat_interleave(k_positions, dim=0)
-                        prefix_lengths_k = prefix_lengths.reshape(-1)  # [B*K]
-                        compression_embeds_k = compression_embeds.reshape(-1, 1, compression_embeds.shape[-1])  # [B*K,1,H]
-                    else:
-                        input_ids_k = input_ids
-                        attention_mask_k = attention_mask
-                        token_embeddings_k = token_embeddings
-                        prefix_lengths_k = prefix_lengths if prefix_lengths.dim() == 1 else prefix_lengths.reshape(-1)
-                        compression_embeds_k = compression_embeds
-
                     inputs_embeds_new, attention_mask_new, labels_new = self._build_compressed_inputs(
-                        compression_embeds=compression_embeds_k,
-                        token_embeddings=token_embeddings_k,
-                        input_ids=input_ids_k,
-                        attention_mask=attention_mask_k,
-                        prefix_lengths=prefix_lengths_k,
+                        compression_embeds=compression_embeds,
+                        token_embeddings=token_embeddings,
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        prefix_lengths=prefix_lengths,
                     )
                     build_s = time.perf_counter() - t0
 

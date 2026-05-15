@@ -379,17 +379,6 @@ class MyTrainingArguments(TrainingArguments):
         default=True,
         metadata={"help": "Freeze base LM parameters and train only compression head parameters."},
     )
-    compression_head_num_positions: int = field(
-        default=1,
-        metadata={
-            "help": (
-                "Number of compression positions to sample per input sample. "
-                "K=1 keeps the legacy [B, 1, H] embedding path. K>1 samples K different "
-                "prefix lengths per sample, runs the compression-head MLP at each, and "
-                "tiles the second-forward batch K times to extract K reconstruction signals per sample."
-            )
-        },
-    )
 
     def __post_init__(self):
         # Convert CLI-friendly forms into a real dict early, before base TrainingArguments validation.
