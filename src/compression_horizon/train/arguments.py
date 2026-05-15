@@ -286,6 +286,29 @@ class MyTrainingArguments(TrainingArguments):
         default=False,
         metadata={"help": "If True, reset LR scheduler and continue training when convergence fails (only once per stage)."},
     )
+    progressive_bucketed_compile: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "If True, use the bucketed + per-token-mask progressive curriculum that "
+                "keeps the base LM input shape constant within a bucket (multiple of 64), "
+                "advances a sticky per-position frontier on single-step argmax match, and "
+                "computes cumulative cross-entropy over the unmasked prefix. Designed to "
+                "play nicely with torch.compile (one compiled graph per bucket size). "
+                "Default OFF — legacy seq_len-sliced path is unchanged. "
+                "REQUIRES --loss_type cross_entropy (raises NotImplementedError otherwise)."
+            )
+        },
+    )
+    progressive_bucket_size: int = field(
+        default=64,
+        metadata={
+            "help": (
+                "Initial bucket size for the bucketed progressive curriculum. Must be a "
+                "positive multiple of 64. Bucket grows linearly by +64 on each transition."
+            )
+        },
+    )
     save_progressive_artifacts: bool = field(
         default=True,
         metadata={"help": "Whether to persist intermediate compression tokens for each stage."},
@@ -348,3 +371,8 @@ class MyTrainingArguments(TrainingArguments):
         # Convert CLI-friendly forms into a real dict early, before base TrainingArguments validation.
         self.lr_scheduler_kwargs = _parse_cli_dict(getattr(self, "lr_scheduler_kwargs", None))  # type: ignore[assignment]
         super().__post_init__()
+        if self.progressive_bucketed_compile:
+            if self.progressive_bucket_size <= 0 or self.progressive_bucket_size % 64 != 0:
+                raise ValueError(
+                    f"progressive_bucket_size must be a positive multiple of 64, " f"got {self.progressive_bucket_size}"
+                )

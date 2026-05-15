@@ -156,6 +156,42 @@ if __name__ == "__main__":
         default=4096,
         help="Truncate dataset to sequence length",
     )
+    parser.add_argument(
+        "--progressive_bucketed_compile",
+        action="store_true",
+        default=False,
+        help="Enable bucketed + per-token-mask progressive curriculum (constant model input shape per bucket; torch.compile-friendly).",
+    )
+    parser.add_argument(
+        "--progressive_bucket_size",
+        type=int,
+        default=None,
+        help="Initial bucket size for the bucketed progressive curriculum. Must be a positive multiple of 64. Default 64.",
+    )
+    parser.add_argument(
+        "--torch_compile",
+        action="store_true",
+        default=False,
+        help="Wrap the base LM in torch.compile (mode=default, backend=inductor). Combine with --progressive_bucketed_compile for cache-hit gains.",
+    )
+    parser.add_argument(
+        "--max_optimization_steps_per_sample",
+        type=int,
+        default=None,
+        help="Hard cap on total optimizer steps per sample. If not specified, defaults to 10000 and is not included in output dir.",
+    )
+    parser.add_argument(
+        "--max_optimization_steps_per_token",
+        type=int,
+        default=None,
+        help="Inner-loop optimizer step budget for converging the current frontier position. If not specified, defaults to 1000 and is not included in output dir.",
+    )
+    parser.add_argument(
+        "--warmup_steps",
+        type=int,
+        default=None,
+        help="LR warmup steps. If not specified, defaults to 100 and is not included in output dir.",
+    )
     args = parser.parse_args()
     workdir = os.getcwd()
     python_path = "/workspace-SR004.nfs2/d.tarasov/envs/compression_horizon/bin/python"
@@ -188,6 +224,7 @@ if __name__ == "__main__":
         "unsloth/gemma-3-270m",
         f"{workdir}/artifacts/experiments_compression_head/ch_head_Llama-3.2-3B-ch-pretrained_epochs_1_schedkw_min_lr=0.00005_limit_1000000_tbs_256_ngpu_8_lr_0p0005_unfrozen",
         "artifacts/experiments_compression_head/ch_head_SmolLM2-135M_epochs_1_schedkw_min_lr=1e-5_limit_5000000_bs_8_tbs_256_ngpu_8_nnode_4_lr_0p001_beta_0p1_unfrozen",
+        f"{workdir}/.omc/autoresearch/ch-match-rate-0p55/runs/20260514T233202Z-compile_9M_a1",
     ]
 
     checkpoints = [c.removesuffix("/") for c in checkpoints]
@@ -209,8 +246,13 @@ if __name__ == "__main__":
             sys.exit(0)
 
     max_seq_len = args.max_seq_len
-    max_optimization_steps_per_sample = 10_000
-    max_optimization_steps_per_token = 1_000
+    max_optimization_steps_per_sample = (
+        args.max_optimization_steps_per_sample if args.max_optimization_steps_per_sample is not None else 10_000
+    )
+    max_optimization_steps_per_token = (
+        args.max_optimization_steps_per_token if args.max_optimization_steps_per_token is not None else 1_000
+    )
+    warmup_steps = args.warmup_steps if args.warmup_steps is not None else 100
 
     for model_checkpoint in checkpoints:
         exp_suffix = f"sl_{max_seq_len}_{model_checkpoint.split('/')[-1]}"
@@ -226,7 +268,7 @@ if __name__ == "__main__":
             f"--num_alignment_layers {num_alignment_layers}",
             f"--loss_type {loss_type}",
             f"--max_sequence_length {max_seq_len}",
-            "--warmup_steps 100",
+            f"--warmup_steps {warmup_steps}",
             f"--model_checkpoint {model_checkpoint}",
             "--per_device_train_batch_size 1",
             f"--max_optimization_steps_per_sample {max_optimization_steps_per_sample}",
@@ -362,6 +404,26 @@ if __name__ == "__main__":
         # Add num_alignment_layers to output dir if specified (non-default)
         if args.num_alignment_layers is not None and args.num_alignment_layers != 1:
             exp_suffix = f"{exp_suffix}_align_{args.num_alignment_layers}"
+
+        # Bucketed + torch.compile flags
+        if args.progressive_bucketed_compile:
+            cmd_args.append("--progressive_bucketed_compile True")
+            exp_suffix = f"{exp_suffix}_bucketed"
+        if args.progressive_bucket_size is not None:
+            cmd_args.append(f"--progressive_bucket_size {args.progressive_bucket_size}")
+            if args.progressive_bucket_size != 64:
+                exp_suffix = f"{exp_suffix}_bs{args.progressive_bucket_size}"
+        if args.torch_compile:
+            cmd_args.append("--torch_compile True")
+            exp_suffix = f"{exp_suffix}_compile"
+
+        # Step-budget / warmup overrides — surface in output dir when non-default
+        if args.max_optimization_steps_per_sample is not None and args.max_optimization_steps_per_sample != 10_000:
+            exp_suffix = f"{exp_suffix}_mss{args.max_optimization_steps_per_sample}"
+        if args.max_optimization_steps_per_token is not None and args.max_optimization_steps_per_token != 1_000:
+            exp_suffix = f"{exp_suffix}_mst{args.max_optimization_steps_per_token}"
+        if args.warmup_steps is not None and args.warmup_steps != 100:
+            exp_suffix = f"{exp_suffix}_wu{args.warmup_steps}"
 
         out_dir_name = f"artifacts/experiments_progressive/{exp_suffix}"
         if os.path.exists(out_dir_name):

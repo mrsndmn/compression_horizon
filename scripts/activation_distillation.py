@@ -301,7 +301,21 @@ if __name__ == "__main__":
 
     torch_dtype = resolve_torch_dtype(getattr(training_args, "dtype", "float32"))
     print("torch_dtype", torch_dtype)
-    if training_args.train_compression_head or "experiments_compression_head/ch_head_" in training_args.model_checkpoint:
+
+    def _checkpoint_is_compression_head(path: str) -> bool:
+        """True iff the checkpoint's config.json declares LlamaForCausalLMCompressionHead."""
+        cfg_path = os.path.join(path, "config.json")
+        if not os.path.isfile(cfg_path):
+            return False
+        with open(cfg_path) as f:
+            cfg = json.load(f)
+        return "LlamaForCausalLMCompressionHead" in (cfg.get("architectures") or [])
+
+    if (
+        training_args.train_compression_head
+        or "experiments_compression_head/ch_head_" in training_args.model_checkpoint
+        or _checkpoint_is_compression_head(training_args.model_checkpoint)
+    ):
         from compression_horizon.models.llama_compression_head import LlamaForCausalLMCompressionHead
 
         model = LlamaForCausalLMCompressionHead.from_pretrained(
