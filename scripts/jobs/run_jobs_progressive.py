@@ -175,6 +175,13 @@ if __name__ == "__main__":
         help="Wrap the base LM in torch.compile (mode=default, backend=inductor). Combine with --progressive_bucketed_compile for cache-hit gains.",
     )
     parser.add_argument(
+        "--no_progressive_fused_linear_ce",
+        dest="progressive_fused_linear_ce",
+        action="store_false",
+        default=True,
+        help="Disable LigerFusedLinearCrossEntropyLoss (default ON). Falls back to the eager logits+CE path.",
+    )
+    parser.add_argument(
         "--max_optimization_steps_per_sample",
         type=int,
         default=None,
@@ -416,6 +423,10 @@ if __name__ == "__main__":
         if args.torch_compile:
             cmd_args.append("--torch_compile True")
             exp_suffix = f"{exp_suffix}_compile"
+        if not args.progressive_fused_linear_ce:
+            # Default is ON in the trainer; only pass through when user opted out.
+            cmd_args.append("--progressive_fused_linear_ce False")
+            exp_suffix = f"{exp_suffix}_nofusedce"
 
         # Step-budget / warmup overrides — surface in output dir when non-default
         if args.max_optimization_steps_per_sample is not None and args.max_optimization_steps_per_sample != 10_000:

@@ -56,6 +56,55 @@ def next_token_cross_entropy_loss_with_prefix(
     )
 
 
+def next_token_fused_linear_ce_loss_with_prefix(
+    lm_head_weight: torch.Tensor,
+    last_hidden_state: torch.Tensor,
+    input_ids: torch.Tensor,
+    attention_mask: torch.Tensor,
+    num_prefix_tokens: int,
+) -> torch.Tensor:
+    """Fused linear + cross-entropy variant of :func:`next_token_cross_entropy_loss_with_prefix`.
+
+    Avoids materializing the [B, T, V] logits tensor by chunking ``lm_head @ hidden^T``
+    fused with cross-entropy inside Liger's kernel (`LigerFusedLinearCrossEntropyLoss`).
+    Lower peak memory and fewer launched kernels than the eager hidden→logits→CE chain.
+
+    Prefix alignment matches the eager helper: hidden states at positions
+    ``[num_prefix_tokens - 1 : num_prefix_tokens - 1 + T]`` predict ``input_ids[:, :T]``,
+    and positions with ``attention_mask == 0`` get label ``-100`` so they are dropped.
+
+    Args:
+        lm_head_weight: [V, H] LM head weight (typically ``model.lm_head.weight``).
+        last_hidden_state: [B, num_prefix_tokens + T, H] hidden states from the base model.
+        input_ids: [B, T] target token ids (no prefix).
+        attention_mask: [B, T] mask over ``input_ids``.
+        num_prefix_tokens: number of prepended compression tokens.
+
+    Returns:
+        Scalar loss (mean over unmasked tokens).
+    """
+    from liger_kernel.transformers import LigerFusedLinearCrossEntropyLoss
+
+    if num_prefix_tokens < 1:
+        raise ValueError(f"num_prefix_tokens must be >= 1, got {num_prefix_tokens}")
+
+    seq_len = input_ids.shape[1]
+    labels = input_ids.clone()
+    labels[attention_mask == 0] = -100
+    shift_labels = labels.reshape(-1)
+
+    aligned_hidden = last_hidden_state[:, num_prefix_tokens - 1 : num_prefix_tokens - 1 + seq_len, :]
+    hidden_2d = aligned_hidden.reshape(-1, aligned_hidden.shape[-1])
+
+    num_items = int((shift_labels != -100).sum().item())
+    if num_items == 0:
+        return last_hidden_state.new_zeros((), requires_grad=True)
+
+    liger_lce = LigerFusedLinearCrossEntropyLoss(reduction="sum")
+    loss_sum = liger_lce(lm_head_weight, hidden_2d, shift_labels)
+    return loss_sum / num_items
+
+
 def next_token_cross_entropy_loss(
     logits: torch.Tensor,
     input_ids: torch.Tensor,

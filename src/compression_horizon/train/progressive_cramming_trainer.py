@@ -8,7 +8,10 @@ import torch.nn.functional as F
 from tqdm.auto import tqdm
 
 from compression_horizon.train.base import BaseTrainer
-from compression_horizon.train.loss import next_token_cross_entropy_loss_with_prefix
+from compression_horizon.train.loss import (
+    next_token_cross_entropy_loss_with_prefix,
+    next_token_fused_linear_ce_loss_with_prefix,
+)
 from compression_horizon.utils.launch import freeze_model_parameters, get_device, set_launch_seed
 
 
@@ -86,11 +89,21 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         # Pin eval mode once: frozen base + no dropout. Avoids mid-loop mode toggles
         # that would invalidate the torch.compile cache.
         model.eval()
+
+        # Fused-CE path needs direct access to the LM head weight and to the base
+        # LlamaModel (so we can call it without going through lm_head). Capture both
+        # before any compile-wrap so we hold references to the original tensors/modules.
+        fused_linear_ce = bool(getattr(self.args, "progressive_fused_linear_ce", False))
+        lm_head_weight = self.model.lm_head.weight if fused_linear_ce else None
+        base_model_for_fused = self.model.model if fused_linear_ce else None
+
         if getattr(self.args, "torch_compile", False):
             compile_mode = getattr(self.args, "torch_compile_mode", None) or "default"
             compile_backend = getattr(self.args, "torch_compile_backend", None) or "inductor"
             print(f"[torch.compile] enabling backend={compile_backend} mode={compile_mode}")
             model = torch.compile(model, mode=compile_mode, backend=compile_backend)
+            if fused_linear_ce and base_model_for_fused is not None:
+                base_model_for_fused = torch.compile(base_model_for_fused, mode=compile_mode, backend=compile_backend)
 
         init_method, mvn_dist, pca_components, pca_mean, loaded_embeddings = self._prepare_embedding_init(model)
 
@@ -264,6 +277,8 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             if getattr(self.args, "progressive_bucketed_compile", False):
                 stage_index = self._train_progressive_bucketed_for_batch(
                     model=model,
+                    base_model_for_fused=base_model_for_fused,
+                    lm_head_weight=lm_head_weight,
                     full_input_ids=full_input_ids,
                     full_model_token_embeddings=full_model_token_embeddings,
                     full_attention_mask=full_attention_mask,
@@ -698,6 +713,8 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         self,
         *,
         model,
+        base_model_for_fused=None,
+        lm_head_weight=None,
         full_input_ids: torch.Tensor,
         full_model_token_embeddings: torch.Tensor,
         full_attention_mask: torch.Tensor,
@@ -764,6 +781,12 @@ class ProgressiveCrammingTrainer(BaseTrainer):
 
         frontier = 0  # scalar Python int — batch-level (legacy-faithful).
         per_position_converged = torch.zeros(batch_size, bucket_size, dtype=torch.bool, device=device)
+
+        # Logging cadence for the inner hot loop. Below this cadence we skip every
+        # CPU↔GPU sync that exists purely for TensorBoard / tqdm display (grad norms,
+        # compression-token stats, loss.item, _log_step scalars). HF logging_steps defaults
+        # to 500 but for the inner per-token loop a value like 50 is closer to user intent.
+        log_every = max(int(getattr(self.args, "logging_steps", 1)) or 1, 1)
 
         stage_index = 0
         max_frontier_reached = 0
@@ -860,82 +883,73 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                         # AC 4: at most frontier+1 active positions per sample
                         assert int(step_attention_mask.sum(dim=1).max().item()) <= frontier + 1
 
-                    outputs = model(
-                        inputs_embeds=model_tokens_with_compression_tokens,
-                        attention_mask=attention_mask_with_compression_tokens,
-                    )
-                    logits = outputs.logits
+                    use_fused = base_model_for_fused is not None and lm_head_weight is not None
+                    if use_fused:
+                        base_outputs = base_model_for_fused(
+                            inputs_embeds=model_tokens_with_compression_tokens,
+                            attention_mask=attention_mask_with_compression_tokens,
+                        )
+                        last_hidden = base_outputs.last_hidden_state
 
-                    loss = next_token_cross_entropy_loss_with_prefix(
-                        logits,
-                        input_ids,
-                        step_attention_mask,
-                        num_prefix_tokens=num_compression_tokens,
-                        reduction="mean",
-                    )
-                    loss.backward()
-                    pbar.update(1)
+                        loss = next_token_fused_linear_ce_loss_with_prefix(
+                            lm_head_weight,
+                            last_hidden,
+                            input_ids,
+                            step_attention_mask,
+                            num_prefix_tokens=num_compression_tokens,
+                        )
+                        loss.backward()
+                        pbar.update(1)
 
-                    with torch.no_grad():
-                        aligned_preds = logits[
-                            :, num_compression_tokens - 1 : num_compression_tokens - 1 + bucket_size, :
-                        ].argmax(dim=-1)
-                        step_match = (aligned_preds == input_ids) & step_attention_mask.bool()
-                        per_position_converged = per_position_converged | step_match
-
-                    # Logging analogue to legacy
-                    if init_method == "pretrained_pca":
-                        grad_norms = [
-                            (
-                                per_sample_pca_coefficients[j].grad.norm(2).item()
-                                if per_sample_pca_coefficients[j].grad is not None
-                                else 0.0
-                            )
-                            for j in range(batch_size)
-                        ]
+                        with torch.no_grad():
+                            aligned_hidden = last_hidden[
+                                :, num_compression_tokens - 1 : num_compression_tokens - 1 + bucket_size, :
+                            ]
+                            # Partial matmul: just the aligned positions, not the full [B, T, V].
+                            aligned_logits = aligned_hidden.to(lm_head_weight.dtype) @ lm_head_weight.t()
+                            aligned_preds = aligned_logits.argmax(dim=-1)
+                            step_match = (aligned_preds == input_ids) & step_attention_mask.bool()
+                            per_position_converged = per_position_converged | step_match
                     else:
-                        grad_norms = [
-                            per_sample_params[j].grad.norm(2).item() if per_sample_params[j].grad is not None else 0.0
-                            for j in range(batch_size)
-                        ]
-                    grad_norm = sum(grad_norms) / max(len(grad_norms), 1)
-                    comp_mean = compression_tokens.mean().item()
-                    comp_std = compression_tokens.std().item()
+                        outputs = model(
+                            inputs_embeds=model_tokens_with_compression_tokens,
+                            attention_mask=attention_mask_with_compression_tokens,
+                        )
+                        logits = outputs.logits
 
-                    active_scheduler = None
-                    for j in range(batch_size):
-                        if not skipped_mask[j] and not bool(per_position_converged[j, frontier].item()):
-                            active_scheduler = per_sample_schedulers[j]
-                            break
-                    log_lr = self.args.learning_rate
-                    if active_scheduler is not None:
-                        log_lr = active_scheduler.get_last_lr()[0]
+                        loss = next_token_cross_entropy_loss_with_prefix(
+                            logits,
+                            input_ids,
+                            step_attention_mask,
+                            num_prefix_tokens=num_compression_tokens,
+                            reduction="mean",
+                        )
+                        loss.backward()
+                        pbar.update(1)
 
-                    convergece_per_sample = per_position_converged[:, frontier].to(torch.float32)
-                    pbar.set_postfix(
-                        loss=loss.item(),
-                        convergece_per_sample=convergece_per_sample.mean().item(),
-                        compr_t_mean=comp_mean,
-                        compr_t_std=comp_std,
-                        grad=grad_norm,
-                        lr=log_lr,
-                    )
+                        with torch.no_grad():
+                            aligned_preds = logits[
+                                :, num_compression_tokens - 1 : num_compression_tokens - 1 + bucket_size, :
+                            ].argmax(dim=-1)
+                            step_match = (aligned_preds == input_ids) & step_attention_mask.bool()
+                            per_position_converged = per_position_converged | step_match
 
-                    self._log_step(
-                        loss,
-                        None,
-                        convergece_per_sample,
-                        compression_tokens,
-                        active_scheduler,
-                        None,
-                        None,
-                    )
+                    # Single CPU↔GPU sync per step: pull the current frontier column once and
+                    # reuse it in every Python-side per-sample decision below. Replaces B+1
+                    # separate .item() syncs that otherwise dominated wall-clock at small B.
+                    done_at_frontier_t = per_position_converged[:, frontier].cpu()
+                    done_at_frontier_cpu: list[bool] = done_at_frontier_t.tolist()
+                    # Keep last_conv fresh every step (artifact's final_convergence reads it on
+                    # bucket-terminate); cheap because the column is already on CPU above.
+                    last_conv = done_at_frontier_t.to(torch.float32)
+                    # last_loss_val is cheap (1 scalar sync) and is also read by the artifact
+                    # and by the frontier-advance pbar; keep it per-step too.
+                    last_loss_val = float(loss.item())
 
                     # Per-sample optimizer step: skip samples already converged at current frontier.
                     max_steps_per_sample = int(self.args.max_optimization_steps_per_sample or 0)
                     for j in range(batch_size):
-                        sample_done_at_frontier = bool(per_position_converged[j, frontier].item())
-                        if skipped_mask[j] or sample_done_at_frontier:
+                        if skipped_mask[j] or done_at_frontier_cpu[j]:
                             per_sample_optimizers[j].zero_grad(set_to_none=True)
                         else:
                             per_sample_optimizers[j].step()
@@ -958,8 +972,55 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                         if low_dim_scheduler is not None:
                             low_dim_scheduler.step()
 
-                    last_loss_val = float(loss.item())
-                    last_conv = convergece_per_sample.detach().cpu()
+                    # Logging block: all CPU↔GPU syncs below exist purely for display.
+                    # Gate on log_every so the inner hot loop runs sync-free on non-log steps.
+                    if _i % log_every == 0:
+                        if init_method == "pretrained_pca":
+                            grad_norms = [
+                                (
+                                    per_sample_pca_coefficients[j].grad.norm(2).item()
+                                    if per_sample_pca_coefficients[j].grad is not None
+                                    else 0.0
+                                )
+                                for j in range(batch_size)
+                            ]
+                        else:
+                            grad_norms = [
+                                (per_sample_params[j].grad.norm(2).item() if per_sample_params[j].grad is not None else 0.0)
+                                for j in range(batch_size)
+                            ]
+                        grad_norm = sum(grad_norms) / max(len(grad_norms), 1)
+                        comp_mean = compression_tokens.mean().item()
+                        comp_std = compression_tokens.std().item()
+
+                        active_scheduler = None
+                        for j in range(batch_size):
+                            if not skipped_mask[j] and not done_at_frontier_cpu[j]:
+                                active_scheduler = per_sample_schedulers[j]
+                                break
+                        log_lr = self.args.learning_rate
+                        if active_scheduler is not None:
+                            log_lr = active_scheduler.get_last_lr()[0]
+
+                        convergece_per_sample = per_position_converged[:, frontier].to(torch.float32)
+                        pbar.set_postfix(
+                            loss=loss.item(),
+                            convergece_per_sample=convergece_per_sample.mean().item(),
+                            compr_t_mean=comp_mean,
+                            compr_t_std=comp_std,
+                            grad=grad_norm,
+                            lr=log_lr,
+                        )
+
+                        self._log_step(
+                            loss,
+                            None,
+                            convergece_per_sample,
+                            compression_tokens,
+                            active_scheduler,
+                            None,
+                            None,
+                        )
 
                     # Frontier-advance rule: batch-level scalar. Advance iff every active
                     # (non-skipped) sample is converged at the current frontier position.
@@ -967,7 +1028,8 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                     if len(active_idx) == 0:
                         # Nothing more to train this batch.
                         break
-                    all_active_converged_at_frontier = bool(per_position_converged[active_idx, frontier].all().item())
+                    # Reuse the prefetched per-sample convergence flags (no extra sync).
+                    all_active_converged_at_frontier = all(done_at_frontier_cpu[j] for j in active_idx)
                     if all_active_converged_at_frontier:
                         frontier += 1
                         inner_advanced = True

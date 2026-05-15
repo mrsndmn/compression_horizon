@@ -309,6 +309,19 @@ class MyTrainingArguments(TrainingArguments):
             )
         },
     )
+    progressive_fused_linear_ce: bool = field(
+        default=True,
+        metadata={
+            "help": (
+                "If True (default), compute cross-entropy via LigerFusedLinearCrossEntropyLoss "
+                "(fused lm_head matmul + CE in a single kernel) instead of materializing "
+                "the [B, T, V] logits tensor. Bypasses the LM head in the compiled forward "
+                "by calling model.model(...) directly; the LM head weight is applied inside "
+                "the Liger kernel. Only effective when --progressive_bucketed_compile is also set. "
+                "Pass --progressive_fused_linear_ce False to fall back to the eager logits path."
+            )
+        },
+    )
     save_progressive_artifacts: bool = field(
         default=True,
         metadata={"help": "Whether to persist intermediate compression tokens for each stage."},
