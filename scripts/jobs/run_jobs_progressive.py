@@ -37,6 +37,11 @@ if __name__ == "__main__":
         help="Filter models by name (substring match). Can specify multiple models. Matches against model name or full checkpoint path.",
     )
     parser.add_argument(
+        "--model_checkpoint",
+        default=None,
+        help="Explicit checkpoint path. Overrides the hardcoded checkpoints list.",
+    )
+    parser.add_argument(
         "--dtype",
         default=None,
         help="Torch dtype to use: auto | float32/fp32 | bfloat16/bf16 | float16/fp16. If not specified, dtype is not included in output dir.",
@@ -236,6 +241,9 @@ if __name__ == "__main__":
 
     checkpoints = [c.removesuffix("/") for c in checkpoints]
     # checkpoints = []
+
+    if args.model_checkpoint:
+        checkpoints = [args.model_checkpoint]
 
     # Filter checkpoints by --model flag if provided
     if args.model:
