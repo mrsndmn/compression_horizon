@@ -74,6 +74,18 @@ class ProgressiveCrammingTrainer(BaseTrainer):
 
         model = self.model.to(device)
         freeze_model_parameters(model)
+        # Dual checkpoint support: when a sibling reconstructor model is provided, the
+        # compressor (`model`) is used ONLY to produce the initial compression-embedding
+        # value (compression_head_forward init); the inner optimization loop drives
+        # gradients through `decode_model` (the reconstructor) so the compression token
+        # is co-adapted to whichever model will decode it at downstream inference.
+        model_reconstructor = getattr(self, "model_reconstructor", None)
+        if model_reconstructor is not None:
+            print("[two-model] progressive cramming dual mode: compressor=init, reconstructor=decode")
+            model_reconstructor = model_reconstructor.to(device)
+            freeze_model_parameters(model_reconstructor)
+            model_reconstructor.eval()
+        decode_model = model_reconstructor if model_reconstructor is not None else model
 
         # Raise Dynamo cache size BEFORE wrap so we don't thrash past the default 8.
         # When bucketed compile is active we'll consume up to max_seq_len/bucket_size graphs.
@@ -94,14 +106,20 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         # LlamaModel (so we can call it without going through lm_head). Capture both
         # before any compile-wrap so we hold references to the original tensors/modules.
         fused_linear_ce = bool(getattr(self.args, "progressive_fused_linear_ce", False))
-        lm_head_weight = self.model.lm_head.weight if fused_linear_ce else None
-        base_model_for_fused = self.model.model if fused_linear_ce else None
+        # In dual mode, fused-CE captures must come from the reconstructor (which is the
+        # model whose lm_head + base will be invoked during the inner optimization loop).
+        _fused_src = self.model_reconstructor if model_reconstructor is not None else self.model
+        lm_head_weight = _fused_src.lm_head.weight if fused_linear_ce else None
+        base_model_for_fused = _fused_src.model if fused_linear_ce else None
 
         if getattr(self.args, "torch_compile", False):
             compile_mode = getattr(self.args, "torch_compile_mode", None) or "default"
             compile_backend = getattr(self.args, "torch_compile_backend", None) or "inductor"
             print(f"[torch.compile] enabling backend={compile_backend} mode={compile_mode}")
             model = torch.compile(model, mode=compile_mode, backend=compile_backend)
+            if model_reconstructor is not None:
+                model_reconstructor = torch.compile(model_reconstructor, mode=compile_mode, backend=compile_backend)
+                decode_model = model_reconstructor
             if fused_linear_ce and base_model_for_fused is not None:
                 base_model_for_fused = torch.compile(base_model_for_fused, mode=compile_mode, backend=compile_backend)
 
@@ -131,7 +149,9 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             batch_size = batch["input_ids"].shape[0]
             full_input_ids = batch.input_ids.squeeze(1).to(device)
             with torch.no_grad():
-                full_model_token_embeddings = model.get_input_embeddings()(full_input_ids)
+                # Embeddings must come from the model that will decode the prefix
+                # (reconstructor in dual mode, compressor otherwise).
+                full_model_token_embeddings = decode_model.get_input_embeddings()(full_input_ids)
             full_attention_mask = batch.attention_mask.squeeze(1).to(device)
 
             if getattr(self.args, "progressive_bucketed_compile", False):
@@ -139,7 +159,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                 # forward pass to recover one model call per batch.
                 target_hidden_full = None
             else:
-                target_hidden_full = self.compute_target_hidden(model, full_model_token_embeddings, full_attention_mask)
+                target_hidden_full = self.compute_target_hidden(decode_model, full_model_token_embeddings, full_attention_mask)
 
             hidden_size = full_model_token_embeddings.shape[-1]
             if self.args.low_dim_projection:
@@ -277,6 +297,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             if getattr(self.args, "progressive_bucketed_compile", False):
                 stage_index = self._train_progressive_bucketed_for_batch(
                     model=model,
+                    decode_model=decode_model,
                     base_model_for_fused=base_model_for_fused,
                     lm_head_weight=lm_head_weight,
                     full_input_ids=full_input_ids,
@@ -369,7 +390,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                             generated_text,
                             ground_truth_text,
                         ) = self.compute_loss(
-                            model,
+                            decode_model,
                             input_ids,
                             inputs_embeds,
                             attention_mask,
@@ -536,7 +557,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                         sample_attention_mask = attention_mask[j : j + 1]
                         sample_compression_tokens = final_compression_tokens_for_ig[j : j + 1]
 
-                        sample_outputs_lm = model(
+                        sample_outputs_lm = decode_model(
                             input_ids=sample_input_ids,
                             attention_mask=sample_attention_mask,
                         )
@@ -578,7 +599,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                             dim=1,
                         )
 
-                        sample_outputs_mem = model(
+                        sample_outputs_mem = decode_model(
                             inputs_embeds=sample_model_tokens_with_compression,
                             attention_mask=sample_attention_mask_with_compression,
                         )
@@ -713,6 +734,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         self,
         *,
         model,
+        decode_model=None,
         base_model_for_fused=None,
         lm_head_weight=None,
         full_input_ids: torch.Tensor,
@@ -756,6 +778,8 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         Returns the final ``stage_index`` so the caller can keep accounting
         in sync with the legacy path.
         """
+        if decode_model is None:
+            decode_model = model
         # CE-only guard: hybrid alignment under the bucketed path is deferred.
         if (
             getattr(self.args, "loss_type", "l2").lower() != "cross_entropy"
@@ -911,7 +935,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                             step_match = (aligned_preds == input_ids) & step_attention_mask.bool()
                             per_position_converged = per_position_converged | step_match
                     else:
-                        outputs = model(
+                        outputs = decode_model(
                             inputs_embeds=model_tokens_with_compression_tokens,
                             attention_mask=attention_mask_with_compression_tokens,
                         )
@@ -1166,7 +1190,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                     sample_attention_mask = valid_mask_full[j : j + 1]
                     sample_compression_tokens = final_compression_tokens_for_ig[j : j + 1]
 
-                    sample_outputs_lm = model(
+                    sample_outputs_lm = decode_model(
                         input_ids=sample_input_ids,
                         attention_mask=sample_attention_mask,
                     )
@@ -1208,7 +1232,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                         dim=1,
                     )
 
-                    sample_outputs_mem = model(
+                    sample_outputs_mem = decode_model(
                         inputs_embeds=sample_model_tokens_with_compression,
                         attention_mask=sample_attention_mask_with_compression,
                     )

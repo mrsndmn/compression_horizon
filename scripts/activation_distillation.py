@@ -312,17 +312,42 @@ if __name__ == "__main__":
         return "LlamaForCausalLMCompressionHead" in (cfg.get("architectures") or [])
 
     model_reconstructor = None
+
+    def _is_dual_checkpoint_dir(path: str) -> bool:
+        """A dual checkpoint dir has both compressor/ and reconstructor/ subdirs."""
+        return (
+            isinstance(path, str)
+            and os.path.isdir(os.path.join(path, "compressor"))
+            and os.path.isdir(os.path.join(path, "reconstructor"))
+        )
+
+    dual_ckpt = _is_dual_checkpoint_dir(training_args.model_checkpoint)
+    compressor_path = None
+    reconstructor_path = None
+    if dual_ckpt:
+        compressor_path = os.path.join(training_args.model_checkpoint, "compressor")
+        reconstructor_path = os.path.join(training_args.model_checkpoint, "reconstructor")
+        print(f"[two-model-load] detected dual checkpoint; compressor={compressor_path} reconstructor={reconstructor_path}")
     if (
         training_args.train_compression_head
         or "experiments_compression_head/ch_head_" in training_args.model_checkpoint
         or _checkpoint_is_compression_head(training_args.model_checkpoint)
+        or dual_ckpt
     ):
         from compression_horizon.models.llama_compression_head import LlamaForCausalLMCompressionHead
 
         model = LlamaForCausalLMCompressionHead.from_pretrained(
-            training_args.model_checkpoint, torch_dtype=torch_dtype, attn_implementation="flash_attention_2"
+            compressor_path if dual_ckpt else training_args.model_checkpoint,
+            torch_dtype=torch_dtype,
+            attn_implementation="flash_attention_2",
         )
-        if getattr(training_args, "separate_reconstructor_model", False):
+        if dual_ckpt:
+            model_reconstructor = AutoModelForCausalLM.from_pretrained(
+                reconstructor_path,
+                torch_dtype=torch_dtype,
+                attn_implementation="flash_attention_2",
+            )
+        elif getattr(training_args, "separate_reconstructor_model", False):
             print("[two-model] building separate reconstructor (plain LM, no compression head) " "from the same checkpoint")
             model_reconstructor = AutoModelForCausalLM.from_pretrained(
                 training_args.model_checkpoint,
@@ -336,7 +361,8 @@ if __name__ == "__main__":
         for p in model.parameters():
             p.requires_grad = False
 
-    tokenizer = AutoTokenizer.from_pretrained(training_args.model_checkpoint)
+    tokenizer_path = compressor_path if dual_ckpt else training_args.model_checkpoint
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
 
