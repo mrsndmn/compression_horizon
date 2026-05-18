@@ -33,8 +33,13 @@ class BaseTrainer:
         train_dataset=None,
         eval_dataset=None,
         data_collator=None,
+        model_reconstructor=None,
     ):
         self.model = model
+        # Optional second model used by the compression-head trainer when
+        # --separate_reconstructor_model is set. None means the second forward
+        # reuses `self.model` (legacy single-model path).
+        self.model_reconstructor = model_reconstructor
         self.processing_class = processing_class
         self.args = args
         self.train_dataset = train_dataset

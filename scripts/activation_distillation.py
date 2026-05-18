@@ -311,6 +311,7 @@ if __name__ == "__main__":
             cfg = json.load(f)
         return "LlamaForCausalLMCompressionHead" in (cfg.get("architectures") or [])
 
+    model_reconstructor = None
     if (
         training_args.train_compression_head
         or "experiments_compression_head/ch_head_" in training_args.model_checkpoint
@@ -321,6 +322,13 @@ if __name__ == "__main__":
         model = LlamaForCausalLMCompressionHead.from_pretrained(
             training_args.model_checkpoint, torch_dtype=torch_dtype, attn_implementation="flash_attention_2"
         )
+        if getattr(training_args, "separate_reconstructor_model", False):
+            print("[two-model] building separate reconstructor (plain LM, no compression head) " "from the same checkpoint")
+            model_reconstructor = AutoModelForCausalLM.from_pretrained(
+                training_args.model_checkpoint,
+                torch_dtype=torch_dtype,
+                attn_implementation="flash_attention_2",
+            )
     else:
         model = AutoModelForCausalLM.from_pretrained(
             training_args.model_checkpoint, torch_dtype=torch_dtype, attn_implementation="flash_attention_2"
@@ -432,6 +440,7 @@ if __name__ == "__main__":
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         data_collator=data_collator,
+        model_reconstructor=model_reconstructor,
     )
     training_artifacts = trainer.train()
     print(f"Saved compressed prefixes to: {training_artifacts}.")

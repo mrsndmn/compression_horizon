@@ -379,6 +379,17 @@ class MyTrainingArguments(TrainingArguments):
         default=True,
         metadata={"help": "Freeze base LM parameters and train only compression head parameters."},
     )
+    separate_reconstructor_model: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Compression-head training: when True, build a second copy of the base LM (no CH adapter) "
+                "from the same checkpoint and route the second (reconstruction) forward through it while the "
+                "first (compression) forward stays on the CH model. Both copies are optimised jointly. "
+                "Has no effect outside the compression-head trainer."
+            )
+        },
+    )
 
     def __post_init__(self):
         # Convert CLI-friendly forms into a real dict early, before base TrainingArguments validation.
