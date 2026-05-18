@@ -171,6 +171,12 @@ if __name__ == "__main__":
         default=None,
         help="torch.compile mode: default | reduce-overhead | max-autotune | max-autotune-no-cudagraphs.",
     )
+    parser.add_argument(
+        "--separate_reconstructor_model",
+        type=lambda x: x.lower() in ("true", "1", "yes"),
+        default=None,
+        help="Train a separate reconstructor model copy (dual-model ablation).",
+    )
 
     args = parser.parse_args()
     workdir = os.getcwd()
@@ -303,6 +309,10 @@ if __name__ == "__main__":
             if args.torch_compile_mode is not None:
                 cmd_args.append(f"--torch_compile_mode {args.torch_compile_mode}")
             exp_suffix = f"{exp_suffix}_compile"
+
+        if args.separate_reconstructor_model:
+            cmd_args.append("--separate_reconstructor_model True")
+            exp_suffix = f"{exp_suffix}_dualmodel"
 
         if args.max_steps is not None:
             cmd_args.append(f"--max_steps {args.max_steps}")
