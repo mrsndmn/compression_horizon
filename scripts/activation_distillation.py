@@ -112,10 +112,18 @@ def load_or_create_tokenized_dataset(
         # split = "sample-10BT"
         del kwargs["num_proc"]
         del kwargs["split"]
-        # 10BT has 14 shards (~9M items total); 100BT has many more (~144) — request enough
-        # to cover limit_dataset_items, defaulting to 30 for the 100BT path (>~18M items).
-        _fineweb_shards = {"10BT": 14, "100BT": 30}.get(fineweb_edu_sample, 14)
-        kwargs["data_files"] = [f"sample/{fineweb_edu_sample}/{i:03}_00000.parquet" for i in range(_fineweb_shards)]
+        # File layouts:
+        # - 10BT: 14 files named XXX_00000.parquet (XXX in 000..013), single suffix 00000.
+        # - 100BT: 14 × 10 = 140 files named XXX_YYYYY.parquet (XXX in 000..013, YYYYY in 00000..00009).
+        # We request enough shards to cover limit_dataset_items (~715k items/shard).
+        if fineweb_edu_sample == "10BT":
+            _shard_count = 14
+            kwargs["data_files"] = [f"sample/10BT/{i:03}_00000.parquet" for i in range(_shard_count)]
+        elif fineweb_edu_sample == "100BT":
+            _shard_count = 30  # ~21M items — enough for an 18M-item run
+            kwargs["data_files"] = [f"sample/100BT/{i // 10:03}_{i % 10:05}.parquet" for i in range(_shard_count)]
+        else:
+            raise ValueError(f"Unknown fineweb_edu_sample={fineweb_edu_sample}; expected '10BT' or '100BT'.")
         # kwargs['streaming'] = True
     elif dataset_name == "LarryLovestein/pg19_1k":
         kwargs["split"] = "train"
