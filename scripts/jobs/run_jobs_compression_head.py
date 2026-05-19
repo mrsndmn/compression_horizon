@@ -189,6 +189,12 @@ if __name__ == "__main__":
         default=None,
         help="Number of compression tokens (queries) when --compression_head_kind=qformer.",
     )
+    parser.add_argument(
+        "--fineweb_edu_sample",
+        type=str,
+        default=None,
+        help="HuggingFaceFW/fineweb-edu sample to use: '10BT' (~9M items) or '100BT' (~30M items).",
+    )
 
     args = parser.parse_args()
     workdir = os.getcwd()
@@ -333,6 +339,11 @@ if __name__ == "__main__":
                 exp_suffix = f"{exp_suffix}_{args.compression_head_kind}{args.compression_head_num_queries}"
             else:
                 exp_suffix = f"{exp_suffix}_{args.compression_head_kind}"
+
+        if args.fineweb_edu_sample:
+            cmd_args.append(f"--fineweb_edu_sample {args.fineweb_edu_sample}")
+            if args.fineweb_edu_sample != "10BT":
+                exp_suffix = f"{exp_suffix}_fwe{args.fineweb_edu_sample}"
 
         if args.max_steps is not None:
             cmd_args.append(f"--max_steps {args.max_steps}")

@@ -379,6 +379,15 @@ class MyTrainingArguments(TrainingArguments):
         default=True,
         metadata={"help": "Freeze base LM parameters and train only compression head parameters."},
     )
+    fineweb_edu_sample: str = field(
+        default="10BT",
+        metadata={
+            "help": (
+                "Which sample of HuggingFaceFW/fineweb-edu to load: '10BT' (~14 shards, ~9M items) "
+                "or '100BT' (~30 shards, ~30M items). Only used when --dataset_name is fineweb-edu."
+            )
+        },
+    )
     compression_head_kind: str = field(
         default="mlp",
         metadata={"help": "Compression head type: 'mlp' (legacy, single token) or 'qformer' (N tokens via cross-attention)."},

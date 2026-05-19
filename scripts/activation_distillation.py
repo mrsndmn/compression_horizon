@@ -52,6 +52,7 @@ def load_or_create_tokenized_dataset(
     cache_prefix: str = "dataset",
     num_proc: int = 16,
     fallback_length: int | None = None,
+    fineweb_edu_sample: str = "10BT",
 ) -> Dataset:
     """
     Load a tokenized dataset from cache or create and cache it.
@@ -85,6 +86,7 @@ def load_or_create_tokenized_dataset(
         "max_sequence_length": max_sequence_length,
         "tokenizer_fingerprint": _tokenizer_fingerprint(tokenizer),
         "no_bos_token": no_bos_token,
+        "fineweb_edu_sample": fineweb_edu_sample if dataset_name == "HuggingFaceFW/fineweb-edu" else None,
     }
     cache_key_json = json.dumps(cache_params, sort_keys=True, ensure_ascii=False, default=str)
     cache_key_hash = hashlib.sha256(cache_key_json.encode("utf-8")).hexdigest()[:16]
@@ -110,7 +112,10 @@ def load_or_create_tokenized_dataset(
         # split = "sample-10BT"
         del kwargs["num_proc"]
         del kwargs["split"]
-        kwargs["data_files"] = [f"sample/10BT/{i:03}_00000.parquet" for i in range(14)]
+        # 10BT has 14 shards (~9M items total); 100BT has many more (~144) — request enough
+        # to cover limit_dataset_items, defaulting to 30 for the 100BT path (>~18M items).
+        _fineweb_shards = {"10BT": 14, "100BT": 30}.get(fineweb_edu_sample, 14)
+        kwargs["data_files"] = [f"sample/{fineweb_edu_sample}/{i:03}_00000.parquet" for i in range(_fineweb_shards)]
         # kwargs['streaming'] = True
     elif dataset_name == "LarryLovestein/pg19_1k":
         kwargs["split"] = "train"
@@ -405,6 +410,7 @@ if __name__ == "__main__":
             no_bos_token=training_args.no_bos_token,
             limit_dataset_items=getattr(training_args, "limit_dataset_items", None),
             offset_dataset_items=getattr(training_args, "offset_dataset_items", None),
+            fineweb_edu_sample=getattr(training_args, "fineweb_edu_sample", "10BT"),
             cache_prefix="dataset",
         )
     distributed_state.wait_for_everyone()
@@ -419,6 +425,7 @@ if __name__ == "__main__":
             no_bos_token=training_args.no_bos_token,
             limit_dataset_items=getattr(training_args, "limit_dataset_items", None),
             offset_dataset_items=getattr(training_args, "offset_dataset_items", None),
+            fineweb_edu_sample=getattr(training_args, "fineweb_edu_sample", "10BT"),
             cache_prefix="dataset",
         )
 
@@ -442,6 +449,7 @@ if __name__ == "__main__":
                 no_bos_token=training_args.no_bos_token,
                 limit_dataset_items=getattr(training_args, "limit_dataset_items", None),
                 offset_dataset_items=getattr(training_args, "offset_dataset_items", None),
+                fineweb_edu_sample=getattr(training_args, "fineweb_edu_sample", "10BT"),
                 cache_prefix="eval_dataset",
                 fallback_length=len(train_dataset),
             )
@@ -457,6 +465,7 @@ if __name__ == "__main__":
                 no_bos_token=training_args.no_bos_token,
                 limit_dataset_items=getattr(training_args, "limit_dataset_items", None),
                 offset_dataset_items=getattr(training_args, "offset_dataset_items", None),
+                fineweb_edu_sample=getattr(training_args, "fineweb_edu_sample", "10BT"),
                 cache_prefix="eval_dataset",
                 fallback_length=len(train_dataset),
             )
