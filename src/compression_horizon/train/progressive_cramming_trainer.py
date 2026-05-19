@@ -230,10 +230,6 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                         "embedding_init_method=compression_head_forward requires a model with a "
                         "compression_head attribute (use a LlamaForCausalLMCompressionHead checkpoint)."
                     )
-                if num_compression_tokens != 1:
-                    raise ValueError(
-                        "embedding_init_method=compression_head_forward currently supports " "num_compression_tokens=1 only."
-                    )
                 lengths_t = full_attention_mask.sum(dim=1).to(device=device, dtype=torch.long)
                 with torch.no_grad():
                     outs = model(
