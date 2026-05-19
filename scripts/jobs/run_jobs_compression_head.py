@@ -177,6 +177,18 @@ if __name__ == "__main__":
         default=None,
         help="Train a separate reconstructor model copy (dual-model ablation).",
     )
+    parser.add_argument(
+        "--compression_head_kind",
+        type=str,
+        default=None,
+        help="Compression head type: 'mlp' (legacy) or 'qformer'.",
+    )
+    parser.add_argument(
+        "--compression_head_num_queries",
+        type=int,
+        default=None,
+        help="Number of compression tokens (queries) when --compression_head_kind=qformer.",
+    )
 
     args = parser.parse_args()
     workdir = os.getcwd()
@@ -313,6 +325,14 @@ if __name__ == "__main__":
         if args.separate_reconstructor_model:
             cmd_args.append("--separate_reconstructor_model True")
             exp_suffix = f"{exp_suffix}_dualmodel"
+
+        if args.compression_head_kind:
+            cmd_args.append(f"--compression_head_kind {args.compression_head_kind}")
+            if args.compression_head_num_queries is not None:
+                cmd_args.append(f"--compression_head_num_queries {args.compression_head_num_queries}")
+                exp_suffix = f"{exp_suffix}_{args.compression_head_kind}{args.compression_head_num_queries}"
+            else:
+                exp_suffix = f"{exp_suffix}_{args.compression_head_kind}"
 
         if args.max_steps is not None:
             cmd_args.append(f"--max_steps {args.max_steps}")

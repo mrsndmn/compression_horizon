@@ -334,10 +334,30 @@ if __name__ == "__main__":
         or _checkpoint_is_compression_head(training_args.model_checkpoint)
         or dual_ckpt
     ):
+        from transformers import AutoConfig
+
         from compression_horizon.models.llama_compression_head import LlamaForCausalLMCompressionHead
 
+        _src_path = compressor_path if dual_ckpt else training_args.model_checkpoint
+        _cfg = AutoConfig.from_pretrained(_src_path)
+        # Stash compression-head selection on config so it round-trips through
+        # save_pretrained/from_pretrained. Only override here on FRESH training runs;
+        # when loading an already-trained checkpoint, the config carries its own values.
+        _ck = getattr(training_args, "compression_head_kind", "mlp")
+        if _ck and _ck != "mlp" and not getattr(_cfg, "compression_head_kind", None):
+            _cfg.compression_head_kind = _ck
+            _cfg.compression_head_num_queries = int(getattr(training_args, "compression_head_num_queries", 1) or 1)
+            _cfg.compression_head_num_heads = int(getattr(training_args, "compression_head_num_heads", 8) or 8)
+            _cfg.compression_head_num_layers = int(getattr(training_args, "compression_head_num_layers", 1) or 1)
+            print(
+                f"[compression-head] kind={_cfg.compression_head_kind} "
+                f"num_queries={_cfg.compression_head_num_queries} "
+                f"num_heads={_cfg.compression_head_num_heads} "
+                f"num_layers={_cfg.compression_head_num_layers}"
+            )
         model = LlamaForCausalLMCompressionHead.from_pretrained(
-            compressor_path if dual_ckpt else training_args.model_checkpoint,
+            _src_path,
+            config=_cfg,
             torch_dtype=torch_dtype,
             attn_implementation="flash_attention_2",
         )

@@ -25,6 +25,88 @@ class CausalLMOutputWithPastAndCompression(ModelOutput):
     compression_embeds_all: Optional[torch.FloatTensor] = None
 
 
+class QFormerLayer(nn.Module):
+    """One cross-attention block: N queries attend to L encoder hidden states, then FFN.
+
+    Uses a manual scaled-dot-product attention path (separate Q/K/V/out linears) instead of
+    nn.MultiheadAttention, which is more bf16-stable and gives us explicit control over the
+    additive mask. nn.MultiheadAttention's internal flash-attn backend can yield NaNs at
+    init with bf16 + key_padding_mask under some setups.
+    """
+
+    def __init__(self, hidden_size: int, num_heads: int = 8, dropout: float = 0.0):
+        super().__init__()
+        if hidden_size % num_heads != 0:
+            raise ValueError(f"hidden_size {hidden_size} must be divisible by num_heads {num_heads}")
+        self.num_heads = num_heads
+        self.head_dim = hidden_size // num_heads
+        self.norm_q1 = nn.LayerNorm(hidden_size)
+        self.norm_kv = nn.LayerNorm(hidden_size)
+        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=True)
+        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=True)
+        self.v_proj = nn.Linear(hidden_size, hidden_size, bias=True)
+        self.out_proj = nn.Linear(hidden_size, hidden_size, bias=True)
+        self.attn_dropout = nn.Dropout(dropout)
+        self.norm_q2 = nn.LayerNorm(hidden_size)
+        self.ffn = nn.Sequential(
+            nn.Linear(hidden_size, 4 * hidden_size),
+            nn.GELU(),
+            nn.Linear(4 * hidden_size, hidden_size),
+        )
+
+    def forward(self, q: torch.Tensor, kv: torch.Tensor, key_padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        # q: [B, N, H], kv: [B, L, H], key_padding_mask: [B, L] True at MASKED positions.
+        bsz, n_q, hidden = q.shape
+        _, n_kv, _ = kv.shape
+        q_n = self.norm_q1(q)
+        kv_n = self.norm_kv(kv)
+        # Q, K, V projections -> [B, H, head_dim] per head -> [B, num_heads, N, head_dim].
+        qh = self.q_proj(q_n).reshape(bsz, n_q, self.num_heads, self.head_dim).transpose(1, 2)
+        kh = self.k_proj(kv_n).reshape(bsz, n_kv, self.num_heads, self.head_dim).transpose(1, 2)
+        vh = self.v_proj(kv_n).reshape(bsz, n_kv, self.num_heads, self.head_dim).transpose(1, 2)
+        # Additive attention mask: 0 where allowed, -inf (in qh dtype) where masked.
+        attn_mask = None
+        if key_padding_mask is not None:
+            # key_padding_mask: [B, L] -> [B, 1, 1, L] for broadcasting against [B, H, N, L].
+            mask = key_padding_mask.to(dtype=torch.bool).unsqueeze(1).unsqueeze(1)
+            attn_mask = torch.zeros_like(mask, dtype=qh.dtype).masked_fill(mask, float("-inf"))
+        attn = torch.nn.functional.scaled_dot_product_attention(qh, kh, vh, attn_mask=attn_mask, dropout_p=0.0)
+        # [B, num_heads, N, head_dim] -> [B, N, H].
+        attn = attn.transpose(1, 2).reshape(bsz, n_q, hidden)
+        attn = self.attn_dropout(self.out_proj(attn))
+        q = q + attn
+        q_n = self.norm_q2(q)
+        q = q + self.ffn(q_n)
+        return q
+
+
+class QFormerCompressionHead(nn.Module):
+    """Q-Former-style compression head: N learnable queries cross-attend to the prefix
+    hidden states and emit N compression tokens of shape [B, N, H]."""
+
+    def __init__(self, hidden_size: int, num_queries: int = 4, num_heads: int = 8, num_layers: int = 1, dropout: float = 0.0):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.num_queries = int(num_queries)
+        self.queries = nn.Parameter(torch.zeros(self.num_queries, hidden_size))
+        self.layers = nn.ModuleList(
+            [QFormerLayer(hidden_size, num_heads=num_heads, dropout=dropout) for _ in range(num_layers)]
+        )
+        self.final_norm = nn.LayerNorm(hidden_size)
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        nn.init.normal_(self.queries, mean=0.0, std=0.02)
+
+    def forward(self, hidden_states: torch.Tensor, key_padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        # hidden_states: [B, L, H]; key_padding_mask: [B, L] (True = mask).
+        bsz = hidden_states.size(0)
+        q = self.queries.unsqueeze(0).expand(bsz, -1, -1).to(dtype=hidden_states.dtype)
+        for layer in self.layers:
+            q = layer(q, hidden_states, key_padding_mask)
+        return self.final_norm(q)
+
+
 class LlamaForCausalLMCompressionHead(LlamaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -37,15 +119,28 @@ class LlamaForCausalLMCompressionHead(LlamaPreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         hidden = config.hidden_size
-        # LayerNorm on the output keeps the compression-token embedding in a bounded range
-        # matching the scale the base model's attention layers expect for input embeddings.
-        # Prevents bf16 attention overflow once the base model is unfrozen and drifts.
-        self.compression_head = nn.Sequential(
-            nn.Linear(hidden, hidden),
-            nn.GELU(),
-            nn.Linear(hidden, hidden),
-            nn.LayerNorm(hidden),
-        )
+        # `config.compression_head_kind` / `config.compression_head_num_queries` round-trip
+        # through save_pretrained / from_pretrained so the right head is rebuilt at load time.
+        kind = getattr(config, "compression_head_kind", "mlp")
+        n_queries = int(getattr(config, "compression_head_num_queries", 1))
+        if kind == "qformer":
+            num_heads = int(getattr(config, "compression_head_num_heads", 8))
+            num_layers = int(getattr(config, "compression_head_num_layers", 1))
+            self.compression_head = QFormerCompressionHead(
+                hidden_size=hidden,
+                num_queries=n_queries,
+                num_heads=num_heads,
+                num_layers=num_layers,
+            )
+        else:
+            # Legacy MLP head: LayerNorm on the output keeps the compression-token embedding
+            # in a bounded range matching the scale the base model's attention layers expect.
+            self.compression_head = nn.Sequential(
+                nn.Linear(hidden, hidden),
+                nn.GELU(),
+                nn.Linear(hidden, hidden),
+                nn.LayerNorm(hidden),
+            )
 
         self.post_init()
 
@@ -62,6 +157,15 @@ class LlamaForCausalLMCompressionHead(LlamaPreTrainedModel, GenerationMixin):
             nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            # Same bf16 phantom-init issue: re-init in-place.
+            nn.init.ones_(module.weight)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, QFormerCompressionHead):
+            # The `queries` parameter is a bare nn.Parameter, not part of a Linear/LayerNorm,
+            # so it would otherwise stay as uninit bf16 memory after from_pretrained.
+            nn.init.normal_(module.queries, mean=0.0, std=0.02)
         else:
             super()._init_weights(module)
 
@@ -82,6 +186,23 @@ class LlamaForCausalLMCompressionHead(LlamaPreTrainedModel, GenerationMixin):
 
     def get_decoder(self):
         return self.model
+
+    def swap_to_qformer_head(self, num_queries: int = 4, num_heads: int = 8, num_layers: int = 1) -> None:
+        """Replace the default MLP compression_head with a Q-Former head producing
+        `num_queries` compression tokens per sample. Call AFTER from_pretrained so the
+        legacy MLP weights from the checkpoint (if any) are discarded and the new module
+        is freshly initialised in the model's dtype/device.
+        """
+        ref_param = next(self.compression_head.parameters(), None)
+        dtype = ref_param.dtype if ref_param is not None else torch.float32
+        device = ref_param.device if ref_param is not None else torch.device("cpu")
+        new_head = QFormerCompressionHead(
+            hidden_size=self.config.hidden_size,
+            num_queries=num_queries,
+            num_heads=num_heads,
+            num_layers=num_layers,
+        ).to(dtype=dtype, device=device)
+        self.compression_head = new_head
 
     def _select_compression_embeds(
         self,
@@ -156,14 +277,23 @@ class LlamaForCausalLMCompressionHead(LlamaPreTrainedModel, GenerationMixin):
         compression_embeds_all = None
         compression_embeds = None
         if prefix_lengths is not None:
-            # Compute only the selected compression embedding to reduce memory:
-            # pick hidden_state at idx = clamp(prefix_lengths - 1) and run compression_head on [B, H].
             bsz, seq_len, _hidden = hidden_states.shape
             device = hidden_states.device
-            idx = prefix_lengths.to(device=device).view(-1).to(torch.long).clamp_min(1) - 1  # [B]
-            idx = idx.clamp_max(seq_len - 1)
-            selected_hidden = hidden_states[torch.arange(bsz, device=device), idx]  # [B, H]
-            compression_embeds = self.compression_head(selected_hidden).unsqueeze(1)  # [B, 1, H]
+            if isinstance(self.compression_head, QFormerCompressionHead):
+                # Q-Former path: queries cross-attend to all prefix positions; we mask
+                # everything past prefix_lengths so the queries only see valid tokens.
+                pl = prefix_lengths.to(device=device).view(-1).to(torch.long).clamp_min(1)
+                pos = torch.arange(seq_len, device=device).unsqueeze(0)  # [1, L]
+                valid = pos < pl.unsqueeze(1)  # [B, L]
+                key_padding_mask = ~valid  # True = mask
+                compression_embeds = self.compression_head(hidden_states, key_padding_mask=key_padding_mask)
+                # Shape: [B, num_queries, H]
+            else:
+                # Legacy MLP path: gather hidden at idx = prefix_length-1, run pointwise MLP.
+                idx = prefix_lengths.to(device=device).view(-1).to(torch.long).clamp_min(1) - 1  # [B]
+                idx = idx.clamp_max(seq_len - 1)
+                selected_hidden = hidden_states[torch.arange(bsz, device=device), idx]  # [B, H]
+                compression_embeds = self.compression_head(selected_hidden).unsqueeze(1)  # [B, 1, H]
 
         if not return_dict:
             output = (logits,) + outputs[1:]

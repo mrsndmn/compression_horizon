@@ -379,6 +379,22 @@ class MyTrainingArguments(TrainingArguments):
         default=True,
         metadata={"help": "Freeze base LM parameters and train only compression head parameters."},
     )
+    compression_head_kind: str = field(
+        default="mlp",
+        metadata={"help": "Compression head type: 'mlp' (legacy, single token) or 'qformer' (N tokens via cross-attention)."},
+    )
+    compression_head_num_queries: int = field(
+        default=1,
+        metadata={"help": "Number of compression tokens (queries) when compression_head_kind='qformer'."},
+    )
+    compression_head_num_heads: int = field(
+        default=8,
+        metadata={"help": "Number of attention heads in each Q-Former layer."},
+    )
+    compression_head_num_layers: int = field(
+        default=1,
+        metadata={"help": "Number of cross-attention layers in the Q-Former."},
+    )
     separate_reconstructor_model: bool = field(
         default=False,
         metadata={

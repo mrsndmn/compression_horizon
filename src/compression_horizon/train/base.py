@@ -181,15 +181,20 @@ class BaseTrainer:
         p = torch.clamp(p, min=0)
         p = torch.minimum(p, max_prefix)
 
-        out_len = 1 + seq_len
+        # Number of compression tokens to prepend (1 for legacy MLP; >1 for Q-Former).
+        if compression_embeds.dim() != 3:
+            raise ValueError(f"compression_embeds must be [B, N, H], got {tuple(compression_embeds.shape)}")
+        num_compression_tokens = compression_embeds.shape[1]
+
+        out_len = num_compression_tokens + seq_len
         inputs_embeds_new = torch.zeros((bsz, out_len, hidden), device=device, dtype=token_embeddings.dtype)
         attention_mask_new = torch.zeros((bsz, out_len), device=device, dtype=attention_mask.dtype)
         labels_new = torch.full((bsz, out_len), fill_value=-100, device=device, dtype=input_ids.dtype)
 
-        inputs_embeds_new[:, 0:1, :] = compression_embeds
-        attention_mask_new[:, 0] = 1
+        inputs_embeds_new[:, :num_compression_tokens, :] = compression_embeds
+        attention_mask_new[:, :num_compression_tokens] = 1
 
-        # Reconstruction objective: the new sequence is [compression_token, prefix_tokens],
+        # Reconstruction objective: the new sequence is [compression_tokens..., prefix_tokens],
         # and the model is trained to autoregressively predict the *prefix tokens themselves*
         # (matching what progressive cramming evaluates), NOT the post-prefix continuation.
         ar = torch.arange(seq_len, device=device, dtype=torch.long)
@@ -202,9 +207,11 @@ class BaseTrainer:
         if valid.dtype != torch.bool:
             valid = valid.to(torch.bool)
 
-        inputs_embeds_new[:, 1:, :] = gathered_embeds * valid.unsqueeze(-1).to(dtype=token_embeddings.dtype)
-        attention_mask_new[:, 1:] = valid.to(dtype=attention_mask.dtype)
-        labels_new[:, 1:] = torch.where(valid, gathered_ids, torch.full_like(gathered_ids, -100))
+        inputs_embeds_new[:, num_compression_tokens:, :] = gathered_embeds * valid.unsqueeze(-1).to(
+            dtype=token_embeddings.dtype
+        )
+        attention_mask_new[:, num_compression_tokens:] = valid.to(dtype=attention_mask.dtype)
+        labels_new[:, num_compression_tokens:] = torch.where(valid, gathered_ids, torch.full_like(gathered_ids, -100))
 
         return inputs_embeds_new, attention_mask_new, labels_new
 
