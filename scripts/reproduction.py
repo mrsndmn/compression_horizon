@@ -10,7 +10,7 @@ from transformers import (
     DataCollatorForLanguageModeling,
 )
 
-from compression_horizon.train import MyTrainer
+from compression_horizon.train import FullCrammingTrainer
 from compression_horizon.train.arguments import MyTrainingArguments
 from compression_horizon.utils.exceptions import NvidiaSMIError
 from compression_horizon.utils.launch import resolve_torch_dtype
@@ -79,15 +79,12 @@ if __name__ == "__main__":
 
     # Train
     transformers.logging.set_verbosity_info()
-    trainer = MyTrainer(
+    trainer = FullCrammingTrainer(
         model,
         processing_class=tokenizer,
         args=training_args,
         train_dataset=train_dataset,
         data_collator=data_collator,
     )
-    if training_args.progressive_train:
-        training_artifacts = trainer.progressive_train()
-    else:
-        training_artifacts = trainer.train()
+    training_artifacts = trainer.train()
     print(f"Saved compressed prefixes to: {training_artifacts}.")
