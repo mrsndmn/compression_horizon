@@ -24,6 +24,56 @@ from compression_horizon.utils.exceptions import NvidiaSMIError
 from compression_horizon.utils.launch import resolve_torch_dtype, set_launch_seed
 
 
+def _parse_truncate_layers_spec(spec: str, total_layers: int) -> list[int]:
+    """Parse a --truncate_layers spec into a sorted list of layer indices to keep.
+
+    Formats:
+      * 'first_last:K' -> [0..K-1] + [total-K..total-1]
+      * 'even:N' -> N evenly-spaced indices including 0 and total-1
+      * '0,1,2,26,27,28,29' -> explicit csv
+    """
+    spec = spec.strip()
+    if spec.startswith("first_last:"):
+        k = int(spec.split(":", 1)[1])
+        if k <= 0 or 2 * k > total_layers:
+            raise ValueError(f"first_last:K requires 0<K and 2K<=total ({total_layers}), got K={k}")
+        keep = list(range(k)) + list(range(total_layers - k, total_layers))
+    elif spec.startswith("even:"):
+        n = int(spec.split(":", 1)[1])
+        if n < 2 or n > total_layers:
+            raise ValueError(f"even:N requires 2<=N<=total ({total_layers}), got N={n}")
+        import numpy as _np
+
+        keep = sorted(set(int(round(x)) for x in _np.linspace(0, total_layers - 1, n)))
+    else:
+        keep = sorted({int(x) for x in spec.split(",") if x.strip() != ""})
+        if not keep or keep[0] < 0 or keep[-1] >= total_layers:
+            raise ValueError(f"explicit indices must lie in [0,{total_layers - 1}], got {keep}")
+    return keep
+
+
+def truncate_llama_layers(model, keep_indices: list[int]) -> None:
+    """In-place truncate a LlamaForCausalLM-style model to the given layer indices.
+
+    Updates model.model.layers (ModuleList), reassigns layer_idx on each remaining block,
+    and updates config.num_hidden_layers. Compatible with LlamaForCausalLMCompressionHead
+    (the CH adapter sits outside model.model.layers and is preserved).
+    """
+    import torch.nn as nn
+
+    layers = model.model.layers
+    total = len(layers)
+    bad = [i for i in keep_indices if i < 0 or i >= total]
+    if bad:
+        raise ValueError(f"truncate_llama_layers: bad indices {bad} for total={total}")
+    new_layers = nn.ModuleList([layers[i] for i in keep_indices])
+    for new_idx, block in enumerate(new_layers):
+        if hasattr(block, "self_attn") and hasattr(block.self_attn, "layer_idx"):
+            block.self_attn.layer_idx = new_idx
+    model.model.layers = new_layers
+    model.config.num_hidden_layers = len(new_layers)
+
+
 def _tokenizer_fingerprint(tokenizer: AutoTokenizer) -> str:
     """Stable 16-char fingerprint of a tokenizer's identity.
 
@@ -368,6 +418,14 @@ if __name__ == "__main__":
                 f"num_heads={_cfg.compression_head_num_heads} "
                 f"num_layers={_cfg.compression_head_num_layers}"
             )
+        _ckpt_num_queries = int(getattr(_cfg, "compression_head_num_queries", 1) or 1)
+        if _ckpt_num_queries > 1 and int(getattr(training_args, "number_of_mem_tokens", 1) or 1) != _ckpt_num_queries:
+            print(
+                f"[auto-sync] overriding --number_of_mem_tokens "
+                f"{training_args.number_of_mem_tokens} -> {_ckpt_num_queries} "
+                f"to match checkpoint's compression_head_num_queries"
+            )
+            training_args.number_of_mem_tokens = _ckpt_num_queries
         model = LlamaForCausalLMCompressionHead.from_pretrained(
             _src_path,
             config=_cfg,
@@ -393,6 +451,18 @@ if __name__ == "__main__":
         )
         for p in model.parameters():
             p.requires_grad = False
+
+    _trunc_spec = getattr(training_args, "truncate_layers", None)
+    if _trunc_spec:
+        _total = model.config.num_hidden_layers
+        _keep = _parse_truncate_layers_spec(_trunc_spec, _total)
+        print(f"[truncate-layers] keeping {len(_keep)}/{_total} layers: {_keep}")
+        truncate_llama_layers(model, _keep)
+        if model_reconstructor is not None:
+            _total_r = model_reconstructor.config.num_hidden_layers
+            _keep_r = _parse_truncate_layers_spec(_trunc_spec, _total_r)
+            print(f"[truncate-layers] reconstructor: keeping {len(_keep_r)}/{_total_r} layers: {_keep_r}")
+            truncate_llama_layers(model_reconstructor, _keep_r)
 
     tokenizer_path = compressor_path if dual_ckpt else training_args.model_checkpoint
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)

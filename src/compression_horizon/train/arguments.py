@@ -415,6 +415,18 @@ class MyTrainingArguments(TrainingArguments):
             )
         },
     )
+    truncate_layers: str | None = field(
+        default=None,
+        metadata={
+            "help": (
+                "Truncate the LM backbone to a subset of transformer layers. Two formats: "
+                "(1) explicit csv of indices to keep, e.g. '0,1,2,3,26,27,28,29'; "
+                "(2) shorthand 'first_last:K' (e.g. 'first_last:4') keeps first K + last K layers; "
+                "or 'even:N' keeps N evenly-spaced layers including endpoints. "
+                "Applied to both compressor and reconstructor in dual-model mode."
+            )
+        },
+    )
 
     def __post_init__(self):
         # Convert CLI-friendly forms into a real dict early, before base TrainingArguments validation.

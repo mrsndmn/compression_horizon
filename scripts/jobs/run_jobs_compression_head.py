@@ -195,6 +195,24 @@ if __name__ == "__main__":
         default=None,
         help="HuggingFaceFW/fineweb-edu sample to use: '10BT' (~9M items) or '100BT' (~30M items).",
     )
+    parser.add_argument(
+        "--truncate_layers",
+        type=str,
+        default=None,
+        help="Truncate LM backbone to subset of layers: csv ('0,1,2,28,29'), 'first_last:K', or 'even:N'.",
+    )
+    parser.add_argument(
+        "--compression_head_num_heads",
+        type=int,
+        default=None,
+        help="Number of attention heads in each Q-Former layer (default: 8).",
+    )
+    parser.add_argument(
+        "--compression_head_num_layers",
+        type=int,
+        default=None,
+        help="Number of cross-attention layers in the Q-Former (default: 1).",
+    )
 
     args = parser.parse_args()
     workdir = os.getcwd()
@@ -339,6 +357,17 @@ if __name__ == "__main__":
                 exp_suffix = f"{exp_suffix}_{args.compression_head_kind}{args.compression_head_num_queries}"
             else:
                 exp_suffix = f"{exp_suffix}_{args.compression_head_kind}"
+            if args.compression_head_num_layers is not None:
+                cmd_args.append(f"--compression_head_num_layers {args.compression_head_num_layers}")
+                exp_suffix = f"{exp_suffix}L{args.compression_head_num_layers}"
+            if args.compression_head_num_heads is not None:
+                cmd_args.append(f"--compression_head_num_heads {args.compression_head_num_heads}")
+                exp_suffix = f"{exp_suffix}H{args.compression_head_num_heads}"
+
+        if args.truncate_layers is not None:
+            cmd_args.append(f"--truncate_layers {args.truncate_layers}")
+            _trunc_token = args.truncate_layers.replace(":", "").replace(",", "_")
+            exp_suffix = f"{exp_suffix}_TRUNC_{_trunc_token}"
 
         if args.fineweb_edu_sample:
             cmd_args.append(f"--fineweb_edu_sample {args.fineweb_edu_sample}")

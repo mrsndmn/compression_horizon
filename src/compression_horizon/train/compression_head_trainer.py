@@ -56,15 +56,12 @@ class CompressionHeadTrainer(BaseTrainer):
                 torch.cuda.synchronize()
 
         if args.compression_head_freeze_base_model:
+            freeze_model_parameters(model)
+            for p in getattr(model, "compression_head", nn.Module()).parameters():
+                p.requires_grad = True
             if dual_mode:
-                print(
-                    "[two-model] WARNING: --compression_head_freeze_base_model is ignored in "
-                    "dual-model training (both compressor and reconstructor stay fully trainable)."
-                )
-            else:
-                freeze_model_parameters(model)
-                for p in getattr(model, "compression_head", nn.Module()).parameters():
-                    p.requires_grad = True
+                freeze_model_parameters(model_reconstructor)
+                print("[two-model] froze compressor base + reconstructor entirely; " "only compression_head remains trainable.")
 
         model.train()
         if dual_mode:
