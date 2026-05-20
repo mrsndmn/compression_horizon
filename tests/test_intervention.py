@@ -1,4 +1,4 @@
-"""Tests for compression_horizon.intervention module.
+"""Tests for compression_horizon.analysis.attention_intervention module.
 
 Tests all intervention functions across the three architecture families
 covered by MODEL_CONFIGS: Llama/SmolLM2, Pythia (GPT-NeoX), and Gemma3.
@@ -11,7 +11,7 @@ import pytest
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from compression_horizon.intervention import (
+from compression_horizon.analysis.attention_intervention import (
     AttentionKnockoutContext,
     EagerAttentionContext,
     build_intervention_result,

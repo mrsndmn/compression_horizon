@@ -9,7 +9,7 @@ import torch
 from tests.trainer_helpers import TinyDataset, _collate_batch, _make_args
 from transformers import AutoTokenizer
 
-from compression_horizon.train.trainer import CompressionHeadTrainer
+from compression_horizon.train import CompressionHeadTrainer
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 

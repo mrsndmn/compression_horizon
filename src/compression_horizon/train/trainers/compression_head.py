@@ -10,8 +10,70 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-from compression_horizon.train.base import BaseTrainer
+from compression_horizon.train.trainers.base import BaseTrainer
 from compression_horizon.utils.launch import freeze_model_parameters
+
+
+def _sample_prefix_lengths(attention_mask: torch.Tensor) -> torch.LongTensor:
+    """Sample a per-sample random prefix length in [1, sequence_length]."""
+    if attention_mask.ndim == 3 and attention_mask.shape[1] == 1:
+        attention_mask = attention_mask.squeeze(1)
+    if attention_mask.ndim != 2:
+        raise ValueError(f"Expected attention_mask to be [B, T], got shape {tuple(attention_mask.shape)}")
+    device = attention_mask.device
+    lengths = attention_mask.sum(dim=1).to(torch.long).clamp_min(1)
+    u = torch.rand(lengths.shape, device=device, dtype=torch.float32)
+    prefix_lengths = (torch.floor(u * lengths.to(torch.float32)).to(torch.long) + 1).clamp_min(1)
+    return torch.minimum(prefix_lengths, lengths).clamp_min(1)
+
+
+def _build_compressed_inputs(
+    *,
+    compression_embeds: torch.Tensor,
+    token_embeddings: torch.Tensor,
+    input_ids: torch.Tensor,
+    attention_mask: torch.Tensor,
+    prefix_lengths: torch.LongTensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Build inputs of shape [B, 1+T, H] with a compression token followed by tokens shifted by prefix_lengths."""
+    if attention_mask.ndim == 3 and attention_mask.shape[1] == 1:
+        attention_mask = attention_mask.squeeze(1)
+    if input_ids.ndim == 3 and input_ids.shape[1] == 1:
+        input_ids = input_ids.squeeze(1)
+    if attention_mask.ndim != 2 or input_ids.ndim != 2:
+        raise ValueError(
+            f"Expected input_ids/attention_mask to be [B, T], got {tuple(input_ids.shape)}/{tuple(attention_mask.shape)}"
+        )
+    device = token_embeddings.device
+    bsz, seq_len, hidden = token_embeddings.shape
+
+    lengths = attention_mask.sum(dim=1).to(torch.long).clamp_min(1)
+    max_prefix = (lengths - 1).clamp_min(0)
+    p = torch.minimum(prefix_lengths.to(device=device).to(torch.long).clamp(min=0), max_prefix)
+
+    out_len = 1 + seq_len
+    inputs_embeds_new = torch.zeros((bsz, out_len, hidden), device=device, dtype=token_embeddings.dtype)
+    attention_mask_new = torch.zeros((bsz, out_len), device=device, dtype=attention_mask.dtype)
+    labels_new = torch.full((bsz, out_len), fill_value=-100, device=device, dtype=input_ids.dtype)
+
+    inputs_embeds_new[:, 0:1, :] = compression_embeds
+    attention_mask_new[:, 0] = 1
+
+    ar = torch.arange(seq_len, device=device, dtype=torch.long)
+    src_idx = p.unsqueeze(1) + ar.unsqueeze(0)
+    valid = src_idx < lengths.unsqueeze(1)
+    src_idx_safe = torch.clamp(src_idx, max=seq_len - 1)
+
+    gathered_embeds = token_embeddings.gather(1, src_idx_safe.unsqueeze(-1).expand(-1, -1, hidden))
+    gathered_ids = input_ids.gather(1, src_idx_safe)
+
+    if valid.dtype != torch.bool:
+        valid = valid.to(torch.bool)
+
+    inputs_embeds_new[:, 1:, :] = gathered_embeds * valid.unsqueeze(-1).to(dtype=token_embeddings.dtype)
+    attention_mask_new[:, 1:] = valid.to(dtype=attention_mask.dtype)
+    labels_new[:, 1:] = torch.where(valid, gathered_ids, torch.full_like(gathered_ids, -100))
+    return inputs_embeds_new, attention_mask_new, labels_new
 
 
 class CompressionHeadTrainer(BaseTrainer):
@@ -141,7 +203,7 @@ class CompressionHeadTrainer(BaseTrainer):
                         )
 
                     t0 = time.perf_counter()
-                    prefix_lengths = self._sample_prefix_lengths(attention_mask)
+                    prefix_lengths = _sample_prefix_lengths(attention_mask)
                     prefix_s = time.perf_counter() - t0
 
                     t0 = time.perf_counter()
@@ -179,7 +241,7 @@ class CompressionHeadTrainer(BaseTrainer):
                     embed_s = time.perf_counter() - t0
 
                     t0 = time.perf_counter()
-                    inputs_embeds_new, attention_mask_new, labels_new = self._build_compressed_inputs(
+                    inputs_embeds_new, attention_mask_new, labels_new = _build_compressed_inputs(
                         compression_embeds=compression_embeds,
                         token_embeddings=token_embeddings,
                         input_ids=input_ids,

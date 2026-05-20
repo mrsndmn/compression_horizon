@@ -8,10 +8,12 @@ __pycache__
 .ruff_cache
 .pytest_cache
 .ipynb_checkpoints
-datasets/
 
 # Data and artifacts
 artifacts/
+datasets/
+hub/
+xet/
 
 # Environment
 .venv
@@ -25,3 +27,10 @@ trainer_output/
 supplemetnary/
 supplemetnary.zip
 .claude
+
+# MacOS system
+.DS_Store
+
+# Paper drafts / under-review PDFs
+*.pdf
+*.docx

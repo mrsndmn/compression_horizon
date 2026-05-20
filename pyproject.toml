@@ -30,6 +30,9 @@ compression-horizon = "compression_horizon:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/compression_horizon"]
+
 [dependency-groups]
 dev = [
     "black>=25.9.0",

@@ -6,8 +6,7 @@ import torch
 from tests.trainer_helpers import TinyDataset, _collate_batch, _make_args
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from compression_horizon.train.base import BaseTrainer
-from compression_horizon.train.trainer import FullCrammingTrainer
+from compression_horizon.train import BaseTrainer, FullCrammingTrainer
 
 # Ensure we can import from src/
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -44,7 +43,7 @@ def test_compute_ce_loss():
         dim=1,
     )
 
-    loss, *_ = trainer.compute_loss(
+    loss, *_ = trainer.forward_and_compute_loss(
         model,
         input_ids.to("cuda"),
         model_token_embeddings.to("cuda"),
@@ -89,7 +88,7 @@ def test_compute_l2_loss_num_alignment_layers():
         dim=1,
     )
 
-    loss_all_layers, *_ = trainer.compute_loss(
+    loss_all_layers, *_ = trainer.forward_and_compute_loss(
         model,
         input_ids.to("cuda"),
         model_token_embeddings.to("cuda"),
@@ -100,7 +99,7 @@ def test_compute_l2_loss_num_alignment_layers():
     )
 
     trainer.args.num_alignment_layers = 1
-    loss_1_layer, *_ = trainer.compute_loss(
+    loss_1_layer, *_ = trainer.forward_and_compute_loss(
         model,
         input_ids.to("cuda"),
         model_token_embeddings.to("cuda"),
@@ -170,7 +169,7 @@ def test_compute_loss_convergence_metric_shape_and_range():
         dim=1,
     )
 
-    loss, _, convergence, *_ = trainer.compute_loss(
+    loss, _, convergence, *_ = trainer.forward_and_compute_loss(
         model,
         input_ids.to("cuda"),
         model_token_embeddings.to("cuda"),

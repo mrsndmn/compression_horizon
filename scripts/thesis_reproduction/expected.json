@@ -1,0 +1,300 @@
+{
+  "full_cramming/pythia_160m": {
+    "paper_section": "Table 11 (Appendix C)",
+    "model": "EleutherAI/pythia-160m",
+    "trainer_type": "full",
+    "dataset": "LarryLovestein/pg19_1k",
+    "num_samples": 50,
+    "max_sequence_length": 32,
+    "expected": {
+      "compressed_tokens":      {"kind": "configuration", "value": 32, "tolerance": 0},
+      "information_gain_bits":  {"kind": "measured",      "mean": 105.0, "std": 20.0},
+      "final_convergence":      {"kind": "measured",      "mean": 0.684, "std": 0.175}
+    },
+    "notes": "Full cramming with fixed token budget. compressed_tokens is an input parameter (= max_sequence_length); only information_gain_bits and final_convergence are measured outputs."
+  },
+  "full_cramming/llama_3_2_1b": {
+    "paper_section": "Table 11 (Appendix C)",
+    "model": "unsloth/Llama-3.2-1B",
+    "trainer_type": "full",
+    "dataset": "LarryLovestein/pg19_1k",
+    "num_samples": 10,
+    "max_sequence_length": 512,
+    "expected": {
+      "compressed_tokens":      {"kind": "configuration", "value": 512, "tolerance": 0},
+      "information_gain_bits":  {"kind": "measured",      "mean": 1965.0, "std": 244.0},
+      "final_convergence":      {"kind": "measured",      "mean": 0.998, "std": 0.001}
+    },
+    "notes": "Full cramming Llama-3.2-1B baseline. Paper reports accuracy 0.998 ± 0 — near-perfect reconstruction; refactor should reproduce this within machine epsilon. Std=0 in paper, set to 0.001 to avoid div-by-zero in z-score; verdict relies on absolute |delta| < 0.005."
+  },
+  "progressive_alignment/smollm2_1_7b": {
+    "paper_section": "Table 6 (Reviewer 1 W1 response, identical to Table 2 in main text), row 'SmolLM2-1.7B lr=0.1 α=1.0 L=8'",
+    "model": "HuggingFaceTB/SmolLM2-1.7B",
+    "trainer_type": "progressive",
+    "dataset": "LarryLovestein/pg19_1k",
+    "num_samples": 50,
+    "max_sequence_length": 4096,
+    "expected": {
+      "compressed_tokens":      {"kind": "measured", "mean": 242.6, "std": 63.2},
+      "information_gain_bits":  {"kind": "measured", "mean": 880.0, "std": 186.0}
+    },
+    "notes": "Progressive cramming + activation alignment on SmolLM2-1.7B (lr=0.1, α=1.0, L=8, cosine distance per paper Section 4.2 formula). Direct same-model reproduction of paper Table 6 alignment row. The compatible baseline (same row family, no alignment) is 338.3 ± 69.1 cram tokens and 1213 ± 166 IG (see progressive/smollm2_1_7b entry) — alignment should produce ~27 % smaller values, demonstrating the regularizer effect described in Section 5.4. Trajectory length (894 ± 121) and PCA 99% (26.46 ± 2.64) are paper-reported and can be verified post-hoc via the trajectory analyzer if needed."
+  },
+  "progressive/smollm2_1_7b": {
+    "paper_section": "Table 6 (Reviewer 1 W1 response, identical to Table 2 in main text), row 'SmolLM2-1.7B lr=0.1'",
+    "model": "HuggingFaceTB/SmolLM2-1.7B",
+    "trainer_type": "progressive",
+    "dataset": "LarryLovestein/pg19_1k",
+    "num_samples": 50,
+    "max_sequence_length": 4096,
+    "expected": {
+      "compressed_tokens":      {"kind": "measured", "mean": 338.3,  "std": 69.1},
+      "information_gain_bits":  {"kind": "measured", "mean": 1213.0, "std": 166.0}
+    },
+    "notes": "Progressive cramming on SmolLM2-1.7B (lr=0.1, no alignment, no low-dim, cross-entropy loss only). Direct same-model reproduction of paper Table 6 baseline row. Trajectory length (1056 ± 153) and PCA 99% (33.16 ± 2.76) are paper-reported and can be verified post-hoc via the trajectory analyzer."
+  },
+  "progressive_lowdim/smollm2_1_7b": {
+    "paper_section": "Table 6 (Reviewer 1 W1 response, identical to Table 2 in main text), row 'SmolLM2-1.7B lr=0.1 dim=256'",
+    "model": "HuggingFaceTB/SmolLM2-1.7B",
+    "trainer_type": "progressive",
+    "dataset": "LarryLovestein/pg19_1k",
+    "num_samples": 50,
+    "max_sequence_length": 4096,
+    "expected": {
+      "compressed_tokens":      {"kind": "measured", "mean": 957.4,  "std": 142.5},
+      "information_gain_bits":  {"kind": "measured", "mean": 3271.0, "std": 309.0}
+    },
+    "notes": "Progressive cramming + low-dim projection (dim=256) on SmolLM2-1.7B (lr=0.1, cross-entropy loss). Direct same-model reproduction of paper Table 6 low-dim row. The same setup matches the original code paths: --per_device_train_batch_size 1 + --low_dim_projection (global=False default), which de-facto means a fresh nn.Linear(256, hidden) per sample because each batch is one sample (see scripts/jobs/run_jobs_progressive.py:230 in commit a0d39f6). The compatible no-low-dim baseline (same row family, dim=hidden) is 338.3 ± 69.1 cram tokens and 1213 ± 166 IG (see progressive/smollm2_1_7b entry) — low-dim should produce ~3x larger values, demonstrating that constraining the search to a 256-dim subspace acts as a strong regularizer (Section 5.2). The trained Linear weights are saved to ${OUTPUT_DIR}/low_dim_projection.pt (note: in this non-global mode it's the last sample's basis, not a shared one)."
+  },
+  "progressive_lowdim_global/smollm2_1_7b": {
+    "paper_section": "Not directly in paper Table 6 — additional experiment testing the manifold hypothesis from Section 4.3 + Section 5.2. Expected targets are reused from the per-sample-basis row as a proxy: if a SHARED 256-dim basis suffices for all texts, numbers should land in the same ballpark.",
+    "model": "HuggingFaceTB/SmolLM2-1.7B",
+    "trainer_type": "progressive",
+    "dataset": "LarryLovestein/pg19_1k",
+    "num_samples": 50,
+    "max_sequence_length": 4096,
+    "expected": {
+      "compressed_tokens":      {"kind": "measured", "mean": 957.4,  "std": 142.5},
+      "information_gain_bits":  {"kind": "measured", "mean": 3271.0, "std": 309.0}
+    },
+    "notes": "Same setup as progressive_lowdim/smollm2_1_7b but with --low_dim_projection_global, meaning ONE nn.Linear(256, hidden) lives through the entire 50-sample run; its AdamW state and cosine LR-scheduler accumulate continuously. The trained Linear at ${OUTPUT_DIR}/low_dim_projection.pt is the *common compression basis* learned across all 50 PG19 texts — directly testable for transfer by loading it as --low_dim_projection_checkpoint into a downstream run. Verdicts here treat the per-sample-basis numbers as a proxy: if cram_tokens / IG come out within ±2σ of (957.4, 3271), that's evidence the manifold hypothesis (Section 4.3) holds — the same 256-dim basis can compress all texts in the corpus. A significantly worse result would say the basis has to be sample-specialized to reach paper-faithful numbers."
+  },
+  "progressive_lowdim_transfer/smollm2_1_7b": {
+    "paper_section": "Not in paper Table 6 — transfer test of the shared basis from progressive_lowdim_global/smollm2_1_7b. Loads its low_dim_projection.pt with requires_grad=False on W, b (only z_j is optimized) and evaluates on a DISJOINT slice of PG19 (indices [50, 100) vs source's [0, 50), guaranteed by --offset_dataset_items 50 and tokenization.py's deterministic Dataset.select(range(...))). Expected targets are reused from the per-sample-basis row as a proxy.",
+    "model": "HuggingFaceTB/SmolLM2-1.7B",
+    "trainer_type": "progressive",
+    "dataset": "LarryLovestein/pg19_1k",
+    "num_samples": 50,
+    "max_sequence_length": 4096,
+    "expected": {
+      "compressed_tokens":      {"kind": "measured", "mean": 957.4,  "std": 142.5},
+      "information_gain_bits":  {"kind": "measured", "mean": 3271.0, "std": 309.0}
+    },
+    "notes": "Transfer experiment. Loads the shared 256-dim basis trained on PG19 [0, 50) (artifacts/thesis_reproduction/progressive_lowdim_global/smollm2_1_7b/low_dim_projection.pt) into a frozen Linear(256, 2048), then optimizes only the per-sample coefficients z_j on the disjoint slice PG19 [50, 100). W and b never move. Interpretation: cram_tokens / IG ≈ source-run numbers → the 256-dim basis is corpus-universal (manifold hypothesis confirmed empirically); cram_tokens / IG << source-run numbers → the basis is text-conditional and must be trained per-sample to reach paper-faithful capacity. The 2σ verdict against the per-sample row is the empirical bound for the former case."
+  },
+  "progressive/smollm2_135m": {
+    "paper_section": "Table 13 (Appendix F)",
+    "model": "HuggingFaceTB/SmolLM2-135M",
+    "trainer_type": "progressive",
+    "dataset": "LarryLovestein/pg19_1k",
+    "num_samples": 50,
+    "max_sequence_length": 4096,
+    "expected": {
+      "compressed_tokens":      {"kind": "measured", "mean": 38.5, "std": 14.1},
+      "information_gain_bits":  {"kind": "measured", "mean": 168.0, "std": 66.0}
+    },
+    "notes": "Progressive cramming SmolLM2-135M baseline (lr=0.1, no alignment, no low-dim). compressed_tokens here is a MEASURED outcome — the largest stage_seq_len at which the trainer reaches 100% teacher-forced accuracy. analyze.py aggregates per-stage rows into one final-converged-stage row per sample before computing statistics. Trajectory Length (178 ± 40) and PCA 99% (12.2 ± 2.96) from Table 13 require post-hoc analysis over the saved stage trajectory and are added as a separate analyzer in a follow-up."
+  },
+  "pca_reconstruction/smollm2_135m_progressive": {
+    "paper_section": "Section 5.3, Figure 5",
+    "model": "HuggingFaceTB/SmolLM2-135M",
+    "reference_model": "Llama-3.1-8B (paper Figure 5 curve)",
+    "trainer_type": "progressive",
+    "dataset": "LarryLovestein/pg19_1k",
+    "num_samples": 50,
+    "analyzer": "pca_reconstruction",
+    "qualitative": {
+      "min_max_k_accuracy": 0.90,
+      "max_pca99_accuracy": 0.95,
+      "pca99_k": 11,
+      "monotone_tolerance": 0.05
+    },
+    "notes": "Post-hoc PCA-reconstruction ablation on the saved Progressive trajectory. Paper claim (page 6): although PCA 99% of trajectory variance requires only ~12 components on SmolLM2-135M (from Table 13, our trajectory analyzer also gives ~10.88), reaching near-perfect teacher-forced accuracy requires substantially more components. Gate: at k = PCA-99 (= 11) accuracy must still be below near-perfect (≤ 0.95), at max-k accuracy must reach ~baseline (≥ 0.90), and the curve must be monotone non-decreasing within bf16 noise (≤ 0.05 max-drop tolerance)."
+  },
+  "trajectory/smollm2_135m_progressive": {
+    "paper_section": "Table 13 (Appendix F), columns Trajectory Length + PCA 99%",
+    "model": "HuggingFaceTB/SmolLM2-135M",
+    "trainer_type": "progressive",
+    "dataset": "LarryLovestein/pg19_1k",
+    "num_samples": 50,
+    "analyzer": "trajectory",
+    "expected": {
+      "trajectory_length": {"mean": 178.0, "std": 40.0},
+      "pca_99":            {"mean": 12.2,  "std": 2.96}
+    },
+    "notes": "Post-hoc trajectory analysis over the saved progressive_prefixes/ — no re-train. Trajectory Length = Σ ||e^(k+1) - e^(k)||_2 (paper eq. 3); PCA 99% = min number of PCA components reaching 99% cumulative explained variance, computed per sample and then averaged. Verdict uses the standard 2σ z-score gate from analyze.py."
+  },
+  "downstream/smollm2_1_7b_hellaswag": {
+    "paper_section": "Table 10 — HellaSwag column (direct same-model comparison)",
+    "model": "HuggingFaceTB/SmolLM2-1.7B",
+    "reference_model": "HuggingFaceTB/SmolLM2-1.7B (paper Table 10 row)",
+    "trainer_type": "full",
+    "dataset": "Rowan/hellaswag (validation split, first 1024)",
+    "num_samples": 1024,
+    "analyzer": "downstream_eval",
+    "subset": "summary_perfectly_reconstructed",
+    "expected": {
+      "baseline":             {"mean": 0.5241, "std": 0.025},
+      "baseline_endings":     {"mean": 0.5330, "std": 0.025},
+      "compression":          {"mean": 0.3647, "std": 0.025},
+      "compression_endings":  {"mean": 0.4070, "std": 0.025},
+      "compression_only":     {"mean": 0.3457, "std": 0.025}
+    },
+    "qualitative": {
+      "min_base": 0.40,
+      "min_drop": 0.05
+    },
+    "notes": "Direct same-model reproduction of Table 10 (HellaSwag). Paper command: --limit_samples 1024 --max_optimization_steps 1000 --batch_size 64 --no_bos_token. Single cramming run produces both Table 5 (all samples) and Table 10 (perfectly-reconstructed) views in the JSON; `subset` selects which one the analyzer compares against."
+  },
+  "downstream/smollm2_1_7b_arc_easy": {
+    "paper_section": "Table 10 — ARC-Easy column (direct same-model comparison)",
+    "model": "HuggingFaceTB/SmolLM2-1.7B",
+    "reference_model": "HuggingFaceTB/SmolLM2-1.7B (paper Table 10 row)",
+    "trainer_type": "full",
+    "dataset": "allenai/ai2_arc ARC-Easy (full validation split)",
+    "num_samples": 570,
+    "analyzer": "downstream_eval",
+    "subset": "summary_perfectly_reconstructed",
+    "expected": {
+      "baseline":             {"mean": 0.6872, "std": 0.025},
+      "baseline_endings":     {"mean": 0.5388, "std": 0.025},
+      "compression":          {"mean": 0.5587, "std": 0.025},
+      "compression_endings":  {"mean": 0.4163, "std": 0.025},
+      "compression_only":     {"mean": 0.3092, "std": 0.025}
+    },
+    "qualitative": {
+      "min_base": 0.40,
+      "min_drop": 0.05
+    },
+    "notes": "Direct same-model reproduction of Table 10 (ARC-Easy). Paper command does not pass --limit_samples, so we use the full ARC-Easy validation split (570 instances). Same hyperparameters as the HellaSwag 1.7B entry."
+  },
+  "downstream/smollm2_1_7b_arc_challenge": {
+    "paper_section": "Table 10 — ARC-Challenge column (direct same-model comparison)",
+    "model": "HuggingFaceTB/SmolLM2-1.7B",
+    "reference_model": "HuggingFaceTB/SmolLM2-1.7B (paper Table 10 row)",
+    "trainer_type": "full",
+    "dataset": "allenai/ai2_arc ARC-Challenge (full validation split)",
+    "num_samples": 299,
+    "analyzer": "downstream_eval",
+    "subset": "summary_perfectly_reconstructed",
+    "expected": {
+      "baseline":             {"mean": 0.3666, "std": 0.025},
+      "baseline_endings":     {"mean": 0.4029, "std": 0.025},
+      "compression":          {"mean": 0.2862, "std": 0.025},
+      "compression_endings":  {"mean": 0.3136, "std": 0.025},
+      "compression_only":     {"mean": 0.2294, "std": 0.025}
+    },
+    "qualitative": {
+      "min_base": 0.30,
+      "min_drop": 0.04
+    },
+    "notes": "Direct same-model reproduction of Table 10 (ARC-Challenge). Full validation split (299 instances). Same protocol as the other 1.7B entries."
+  },
+  "downstream/smollm2_135m_hellaswag": {
+    "paper_section": "Table 10 (perfectly-reconstructed subset) — HellaSwag column",
+    "model": "HuggingFaceTB/SmolLM2-135M",
+    "reference_model": "HuggingFaceTB/SmolLM2-1.7B (paper Table 10 row)",
+    "trainer_type": "full",
+    "dataset": "Rowan/hellaswag (validation split, first N)",
+    "num_samples": 50,
+    "analyzer": "downstream_eval",
+    "expected": {
+      "baseline":                 {"mean": 0.5241, "std": 0.0},
+      "baseline_endings":         {"mean": 0.5330, "std": 0.0},
+      "compression":              {"mean": 0.3647, "std": 0.0},
+      "compression_endings":      {"mean": 0.4070, "std": 0.0},
+      "compression_only":         {"mean": 0.3457, "std": 0.0}
+    },
+    "qualitative": {
+      "min_base": 0.28,
+      "min_drop": 0.10
+    },
+    "notes": "Paper Table 10 SmolLM2-1.7B HellaSwag row (perfectly-reconstructed subset): Baseline=52.41%, Baseline endings=53.30%, Compression=36.47%, Compression endings=40.70%, Compression only=34.57%. Paper does NOT split out the 'edge' variants (compression_edge, compression_only_edge); they are implementation extras kept from the legacy scripts for diagnostic visibility. For SmolLM2-135M paper has no row — qualitative comparison. Gate: baseline_endings ≥ 0.28 (≈random+3pp); compression_endings ≥ 0.10 below baseline_endings (downstream-collapse signal). Pass `--only_full_convergence` to align the JSON with Table 10's subset definition."
+  },
+  "downstream/smollm2_135m_arc_easy": {
+    "paper_section": "Table 10 (perfectly-reconstructed subset) — ARC-Easy column",
+    "model": "HuggingFaceTB/SmolLM2-135M",
+    "reference_model": "HuggingFaceTB/SmolLM2-1.7B (paper Table 10 row)",
+    "trainer_type": "full",
+    "dataset": "allenai/ai2_arc ARC-Easy (validation split, first N)",
+    "num_samples": 50,
+    "analyzer": "downstream_eval",
+    "expected": {
+      "baseline":                 {"mean": 0.6872, "std": 0.0},
+      "baseline_endings":         {"mean": 0.5388, "std": 0.0},
+      "compression":              {"mean": 0.5587, "std": 0.0},
+      "compression_endings":      {"mean": 0.4163, "std": 0.0},
+      "compression_only":         {"mean": 0.3092, "std": 0.0}
+    },
+    "qualitative": {
+      "min_base": 0.30,
+      "min_drop": 0.10
+    },
+    "notes": "Paper Table 10 SmolLM2-1.7B ARC-Easy row: Baseline=68.72%, Baseline endings=53.88%, Compression=55.87%, Compression endings=41.63%, Compression only=30.92%. Same protocol as HellaSwag entry."
+  },
+  "downstream/smollm2_135m_arc_challenge": {
+    "paper_section": "Table 10 (perfectly-reconstructed subset) — ARC-Challenge column",
+    "model": "HuggingFaceTB/SmolLM2-135M",
+    "reference_model": "HuggingFaceTB/SmolLM2-1.7B (paper Table 10 row)",
+    "trainer_type": "full",
+    "dataset": "allenai/ai2_arc ARC-Challenge (validation split, first N)",
+    "num_samples": 50,
+    "analyzer": "downstream_eval",
+    "expected": {
+      "baseline":                 {"mean": 0.3666, "std": 0.0},
+      "baseline_endings":         {"mean": 0.4029, "std": 0.0},
+      "compression":              {"mean": 0.2862, "std": 0.0},
+      "compression_endings":      {"mean": 0.3136, "std": 0.0},
+      "compression_only":         {"mean": 0.2294, "std": 0.0}
+    },
+    "qualitative": {
+      "min_base": 0.28,
+      "min_drop": 0.08
+    },
+    "notes": "Paper Table 10 SmolLM2-1.7B ARC-Challenge row: Baseline=36.66%, Baseline endings=40.29%, Compression=28.62%, Compression endings=31.36%, Compression only=22.94%. ARC-Challenge is hardest of the three; gate tolerates a slightly smaller drop."
+  },
+  "attention_knockout/smollm2_135m_progressive": {
+    "paper_section": "Section 4.4 (Reviewer 1 W2 response)",
+    "model": "HuggingFaceTB/SmolLM2-135M",
+    "trainer_type": "progressive",
+    "dataset": "LarryLovestein/pg19_1k",
+    "num_samples": 50,
+    "analyzer": "attention_knockout",
+    "qualitative": {
+      "min_baseline": 0.9,
+      "min_early_drop": 0.3,
+      "min_asymmetry": 3.0,
+      "num_edge": 4
+    },
+    "notes": "Causal probe of attention hijacking: mask attention to the compression-token columns at chosen layers, measure teacher-forced reconstruction accuracy. Pass criteria: (a) baseline accuracy ≥ 0.9 (Progressive converged samples should be near-perfect); (b) per-layer KO at the first num_edge layers drops mean accuracy by ≥0.30 absolute; (c) early/late asymmetry ratio ≥ 3× (early_drop / late_drop). Ratio replaces an absolute late-drop ceiling so the gate stays meaningful when secondary attention bumps near the model tail inflate the late-window mean (e.g. at small scales). Demonstrates that early layers causally drive reconstruction (Reviewer 1's central counter-argument)."
+  },
+  "attention_hijacking/smollm2_135m_progressive": {
+    "paper_section": "Table 3 (Section 5.5)",
+    "model": "HuggingFaceTB/SmolLM2-135M",
+    "reference_model": "HuggingFaceTB/SmolLM2-1.7B (paper Table 3 row)",
+    "trainer_type": "progressive",
+    "dataset": "LarryLovestein/pg19_1k",
+    "num_samples": 50,
+    "analyzer": "attention_hijacking",
+    "expected": {
+      "compression_mass": {"mean": 49.85, "std": 2.75},
+      "bos_mass":         {"mean": 56.47, "std": 9.19},
+      "correlation":      {"mean": 0.9532, "std": 0.05}
+    },
+    "qualitative": {
+      "min_compression_mass": 30.0,
+      "min_correlation": 0.5
+    },
+    "notes": "Attention-hijacking analysis on the embeddings produced by the SmolLM2-135M progressive run. Paper Table 3 reports stats only for SmolLM2-1.7B (and a few other sizes); the 135M row is NOT in the paper, so we treat the comparison as qualitative — the verdict is determined by the `qualitative` block (compression_mass ≥ 30% AND correlation ≥ 0.5), confirming the hijacking phenomenon described in Section 5.5 also manifests at the 135M scale."
+  }
+}

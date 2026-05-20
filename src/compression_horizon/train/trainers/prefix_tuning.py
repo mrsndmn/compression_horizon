@@ -4,12 +4,32 @@ import torch
 import torch.nn as nn
 from tqdm.auto import tqdm
 
-from compression_horizon.train.base import BaseTrainer
 from compression_horizon.train.loss import (
     compute_hybrid_cross_entropy_and_alignment_loss_no_prefix,
     token_argmax_match_rate,
 )
+from compression_horizon.train.trainers.base import BaseTrainer
 from compression_horizon.utils.launch import freeze_model_parameters, get_device, set_launch_seed
+
+
+def _find_prefix_embedding_parameter(peft_model: nn.Module, num_virtual_tokens: int) -> tuple[str, torch.nn.Parameter] | None:
+    """Best-effort: locate PEFT prefix/prompt embedding parameter for logging/saving."""
+    candidates: list[tuple[str, torch.nn.Parameter]] = []
+    for name, param in peft_model.named_parameters():
+        if not param.requires_grad or param.ndim != 2 or param.shape[0] != num_virtual_tokens:
+            continue
+        priority = 0
+        lname = name.lower()
+        if "prompt" in lname or "prefix" in lname:
+            priority += 2
+        if "embed" in lname:
+            priority += 1
+        candidates.append((f"{priority:02d}:{name}", param))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    best_name = candidates[0][0].split(":", 1)[1]
+    return best_name, candidates[0][1]
 
 
 class PrefixTuningTrainer(BaseTrainer):
@@ -62,7 +82,7 @@ class PrefixTuningTrainer(BaseTrainer):
 
                 with torch.no_grad():
                     token_embeddings = base_model.get_input_embeddings()(input_ids)
-                target_hidden = self.compute_target_hidden(base_model, token_embeddings, attention_mask)
+                target_hidden_states = self.compute_hidden_states(base_model, token_embeddings, attention_mask)
 
                 peft_model.train()
 
@@ -81,7 +101,7 @@ class PrefixTuningTrainer(BaseTrainer):
                     num_training_steps=self.args.max_optimization_steps_per_sample,
                 )
 
-                found = self._find_prefix_embedding_parameter(peft_model, num_virtual_tokens)
+                found = _find_prefix_embedding_parameter(peft_model, num_virtual_tokens)
                 prefix_name, prefix_param = found if found is not None else (None, None)
 
                 initialization_prefix_embedding = None
@@ -110,7 +130,7 @@ class PrefixTuningTrainer(BaseTrainer):
                         logits=outputs.logits,
                         input_ids=input_ids,
                         attention_mask=attention_mask,
-                        target_hidden_states=target_hidden,
+                        target_hidden_states=target_hidden_states,
                         compression_hidden_states=outputs.hidden_states,
                         num_alignment_layers=self.args.num_alignment_layers,
                         inverted_alignment=self.args.inverted_alignment,
@@ -139,12 +159,13 @@ class PrefixTuningTrainer(BaseTrainer):
                             lr=float(log_lr),
                             prefix_param=(prefix_name or "n/a"),
                         )
-                        self._log_step_prefix_tuning(
+                        self._log_step(
                             loss,
                             alignment_loss,
                             convergence_per_sample,
                             prefix_param,
                             lr_scheduler,
+                            embedding_namespace="prefix_tuning",
                         )
 
                     if float(convergence_per_sample.mean().item()) >= 1.0:
@@ -192,7 +213,9 @@ class PrefixTuningTrainer(BaseTrainer):
             self.writer.flush()
             self.writer.close()
 
-        save_path = self._save_prefix_tuning_artifacts(final_prefix_embeddings_cpu, collected_rows, "prefix_tuning_prefixes")
-        if save_path is not None:
-            return save_path
-        return None
+        return self._save_artifacts(
+            collected_rows,
+            tensor=final_prefix_embeddings_cpu,
+            tensor_filename="prefix_tuning_embeddings.pt",
+            subdir_name="prefix_tuning_prefixes",
+        )

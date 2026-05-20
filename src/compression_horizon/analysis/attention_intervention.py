@@ -1,27 +1,24 @@
-"""Attention intervention utilities for compression token analysis.
-
-Provides tools to:
-- Inspect per-layer attention mass on compression token positions
-- Knock out (mask) attention to compression tokens at specific layers
-- Compute PPL under various knockout regimes (per-layer, cumulative, reverse cumulative)
-- Run full intervention evaluation and build summary statistics
-"""
+"""Attention intervention utilities for compression token analysis."""
 
 import math
 from typing import Optional
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
-from compression_horizon.metric import estimate_token_perplexity
+from compression_horizon.analysis.perplexity import estimate_token_perplexity
 from compression_horizon.utils.launch import get_device
+
+# Note: `from compression_horizon.train.inputs import build_united_input` is
+# imported lazily inside the functions below to avoid a circular import path
+# (analysis → train.inputs → train → trainers/full_cramming → analysis).
 
 # ---------------------------------------------------------------------------
 # Model architecture helpers
 # ---------------------------------------------------------------------------
 
 
-def get_decoder_layers(model: AutoModelForCausalLM) -> torch.nn.ModuleList:
+def get_decoder_layers(model: PreTrainedModel) -> torch.nn.ModuleList:
     """Return the list of decoder layers for supported model architectures."""
     # Gemma3 (ConditionalGeneration): model.model.language_model.layers
     if hasattr(model, "model") and hasattr(model.model, "language_model") and hasattr(model.model.language_model, "layers"):
@@ -43,31 +40,26 @@ def get_decoder_layers(model: AutoModelForCausalLM) -> torch.nn.ModuleList:
 class EagerAttentionContext:
     """Context manager that temporarily switches model to eager attention and restores original on exit."""
 
-    def __init__(self, model: AutoModelForCausalLM):
+    def __init__(self, model: PreTrainedModel) -> None:
         self.model = model
-        self._original_impl = None
+        self._original_attn_implementation = None
 
     def __enter__(self):
-        self._original_impl = getattr(self.model.config, "_attn_implementation", None)
+        self._original_attn_implementation = getattr(self.model.config, "_attn_implementation", None)
         self.model.set_attn_implementation("eager")
         return self
 
     def __exit__(self, *args):
-        if self._original_impl is not None:
-            self.model.set_attn_implementation(self._original_impl)
+        if self._original_attn_implementation is not None:
+            self.model.set_attn_implementation(self._original_attn_implementation)
 
 
 class AttentionKnockoutContext:
-    """Context manager that masks attention to compression token positions at specified layers.
-
-    Switches to eager attention (required for 4D mask support), registers forward pre-hooks
-    on target decoder layers that modify the 4D attention mask to set compression token
-    columns to -inf, then restores original attention implementation on exit.
-    """
+    """Context manager that masks attention to compression token positions at specified layers."""
 
     def __init__(
         self,
-        model: AutoModelForCausalLM,
+        model: PreTrainedModel,
         knockout_layers: list[int],
         num_compression_tokens: int,
     ):
@@ -79,13 +71,13 @@ class AttentionKnockoutContext:
         self._eager_ctx = EagerAttentionContext(model)
 
     def _make_hook(self):
-        num_ct = self.num_compression_tokens
+        num_compression_tokens = self.num_compression_tokens
 
         def hook_fn(module, args, kwargs):
             mask = kwargs.get("attention_mask", None)
             if mask is not None and mask.dim() == 4:
                 mask = mask.clone()
-                mask[:, :, :, :num_ct] = torch.finfo(mask.dtype).min
+                mask[:, :, :, :num_compression_tokens] = torch.finfo(mask.dtype).min
                 kwargs["attention_mask"] = mask
             return args, kwargs
 
@@ -113,20 +105,15 @@ class AttentionKnockoutContext:
 
 @torch.no_grad()
 def compute_attention_mass_per_layer(
-    model: AutoModelForCausalLM,
-    tokenizer: AutoTokenizer,
+    model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizerBase,
     compression_token_embeddings: torch.Tensor,
     context: str,
     num_compression_tokens: int = 1,
     device: Optional[torch.device] = None,
     add_special_tokens: bool = True,
 ) -> list[float]:
-    """Compute per-layer attention mass on compression token positions.
-
-    Does a single forward pass with output_attentions=True, then for each layer
-    computes the mean attention weight directed at compression token positions
-    (averaged over heads and query positions). Returns percentages (0-100).
-    """
+    """Compute per-layer attention mass on compression token positions."""
     if device is None:
         device = get_device()
 
@@ -138,31 +125,34 @@ def compute_attention_mass_per_layer(
     attention_mask = encoded["attention_mask"].to(device)
 
     embed_fn = model.get_input_embeddings()
-    token_embeddings = embed_fn(input_ids)  # [1, seq_len, hidden]
+    token_embeddings = embed_fn(input_ids)  # [1, sequence, hidden]
 
-    comp_embeds = compression_token_embeddings.unsqueeze(0).to(token_embeddings.dtype).to(device)
-    united_embeddings = torch.cat([comp_embeds, token_embeddings], dim=1)
-    united_attention = torch.cat(
-        [torch.ones((1, num_compression_tokens), dtype=attention_mask.dtype, device=device), attention_mask],
-        dim=1,
+    compression_token_embeddings = compression_token_embeddings.unsqueeze(0)
+    compression_attention_mask = torch.ones((1, num_compression_tokens), dtype=attention_mask.dtype, device=device)
+    from compression_horizon.train.inputs import build_united_input  # deferred (circular)
+
+    united_token_embeddings, united_attention_mask = build_united_input(
+        compression_token_embeddings,
+        compression_attention_mask,
+        token_embeddings,
+        attention_mask,
     )
 
     with EagerAttentionContext(model):
         outputs = model(
-            inputs_embeds=united_embeddings,
-            attention_mask=united_attention,
+            inputs_embeds=united_token_embeddings,
+            attention_mask=united_attention_mask,
             output_attentions=True,
         )
 
-    # attentions: tuple of [1, num_heads, seq_len, seq_len] per layer
+    # attentions: tuple of [1, head, sequence, sequence] per layer
     attention_mass = []
     for attn_layer in outputs.attentions:
-        avg_over_heads = attn_layer.mean(dim=1)  # [1, total_seq, total_seq]
-        seq_len = int(united_attention.sum().item())
-        comp_attn = avg_over_heads[0, :seq_len, :num_compression_tokens].sum(dim=-1)  # [seq_len]
+        avg_over_heads = attn_layer.mean(dim=1)  # [1, sequence, sequence]
+        seq_len = int(compression_attention_mask.sum().item())
+        comp_attn = avg_over_heads[0, :seq_len, :num_compression_tokens].sum(dim=-1)  # [sequence]
         mass_pct = comp_attn.mean().item() * 100.0
         attention_mass.append(mass_pct)
-
     return attention_mass
 
 
@@ -173,8 +163,8 @@ def compute_attention_mass_per_layer(
 
 @torch.no_grad()
 def compute_ppl_with_compression_and_knockout_batch(
-    model: AutoModelForCausalLM,
-    tokenizer: AutoTokenizer,
+    model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizerBase,
     compression_token_embeddings: list[torch.Tensor],
     contexts: list[str],
     endings: list[str],
@@ -183,11 +173,7 @@ def compute_ppl_with_compression_and_knockout_batch(
     device: Optional[torch.device] = None,
     add_special_tokens: bool = True,
 ) -> list[float]:
-    """Compute PPL with compression tokens prepended and attention knockout at specified layers.
-
-    Same as compute_ppl_with_compression_batch but masks attention to compression token
-    positions at the specified layers (pre-softmax -inf masking).
-    """
+    """Compute PPL with compression tokens prepended and attention knockout at specified layers."""
     if device is None:
         device = get_device()
 
@@ -207,72 +193,34 @@ def compute_ppl_with_compression_and_knockout_batch(
     input_ids = encoded["input_ids"].to(device)
     attention_mask = encoded["attention_mask"].to(device)
 
-    # Get token embeddings
-    embed_fn = model.get_input_embeddings()
-    token_embeddings = embed_fn(input_ids)
+    token_embeddings = model.get_input_embeddings()(input_ids)
+    num_compression_tokens = compression_token_embeddings[0].shape[0]
+    batched_compression = torch.stack(
+        [c.to(token_embeddings.dtype).to(device) for c in compression_token_embeddings],
+        dim=0,
+    )
+    compression_attention_mask = torch.ones(
+        (len(compression_token_embeddings), num_compression_tokens),
+        dtype=attention_mask.dtype,
+        device=device,
+    )
+    from compression_horizon.train.inputs import build_united_input  # deferred (circular)
 
-    # Prepare batched inputs with compression tokens
-    united_token_embeddings_list = []
-    united_attention_mask_list = []
-    num_ct = compression_token_embeddings[0].shape[0]
-    for i in range(len(full_texts)):
-        seq_len = int(attention_mask[i].sum().item())
-        sample_token_embeddings = token_embeddings[i : i + 1, :seq_len]
-        sample_attention_mask = attention_mask[i : i + 1, :seq_len]
-        sample_compression_token_embeddings = compression_token_embeddings[i].unsqueeze(0).to(token_embeddings.dtype)
-        united_token_embeddings = torch.cat([sample_compression_token_embeddings, sample_token_embeddings], dim=1)
-        united_attention_mask = torch.cat(
-            [torch.ones((1, num_ct), dtype=sample_attention_mask.dtype, device=device), sample_attention_mask],
-            dim=1,
-        )
-        united_token_embeddings_list.append(united_token_embeddings)
-        united_attention_mask_list.append(united_attention_mask)
+    united_token_embeddings, united_attention_mask = build_united_input(
+        batched_compression, compression_attention_mask, token_embeddings, attention_mask
+    )
 
-    # Pad to maximum length
-    max_len = max(item.shape[1] for item in united_token_embeddings_list)
-    batch_embeddings = []
-    batch_attention = []
-    for i in range(len(full_texts)):
-        united_token_embeddings = united_token_embeddings_list[i]
-        united_attention_mask = united_attention_mask_list[i]
-        current_len = united_token_embeddings.shape[1]
-        if current_len < max_len:
-            pad_len = max_len - current_len
-            hidden_size = united_token_embeddings.shape[2]
-            united_token_embeddings = torch.cat(
-                [
-                    united_token_embeddings,
-                    torch.zeros(1, pad_len, hidden_size, dtype=united_token_embeddings.dtype, device=device),
-                ],
-                dim=1,
-            )
-            united_attention_mask = torch.cat(
-                [
-                    united_attention_mask,
-                    torch.zeros(1, pad_len, dtype=united_attention_mask.dtype, device=device),
-                ],
-                dim=1,
-            )
-        batch_embeddings.append(united_token_embeddings)
-        batch_attention.append(united_attention_mask)
-    batch_embeddings = torch.cat(batch_embeddings, dim=0)
-    batch_attention = torch.cat(batch_attention, dim=0)
+    with AttentionKnockoutContext(model, knockout_layers, num_compression_tokens):
+        outputs = model(inputs_embeds=united_token_embeddings, attention_mask=united_attention_mask)
 
-    # Forward pass with attention knockout
-    with AttentionKnockoutContext(model, knockout_layers, num_ct):
-        outputs = model(inputs_embeds=batch_embeddings, attention_mask=batch_attention)
-
-    # Compute PPL for each sample
     ppls = []
     for i in range(len(full_texts)):
         seq_len = int(attention_mask[i].sum().item())
-        sample_logits = outputs.logits[i : i + 1, num_ct : num_ct + seq_len]
+        sample_logits = outputs.logits[i : i + 1, num_compression_tokens : num_compression_tokens + seq_len]
         sample_input_ids = input_ids[i : i + 1, :seq_len]
         sample_attention = attention_mask[i : i + 1, :seq_len]
         ppl = estimate_token_perplexity(sample_logits, sample_input_ids, sample_attention)
-        if math.isnan(ppl):
-            ppl = float("inf")
-        ppls.append(ppl)
+        ppls.append(ppl if not math.isnan(ppl) else float("inf"))
     return ppls
 
 
@@ -283,8 +231,8 @@ def compute_ppl_with_compression_and_knockout_batch(
 
 @torch.no_grad()
 def compute_reconstruction_accuracy_with_knockout(
-    model: AutoModelForCausalLM,
-    tokenizer: AutoTokenizer,
+    model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizerBase,
     compression_token_embeddings: torch.Tensor,
     context: str,
     knockout_layers: list[int],
@@ -292,12 +240,7 @@ def compute_reconstruction_accuracy_with_knockout(
     device: Optional[torch.device] = None,
     add_special_tokens: bool = True,
 ) -> float:
-    """Compute teacher-forced reconstruction accuracy of the compressed prefix under knockout.
-
-    Runs a forward pass with compression tokens prepended to context tokens, with attention
-    to compression tokens knocked out at specified layers. Returns the fraction of context
-    tokens correctly predicted (argmax of logits == actual next token).
-    """
+    """Compute teacher-forced reconstruction accuracy of the compressed prefix under knockout."""
     if device is None:
         device = get_device()
 
@@ -308,29 +251,26 @@ def compute_reconstruction_accuracy_with_knockout(
     input_ids = encoded["input_ids"].to(device)  # [1, seq_len]
     attention_mask = encoded["attention_mask"].to(device)  # [1, seq_len]
 
-    embed_fn = model.get_input_embeddings()
-    token_embeddings = embed_fn(input_ids)  # [1, seq_len, hidden]
+    token_embeddings = model.get_input_embeddings()(input_ids)  # [1, seq_len, hidden]
+    compression_attention_mask = torch.ones((1, num_compression_tokens), dtype=attention_mask.dtype, device=device)
+    from compression_horizon.train.inputs import build_united_input  # deferred (circular)
 
-    comp_embeds = compression_token_embeddings.unsqueeze(0).to(token_embeddings.dtype).to(device)
-    united_embeddings = torch.cat([comp_embeds, token_embeddings], dim=1)
-    united_attention = torch.cat(
-        [torch.ones((1, num_compression_tokens), dtype=attention_mask.dtype, device=device), attention_mask],
-        dim=1,
+    united_token_embeddings, united_attention_mask = build_united_input(
+        compression_token_embeddings.unsqueeze(0), compression_attention_mask, token_embeddings, attention_mask
     )
 
-    num_ct = num_compression_tokens
-    with AttentionKnockoutContext(model, knockout_layers, num_ct):
-        outputs = model(inputs_embeds=united_embeddings, attention_mask=united_attention)
+    with AttentionKnockoutContext(model, knockout_layers, num_compression_tokens):
+        outputs = model(inputs_embeds=united_token_embeddings, attention_mask=united_attention_mask)
 
     seq_len = int(attention_mask.sum().item())
-    # logits[num_ct - 1] predicts first context token, logits[num_ct + j - 1] predicts context token j
-    # We predict context tokens 0..seq_len-1 from logits[num_ct-1..num_ct+seq_len-2]
-    pred_logits = outputs.logits[0, num_ct - 1 : num_ct + seq_len - 1]  # [seq_len, vocab]
-    predicted_tokens = pred_logits.argmax(dim=-1)  # [seq_len]
-    target_tokens = input_ids[0, :seq_len]  # [seq_len]
+    # logits[num_compression_tokens - 1] predicts the first context token; in general
+    # logits[num_compression_tokens + j - 1] predicts context token j. We score
+    # context tokens 0..seq_len-1 from logits[num_compression_tokens - 1..num_compression_tokens + seq_len - 2].
+    pred_logits = outputs.logits[0, num_compression_tokens - 1 : num_compression_tokens + seq_len - 1]
+    predicted_tokens = pred_logits.argmax(dim=-1)
+    target_tokens = input_ids[0, :seq_len]
 
-    accuracy = (predicted_tokens == target_tokens).float().mean().item()
-    return accuracy
+    return float((predicted_tokens == target_tokens).float().mean().item())
 
 
 # ---------------------------------------------------------------------------
@@ -339,8 +279,8 @@ def compute_reconstruction_accuracy_with_knockout(
 
 
 def evaluate_sample_interventions(
-    model: AutoModelForCausalLM,
-    tokenizer: AutoTokenizer,
+    model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizerBase,
     compression_embedding: torch.Tensor,
     context: str,
     endings: list[str],

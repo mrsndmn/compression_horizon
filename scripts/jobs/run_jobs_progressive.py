@@ -66,14 +66,14 @@ if __name__ == "__main__":
         help="Enable low dimension projection. If not specified, not included in output dir.",
     )
     parser.add_argument(
-        "--low_dim_proj_checkpoint",
+        "--low_dim_projection_checkpoint",
         type=str,
         default=None,
         help="Path to checkpoint file to load low-dimensional projection state from. If not specified, not included in output dir.",
     )
     parser.add_argument(
-        "--no_low_dim_proj_train",
-        dest="low_dim_proj_train",
+        "--no_low_dim_projection_train",
+        dest="low_dim_projection_train",
         action="store_false",
         default=True,
         help="Disable optimization of the low-dimensional projection (freeze it). Default: projection is trained.",
@@ -270,16 +270,16 @@ if __name__ == "__main__":
         if args.no_bos_token:
             exp_suffix = f"{exp_suffix}_nobos"
 
-        # Add low_dim_proj_checkpoint if specified
-        if args.low_dim_proj_checkpoint is not None:
-            cmd_args.append(f"--low_dim_proj_checkpoint {args.low_dim_proj_checkpoint}")
+        # Add low_dim_projection_checkpoint if specified
+        if args.low_dim_projection_checkpoint is not None:
+            cmd_args.append(f"--low_dim_projection_checkpoint {args.low_dim_projection_checkpoint}")
             # Extract checkpoint name for suffix (last part of path)
-            checkpoint_name = os.path.basename(args.low_dim_proj_checkpoint).replace(".pt", "").replace(".pth", "")
+            checkpoint_name = os.path.basename(args.low_dim_projection_checkpoint).replace(".pt", "").replace(".pth", "")
             exp_suffix = f"{exp_suffix}_lowprojckpt_{checkpoint_name}"
 
-        # Add low_dim_proj_train if specified (non-default)
-        if not args.low_dim_proj_train:
-            cmd_args.append("--low_dim_proj_train False")
+        # Add low_dim_projection_train if specified (non-default)
+        if not args.low_dim_projection_train:
+            cmd_args.append("--low_dim_projection_train False")
             exp_suffix = f"{exp_suffix}_lowprojfrozen"
 
         # Add embedding_init_method to output dir if specified (non-default)

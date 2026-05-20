@@ -8,7 +8,7 @@ import torch
 from tests.trainer_helpers import TinyDataset, _collate_batch, _make_args
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from compression_horizon.train.trainer import PrefixTuningTrainer
+from compression_horizon.train import PrefixTuningTrainer
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 

@@ -1,7 +1,7 @@
-from transformers import AutoTokenizer
+from transformers import PreTrainedTokenizerBase
 
 
-def count_text_tokens(tokenizer: AutoTokenizer, text: str, add_special_tokens: bool = True) -> int:
+def count_text_tokens(tokenizer: PreTrainedTokenizerBase, text: str, add_special_tokens: bool = True) -> int:
     """Count tokens in text using the provided tokenizer."""
     encoded = tokenizer(
         text,

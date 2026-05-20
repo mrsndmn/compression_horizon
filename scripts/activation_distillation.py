@@ -9,14 +9,14 @@ import transformers
 from datasets import Dataset, load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, DataCollatorForLanguageModeling
 
-from compression_horizon.train.arguments import MyTrainingArguments
-from compression_horizon.train.trainer import (
+from compression_horizon.train import (
     CompressionHeadTrainer,
     FullCrammingTrainer,
     LowDimTrainer,
     PrefixTuningTrainer,
     ProgressiveCrammingTrainer,
 )
+from compression_horizon.train.arguments import MyTrainingArguments
 from compression_horizon.utils.exceptions import NvidiaSMIError
 from compression_horizon.utils.launch import resolve_torch_dtype, set_launch_seed
 

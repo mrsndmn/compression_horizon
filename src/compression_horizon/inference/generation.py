@@ -9,15 +9,16 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 def generate_from_compression(
     model: PreTrainedModel,
     tokenizer: PreTrainedTokenizerFast | PreTrainedTokenizer,
-    compressed_embeddings: torch.Tensor,  # [1, mem, hidden]
+    compression_token_embeddings: torch.Tensor,  # [1, compression, hidden]
     max_new_tokens: int,
     num_return_sequences: int = 1,
     add_noise=False,
     random_position_ids: bool = False,
-) -> list[str]:
+    return_generated_ids: bool = False,
+) -> list[str] | tuple[list[str], torch.Tensor]:
     """Generates a sequence starting from compressed embeddings."""
     # Cast to the same device
-    device = compressed_embeddings.device
+    device = compression_token_embeddings.device
     if model.device != device:
         model = model.to(device)
     model.eval()
@@ -29,14 +30,15 @@ def generate_from_compression(
 
     # Prepare batch of prefixes
     if num_return_sequences > 1:
-        compressed_embeddings = compressed_embeddings.expand(num_return_sequences, -1, -1)  # [batch, mem, hidden]
+        compression_token_embeddings = compression_token_embeddings.expand(
+            num_return_sequences, -1, -1
+        )  # [batch, sequence, hidden]
 
     if add_noise:
-        noise = torch.randn_like(compressed_embeddings) * 0.01
-        compressed_embeddings += noise
-        print("Add noise", "compressed_embeddings.norm", compressed_embeddings.norm(2), "noise.norm", noise.norm(2))
+        noise = torch.randn_like(compression_token_embeddings) * 0.01
+        compression_token_embeddings += noise
 
-    batch_size, num_compression_tokens, hidden_size = compressed_embeddings.shape
+    batch_size, num_compression_tokens, hidden_size = compression_token_embeddings.shape
 
     # Container for generated token ids
     generated_token_ids = torch.empty((batch_size, 0), dtype=torch.long, device=device)  # [batch, 0]
@@ -47,27 +49,29 @@ def generate_from_compression(
     for _ in range(max_new_tokens):
         # Embeddings
         if generated_token_ids.size(1) == 0:
-            generated_embeddings = torch.empty(batch_size, 0, hidden_size, device=device)  # [batch, 0, hidden]
+            generated_embeddings = torch.empty((batch_size, 0, hidden_size), device=device)  # [batch, 0, hidden]
         else:
             generated_embeddings = input_embeddings(generated_token_ids)  # [batch, sequence, hidden]
         united_token_embeddings = torch.cat(
-            (compressed_embeddings, generated_embeddings), dim=1
-        )  # [batch, mem + sequence, hidden]
+            (compression_token_embeddings, generated_embeddings), dim=1
+        )  # [batch, compression + sequence, hidden]
         united_token_embeddings = united_token_embeddings.to(torch_dtype)
 
         # Attention mask
         compression_attention_mask = torch.ones(
             (batch_size, num_compression_tokens), dtype=torch.long, device=device
-        )  # [batch, mem]
+        )  # [batch, compression]
         attention_mask = torch.ones(
             (batch_size, generated_embeddings.size(1)), dtype=torch.long, device=device
         )  # [batch, sequence]
-        united_attention_mask = torch.cat((compression_attention_mask, attention_mask), dim=1)  # [batch, mem + sequence]
+        united_attention_mask = torch.cat(
+            (compression_attention_mask, attention_mask), dim=1
+        )  # [batch, compression + sequence]
 
         if random_position_ids:
             position_ids = (
                 torch.randperm(united_token_embeddings.size(1), device=device).unsqueeze(dim=0).repeat(batch_size, 1)
-            )  # [batch, mem + sequence]
+            )  # [batch, compression + sequence]
             outputs = model(
                 inputs_embeds=united_token_embeddings,
                 attention_mask=united_attention_mask,
@@ -98,7 +102,7 @@ def generate_from_compression(
             break
 
     texts = tokenizer.batch_decode(generated_token_ids, skip_special_tokens=True)
-    return texts
+    return texts, generated_token_ids if return_generated_ids else texts
 
 
 @torch.no_grad()
