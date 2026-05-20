@@ -328,8 +328,8 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                 sample_id_counter += batch_size
                 continue
 
+            total_steps = 0
             while True:
-                scheduler_reset_used = False
                 input_ids = full_input_ids[:, :seq_len]
                 inputs_embeds = full_model_token_embeddings[:, :seq_len, :]
                 target_hidden = list(h[:, :seq_len] for h in target_hidden_full)
@@ -338,10 +338,10 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                 pbar = tqdm(
                     range(self.args.max_optimization_steps_per_token),
                     total=self.args.max_optimization_steps_per_token,
-                    leave=False,
-                    disable=True,
+                    # leave=False,
+                    # disable=True,
                 )
-                pbar.set_description(f"Stage L={seq_len}")
+                pbar.set_description(f"Stage L={seq_len}, TotSteps={total_steps}")
                 last_loss_val = None
                 last_conv = None
                 converged = False
@@ -349,164 +349,137 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                 # Reset per-stage convergence (but not skipped_mask or steps_taken)
                 converged_mask = [skipped_mask[j] for j in range(batch_size)]
 
-                while True:
-                    for i in pbar:
-                        if init_method == "pretrained_pca":
-                            pca_coefficients = torch.cat(per_sample_pca_coefficients, dim=0)
-                            reconstructed_flat = torch.matmul(
-                                pca_coefficients, pca_components_device
-                            ) + pca_mean_device.unsqueeze(0)
-                            compression_tokens = reconstructed_flat.reshape(
-                                batch_size,
-                                num_compression_tokens,
-                                hidden_size,
-                            )
-                        else:
-                            compression_tokens = torch.cat(per_sample_params, dim=0)
-
-                        current_compression_tokens = compression_tokens.clone()
-                        if self.args.low_dim_projection:
-                            current_compression_tokens = low_dim_prjoection(compression_tokens)
-
-                        model_tokens_with_compression_tokens = torch.cat(
-                            [
-                                current_compression_tokens.to(inputs_embeds.device).to(inputs_embeds.dtype),
-                                inputs_embeds,
-                            ],
-                            dim=1,
+                for i in pbar:
+                    if init_method == "pretrained_pca":
+                        pca_coefficients = torch.cat(per_sample_pca_coefficients, dim=0)
+                        reconstructed_flat = torch.matmul(pca_coefficients, pca_components_device) + pca_mean_device.unsqueeze(
+                            0
                         )
-                        attention_mask_with_compression_tokens = torch.cat(
-                            [compression_tokens_attention_mask, attention_mask],
-                            dim=1,
-                        )
-                        (
-                            loss,
-                            alignment_loss,
-                            convergece_per_sample,
-                            generated_text,
-                            ground_truth_text,
-                        ) = self.compute_loss(
-                            decode_model,
-                            input_ids,
-                            inputs_embeds,
-                            attention_mask,
-                            model_tokens_with_compression_tokens,
-                            attention_mask_with_compression_tokens,
+                        compression_tokens = reconstructed_flat.reshape(
+                            batch_size,
                             num_compression_tokens,
-                            target_hidden=target_hidden,
+                            hidden_size,
                         )
-                        loss.backward()
-                        pbar.update(1)
+                    else:
+                        compression_tokens = torch.cat(per_sample_params, dim=0)
 
-                        if init_method == "pretrained_pca":
-                            grad_norms = [
-                                (
-                                    per_sample_pca_coefficients[j].grad.norm(2).item()
-                                    if per_sample_pca_coefficients[j].grad is not None
-                                    else 0.0
-                                )
-                                for j in range(batch_size)
-                            ]
-                            grad_norm = sum(grad_norms) / len(grad_norms)
-                            comp_mean = compression_tokens.mean().item()
-                            comp_std = compression_tokens.std().item()
-                        else:
-                            grad_norms = [
-                                per_sample_params[j].grad.norm(2).item() if per_sample_params[j].grad is not None else 0.0
-                                for j in range(batch_size)
-                            ]
-                            grad_norm = sum(grad_norms) / len(grad_norms)
-                            comp_mean = compression_tokens.mean().item()
-                            comp_std = compression_tokens.std().item()
+                    current_compression_tokens = compression_tokens.clone()
+                    if self.args.low_dim_projection:
+                        current_compression_tokens = low_dim_prjoection(compression_tokens)
 
-                        log_lr = self.args.learning_rate
-                        active_scheduler = None
-                        for j in range(batch_size):
-                            if not skipped_mask[j] and not converged_mask[j]:
-                                active_scheduler = per_sample_schedulers[j]
-                                break
-                        if active_scheduler is not None:
-                            log_lr = active_scheduler.get_last_lr()[0]
+                    model_tokens_with_compression_tokens = torch.cat(
+                        [
+                            current_compression_tokens.to(inputs_embeds.device).to(inputs_embeds.dtype),
+                            inputs_embeds,
+                        ],
+                        dim=1,
+                    )
+                    attention_mask_with_compression_tokens = torch.cat(
+                        [compression_tokens_attention_mask, attention_mask],
+                        dim=1,
+                    )
+                    (
+                        loss,
+                        alignment_loss,
+                        convergece_per_sample,
+                        generated_text,
+                        ground_truth_text,
+                    ) = self.compute_loss(
+                        decode_model,
+                        input_ids,
+                        inputs_embeds,
+                        attention_mask,
+                        model_tokens_with_compression_tokens,
+                        attention_mask_with_compression_tokens,
+                        num_compression_tokens,
+                        target_hidden=target_hidden,
+                    )
+                    loss.backward()
+                    pbar.update(1)
 
-                        pbar.set_postfix(
-                            loss=loss.item(),
-                            convergece_per_sample=convergece_per_sample.mean().item(),
-                            compr_t_mean=comp_mean,
-                            compr_t_std=comp_std,
-                            grad=grad_norm,
-                            lr=log_lr,
-                        )
+                    if init_method == "pretrained_pca":
+                        grad_norms = [
+                            (
+                                per_sample_pca_coefficients[j].grad.norm(2).item()
+                                if per_sample_pca_coefficients[j].grad is not None
+                                else 0.0
+                            )
+                            for j in range(batch_size)
+                        ]
+                        grad_norm = sum(grad_norms) / len(grad_norms)
+                        comp_mean = compression_tokens.mean().item()
+                        comp_std = compression_tokens.std().item()
+                    else:
+                        grad_norms = [
+                            per_sample_params[j].grad.norm(2).item() if per_sample_params[j].grad is not None else 0.0
+                            for j in range(batch_size)
+                        ]
+                        grad_norm = sum(grad_norms) / len(grad_norms)
+                        comp_mean = compression_tokens.mean().item()
+                        comp_std = compression_tokens.std().item()
 
-                        self._log_step(
-                            loss,
-                            alignment_loss,
-                            convergece_per_sample,
-                            compression_tokens,
-                            active_scheduler,
-                            generated_text,
-                            ground_truth_text,
-                        )
-
-                        # Per-sample optimizer step
-                        for j in range(batch_size):
-                            if skipped_mask[j] or converged_mask[j]:
-                                per_sample_optimizers[j].zero_grad(set_to_none=True)
-                            else:
-                                per_sample_optimizers[j].step()
-                                if per_sample_schedulers[j] is not None:
-                                    per_sample_schedulers[j].step()
-                                per_sample_optimizers[j].zero_grad(set_to_none=True)
-                                per_sample_steps_taken[j] += 1
-
-                        if self.args.low_dim_projection and self.args.low_dim_proj_train and low_dim_optim is not None:
-                            low_dim_optim.step()
-                            low_dim_optim.zero_grad()
-                            if low_dim_scheduler is not None:
-                                low_dim_scheduler.step()
-
-                        last_loss_val = float(loss.item())
-                        last_conv = convergece_per_sample.detach().cpu()
-
-                        # Per-sample convergence check
-                        for j in range(batch_size):
-                            if not skipped_mask[j] and not converged_mask[j]:
-                                if convergece_per_sample[j].item() >= threshold:
-                                    converged_mask[j] = True
-
-                        all_active_converged = all(converged_mask[j] or skipped_mask[j] for j in range(batch_size))
-                        if all_active_converged:
-                            converged = True
+                    log_lr = self.args.learning_rate
+                    active_scheduler = None
+                    for j in range(batch_size):
+                        if not skipped_mask[j] and not converged_mask[j]:
+                            active_scheduler = per_sample_schedulers[j]
                             break
+                    if active_scheduler is not None:
+                        log_lr = active_scheduler.get_last_lr()[0]
 
-                    if converged:
+                    pbar.set_postfix(
+                        loss=loss.item(),
+                        convergece_per_sample=convergece_per_sample.mean().item(),
+                        compr_t_mean=comp_mean,
+                        compr_t_std=comp_std,
+                        grad=grad_norm,
+                        lr=log_lr,
+                    )
+
+                    self._log_step(
+                        loss,
+                        alignment_loss,
+                        convergece_per_sample,
+                        compression_tokens,
+                        active_scheduler,
+                        generated_text,
+                        ground_truth_text,
+                    )
+                    total_steps += 1
+
+                    # Per-sample optimizer step
+                    for j in range(batch_size):
+                        if skipped_mask[j] or converged_mask[j]:
+                            per_sample_optimizers[j].zero_grad(set_to_none=True)
+                        else:
+                            per_sample_optimizers[j].step()
+                            if per_sample_schedulers[j] is not None:
+                                per_sample_schedulers[j].step()
+                            per_sample_optimizers[j].zero_grad(set_to_none=True)
+                            per_sample_steps_taken[j] += 1
+
+                    if self.args.low_dim_projection and self.args.low_dim_proj_train and low_dim_optim is not None:
+                        low_dim_optim.step()
+                        low_dim_optim.zero_grad()
+                        if low_dim_scheduler is not None:
+                            low_dim_scheduler.step()
+
+                    last_loss_val = float(loss.item())
+                    last_conv = convergece_per_sample.detach().cpu()
+
+                    # Per-sample convergence check
+                    for j in range(batch_size):
+                        if not skipped_mask[j] and not converged_mask[j]:
+                            if convergece_per_sample[j].item() >= threshold:
+                                converged_mask[j] = True
+
+                    all_active_converged = all(converged_mask[j] or skipped_mask[j] for j in range(batch_size))
+                    if all_active_converged:
+                        converged = True
                         break
 
-                    if (
-                        not converged
-                        and self.args.progressive_reset_lr_scheduler_on_non_convergence
-                        and not scheduler_reset_used
-                    ):
-                        print(f"Not converged at seq_len={seq_len}, " "resetting LR schedulers for non-converged samples...")
-                        for j in range(batch_size):
-                            if not skipped_mask[j] and not converged_mask[j]:
-                                if init_method == "pretrained_pca":
-                                    opt, sched = self._build_optimizer_and_scheduler([per_sample_pca_coefficients[j]])
-                                else:
-                                    opt, sched = self._build_optimizer_and_scheduler(
-                                        [per_sample_params[j]],
-                                        num_training_steps=self.args.max_optimization_steps_per_token,
-                                    )
-                                per_sample_optimizers[j] = opt
-                                per_sample_schedulers[j] = sched
-                        scheduler_reset_used = True
-                        pbar = tqdm(
-                            range(self.args.max_optimization_steps_per_token),
-                            total=self.args.max_optimization_steps_per_token,
-                            leave=False,
-                        )
-                        pbar.set_description(f"Stage L={seq_len} (retry)")
-                        continue
-                    else:
+                    if total_steps > int(self.args.max_optimization_steps_per_sample):
+                        converged = False
                         break
 
                 # Mark non-converged samples as permanently skipped
@@ -833,8 +806,6 @@ class ProgressiveCrammingTrainer(BaseTrainer):
 
         # Outer loop over buckets.
         while bucket_size <= max_len_bucketed:
-            scheduler_reset_used = False
-
             input_ids = _slice_or_pad(full_input_ids, bucket_size)
             inputs_embeds = _slice_or_pad(full_model_token_embeddings, bucket_size)
             valid_mask_full = _slice_or_pad(full_attention_mask, bucket_size)
@@ -850,8 +821,6 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             pbar.set_description(f"Bucket L={bucket_size} f={frontier}")
             last_loss_val = None
             last_conv = None
-
-            inner_advanced = False  # did frontier advance at least once this inner loop?
 
             # Inner loop with optional one-shot LR-scheduler reset retry.
             while True:
@@ -1052,7 +1021,6 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                     all_active_converged_at_frontier = all(done_at_frontier_cpu[j] for j in active_idx)
                     if all_active_converged_at_frontier:
                         frontier += 1
-                        inner_advanced = True
                         stage_index += 1
                         max_frontier_reached = max(max_frontier_reached, frontier)
                         loss_repr = f"{last_loss_val:.4f}" if last_loss_val is not None else "n/a"
@@ -1076,72 +1044,23 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                 if all(skipped_mask):
                     break
 
-                # Frontier did not advance at all in the entire inner pbar pass.
-                # Mirror legacy progressive_reset_lr_scheduler_on_non_convergence retry.
-                if (
-                    not inner_advanced
-                    and self.args.progressive_reset_lr_scheduler_on_non_convergence
-                    and not scheduler_reset_used
-                ):
-                    print(
-                        f"[bucketed] non-convergence at bucket={bucket_size} frontier={frontier}, "
-                        f"resetting LR schedulers for non-converged samples..."
-                    )
-                    for j in range(batch_size):
-                        if not skipped_mask[j] and not bool(per_position_converged[j, frontier].item()):
-                            if init_method == "pretrained_pca":
-                                opt, sched = self._build_optimizer_and_scheduler([per_sample_pca_coefficients[j]])
-                            else:
-                                opt, sched = self._build_optimizer_and_scheduler(
-                                    [per_sample_params[j]],
-                                    num_training_steps=self.args.max_optimization_steps_per_token,
-                                )
-                            per_sample_optimizers[j] = opt
-                            per_sample_schedulers[j] = sched
-                    scheduler_reset_used = True
-                    pbar = tqdm(
-                        range(self.args.max_optimization_steps_per_token),
-                        total=self.args.max_optimization_steps_per_token,
-                        leave=False,
-                    )
-                    pbar.set_description(f"Bucket L={bucket_size} f={frontier} (retry)")
-                    continue
-
-                # Retry exhausted or disabled: mark non-converged samples as skipped and
-                # force-advance the frontier so the run does not hang.
-                if not inner_advanced:
-                    for j in range(batch_size):
-                        if not skipped_mask[j] and not bool(per_position_converged[j, frontier].item()):
-                            skipped_mask[j] = True
-                            print(
-                                f"Sample {j} failed to converge at bucket={bucket_size} frontier={frontier}, "
-                                f"marking as skipped."
-                            )
-                    frontier += 1
-                    stage_index += 1
-                    max_frontier_reached = max(max_frontier_reached, frontier)
-                    frontier_pbar.set_postfix(bucket=bucket_size, stage=stage_index, forced=True)
-                    frontier_pbar.update(1)
-                    if max_stages_cap and stage_index >= max_stages_cap:
-                        break
-                    if frontier >= bucket_size:
-                        break
-                    # Reset inner loop with fresh pbar to continue at the new frontier.
-                    inner_advanced = False
-                    scheduler_reset_used = False
-                    pbar = tqdm(
-                        range(self.args.max_optimization_steps_per_token),
-                        total=self.args.max_optimization_steps_per_token,
-                        leave=False,
-                        disable=True,
-                    )
-                    pbar.set_description(f"Bucket L={bucket_size} f={frontier}")
-                    continue
-
-                # We advanced at least once this inner pass; loop back with fresh pbar
-                # so the next position gets its full budget.
-                inner_advanced = False
-                scheduler_reset_used = False
+                for j in range(batch_size):
+                    if not skipped_mask[j] and not bool(per_position_converged[j, frontier].item()):
+                        skipped_mask[j] = True
+                        print(
+                            f"Sample {j} failed to converge at bucket={bucket_size} frontier={frontier}, "
+                            f"marking as skipped."
+                        )
+                frontier += 1
+                stage_index += 1
+                max_frontier_reached = max(max_frontier_reached, frontier)
+                frontier_pbar.set_postfix(bucket=bucket_size, stage=stage_index, forced=True)
+                frontier_pbar.update(1)
+                if max_stages_cap and stage_index >= max_stages_cap:
+                    break
+                if frontier >= bucket_size:
+                    break
+                # Reset inner loop with fresh pbar to continue at the new frontier.
                 pbar = tqdm(
                     range(self.args.max_optimization_steps_per_token),
                     total=self.args.max_optimization_steps_per_token,

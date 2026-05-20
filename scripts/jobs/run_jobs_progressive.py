@@ -120,12 +120,6 @@ if __name__ == "__main__":
         help="Random seed for reproducibility. If not specified, defaults to 42 and is not included in output dir.",
     )
     parser.add_argument(
-        "--progressive_reset_lr_scheduler_on_non_convergence",
-        action="store_true",
-        default=False,
-        help="Enable LR scheduler reset on non-convergence in progressive training. If not specified, not included in output dir.",
-    )
-    parser.add_argument(
         "--lr_scheduler_type",
         type=str,
         default=None,
@@ -402,11 +396,6 @@ if __name__ == "__main__":
                 exp_suffix = f"{exp_suffix}_schedkw_{kwargs_suffix}"
             except json.JSONDecodeError:
                 raise ValueError(f"Invalid JSON format for --lr_scheduler_kwargs: {args.lr_scheduler_kwargs}")
-
-        # Add progressive_reset_lr_scheduler_on_non_convergence if specified
-        if args.progressive_reset_lr_scheduler_on_non_convergence:
-            cmd_args.append("--progressive_reset_lr_scheduler_on_non_convergence")
-            exp_suffix = f"{exp_suffix}_resetlr"
 
         # Add loss_type to output dir if specified (non-default)
         if args.loss_type is not None and args.loss_type != "cross_entropy":
