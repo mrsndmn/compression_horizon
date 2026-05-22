@@ -240,8 +240,21 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                         return_dict=True,
                     )
                     ch_embeds = outs.compression_embeds.detach().to(torch.float32)  # [B, 1, H]
-                initialization_embeddings = ch_embeds.detach().clone().cpu()
-                per_sample_params = [torch.nn.Parameter(ch_embeds[j : j + 1].clone().to(device)) for j in range(batch_size)]
+                # When low_dim_projection is on, per-sample params live in low_dim_size space
+                # and a Linear maps them up to embedding_dim. Solve W @ x ≈ ch_embeds via
+                # least-squares so the projected init still reproduces the CH-forward output.
+                if self.args.low_dim_projection and low_dim_prjoection is not None:
+                    W = low_dim_prjoection.weight.detach().to(torch.float32)  # [H, K]
+                    bias = low_dim_prjoection.bias.detach().to(torch.float32) if low_dim_prjoection.bias is not None else None
+                    target = ch_embeds if bias is None else ch_embeds - bias  # [B, N, H]
+                    B, N, H = target.shape
+                    target_flat = target.reshape(-1, H).T  # [H, B*N]
+                    x_flat = torch.linalg.lstsq(W, target_flat).solution  # [K, B*N]
+                    init_params = x_flat.T.reshape(B, N, -1)  # [B, N, K]
+                else:
+                    init_params = ch_embeds
+                initialization_embeddings = init_params.detach().clone().cpu()
+                per_sample_params = [torch.nn.Parameter(init_params[j : j + 1].clone().to(device)) for j in range(batch_size)]
                 per_sample_optimizers = []
                 per_sample_schedulers = []
                 for j in range(batch_size):

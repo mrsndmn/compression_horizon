@@ -99,9 +99,19 @@ class BaseTrainer:
             **extra_kwargs,
         )
 
+        # D2 residual pathway: if compression head model exposes `compression_residual_proj`,
+        # add a per-vocab bias (Linear(H, V) applied to the compression embedding, broadcast over T).
+        _residual_proj = getattr(self.model, "compression_residual_proj", None)
+        if _residual_proj is not None:
+            _comp_embed = united_token_embeddings[:, :num_compression_tokens]  # [B, N, H]
+            _bias = _residual_proj(_comp_embed).mean(dim=1, keepdim=True)  # [B, 1, V]
+            _logits_with_bias = compression_outputs.logits + _bias
+        else:
+            _logits_with_bias = compression_outputs.logits
+
         hybrid_alpha = self.args.hybrid_alpha
         loss, alignment_loss = compute_hybrid_cross_entropy_and_alignment_loss(
-            logits=compression_outputs.logits,
+            logits=_logits_with_bias,
             input_ids=input_ids,
             attention_mask=attention_mask,
             num_prefix_tokens=num_compression_tokens,

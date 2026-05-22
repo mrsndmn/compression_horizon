@@ -364,6 +364,11 @@ if __name__ == "__main__":
 
     torch_dtype = resolve_torch_dtype(getattr(training_args, "dtype", "float32"))
     print("torch_dtype", torch_dtype)
+    import torch as _torch
+
+    # flash-attn-2 only supports fp16/bf16; fall back to sdpa for fp32 (or auto/other).
+    _attn_impl = "flash_attention_2" if torch_dtype in (_torch.bfloat16, _torch.float16) else "sdpa"
+    print(f"attn_implementation: {_attn_impl}")
 
     def _checkpoint_is_compression_head(path: str) -> bool:
         """True iff the checkpoint's config.json declares LlamaForCausalLMCompressionHead."""
@@ -412,11 +417,13 @@ if __name__ == "__main__":
             _cfg.compression_head_num_queries = int(getattr(training_args, "compression_head_num_queries", 1) or 1)
             _cfg.compression_head_num_heads = int(getattr(training_args, "compression_head_num_heads", 8) or 8)
             _cfg.compression_head_num_layers = int(getattr(training_args, "compression_head_num_layers", 1) or 1)
+            _cfg.compression_head_query_proj_factor = int(getattr(training_args, "compression_head_query_proj_factor", 1) or 1)
             print(
                 f"[compression-head] kind={_cfg.compression_head_kind} "
                 f"num_queries={_cfg.compression_head_num_queries} "
                 f"num_heads={_cfg.compression_head_num_heads} "
-                f"num_layers={_cfg.compression_head_num_layers}"
+                f"num_layers={_cfg.compression_head_num_layers} "
+                f"query_proj_factor={_cfg.compression_head_query_proj_factor}"
             )
         _ckpt_num_queries = int(getattr(_cfg, "compression_head_num_queries", 1) or 1)
         if _ckpt_num_queries > 1 and int(getattr(training_args, "number_of_mem_tokens", 1) or 1) != _ckpt_num_queries:
@@ -430,27 +437,39 @@ if __name__ == "__main__":
             _src_path,
             config=_cfg,
             torch_dtype=torch_dtype,
-            attn_implementation="flash_attention_2",
+            attn_implementation=_attn_impl,
         )
         if dual_ckpt:
             model_reconstructor = AutoModelForCausalLM.from_pretrained(
                 reconstructor_path,
                 torch_dtype=torch_dtype,
-                attn_implementation="flash_attention_2",
+                attn_implementation=_attn_impl,
             )
         elif getattr(training_args, "separate_reconstructor_model", False):
             print("[two-model] building separate reconstructor (plain LM, no compression head) " "from the same checkpoint")
             model_reconstructor = AutoModelForCausalLM.from_pretrained(
                 training_args.model_checkpoint,
                 torch_dtype=torch_dtype,
-                attn_implementation="flash_attention_2",
+                attn_implementation=_attn_impl,
             )
     else:
         model = AutoModelForCausalLM.from_pretrained(
-            training_args.model_checkpoint, torch_dtype=torch_dtype, attn_implementation="flash_attention_2"
+            training_args.model_checkpoint, torch_dtype=torch_dtype, attn_implementation=_attn_impl
         )
         for p in model.parameters():
             p.requires_grad = False
+
+    if getattr(training_args, "enable_compression_residual_lm_head", False):
+        import torch.nn as _nn
+
+        _H = model.config.hidden_size
+        _V = model.config.vocab_size
+        _proj = _nn.Linear(_H, _V, bias=False)
+        # Zero init: at step 0 contribution is 0, so model starts equivalent to baseline.
+        _nn.init.zeros_(_proj.weight)
+        _proj = _proj.to(dtype=torch_dtype, device=next(model.parameters()).device)
+        model.compression_residual_proj = _proj
+        print(f"[d2-residual-lm-head] attached compression_residual_proj: Linear({_H} -> {_V}, zero-init)")
 
     _trunc_spec = getattr(training_args, "truncate_layers", None)
     if _trunc_spec:
@@ -463,6 +482,77 @@ if __name__ == "__main__":
             _keep_r = _parse_truncate_layers_spec(_trunc_spec, _total_r)
             print(f"[truncate-layers] reconstructor: keeping {len(_keep_r)}/{_total_r} layers: {_keep_r}")
             truncate_llama_layers(model_reconstructor, _keep_r)
+
+    _skip_in = bool(getattr(training_args, "skip_input_layernorm_for_compression", False))
+    _skip_post = bool(getattr(training_args, "skip_post_attention_layernorm_for_compression", False))
+    _skip_layer_idx_env = os.environ.get("SKIP_NORM_LAYER_INDICES", "")  # csv, empty=all
+    if (_skip_in or _skip_post) and model_reconstructor is not None:
+        import torch as _torch
+        import torch.nn as _nn
+
+        _n_comp = int(getattr(model.config, "compression_head_num_queries", 1) or 1)
+        _which_layers: list[int] | None = None
+        if _skip_layer_idx_env.strip():
+            _which_layers = [int(x) for x in _skip_layer_idx_env.split(",") if x.strip()]
+
+        class _SkipFirstNRMSNorm(_nn.Module):
+            def __init__(self, inner: _nn.Module, n: int):
+                super().__init__()
+                self.inner = inner
+                self.n = n
+
+            def forward(self, x: "_torch.Tensor") -> "_torch.Tensor":
+                if x.size(1) <= self.n:
+                    return x
+                return _torch.cat([x[:, : self.n], self.inner(x[:, self.n :])], dim=1)
+
+        _patched_in = _patched_post = 0
+        for _li, _layer in enumerate(model_reconstructor.model.layers):
+            if _which_layers is not None and _li not in _which_layers:
+                continue
+            if _skip_in and hasattr(_layer, "input_layernorm"):
+                _layer.input_layernorm = _SkipFirstNRMSNorm(_layer.input_layernorm, _n_comp)
+                _patched_in += 1
+            if _skip_post and hasattr(_layer, "post_attention_layernorm"):
+                _layer.post_attention_layernorm = _SkipFirstNRMSNorm(_layer.post_attention_layernorm, _n_comp)
+                _patched_post += 1
+        print(
+            f"[ablation:skip-norm-on-comp] reconstructor: patched {_patched_in} input_layernorms, "
+            f"{_patched_post} post_attention_layernorms; N={_n_comp} positions identity-mapped; "
+            f"layers={'ALL' if _which_layers is None else _which_layers}"
+        )
+
+    _rmsnorm_mode = str(getattr(training_args, "replace_rmsnorm_with_identity", "off") or "off").lower()
+    if _rmsnorm_mode not in {"off", "false", ""}:
+        import torch.nn as _nn
+        from transformers.models.llama.modeling_llama import LlamaRMSNorm
+
+        def _swap_all(module: _nn.Module) -> int:
+            n = 0
+            for name, child in list(module.named_children()):
+                if isinstance(child, LlamaRMSNorm):
+                    setattr(module, name, _nn.Identity())
+                    n += 1
+                else:
+                    n += _swap_all(child)
+            return n
+
+        def _swap_final(m) -> int:
+            if hasattr(m, "model") and hasattr(m.model, "norm") and isinstance(m.model.norm, LlamaRMSNorm):
+                m.model.norm = _nn.Identity()
+                return 1
+            return 0
+
+        for tag, m in (("compressor", model), ("reconstructor", model_reconstructor)):
+            if m is None:
+                continue
+            if _rmsnorm_mode == "all":
+                n = _swap_all(m)
+            elif _rmsnorm_mode == "final":
+                n = _swap_final(m)
+            else:
+                raise ValueError(f"Unknown replace_rmsnorm_with_identity mode: {_rmsnorm_mode!r}")
+            print(f"[ablation:{_rmsnorm_mode}] replaced {n} LlamaRMSNorm → nn.Identity in {tag}")
 
     tokenizer_path = compressor_path if dual_ckpt else training_args.model_checkpoint
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
@@ -575,6 +665,42 @@ if __name__ == "__main__":
         data_collator=data_collator,
         model_reconstructor=model_reconstructor,
     )
+
+    _teacher_ckpt = getattr(training_args, "distill_teacher_checkpoint", None)
+    if _teacher_ckpt:
+        from compression_horizon.models.llama_compression_head import LlamaForCausalLMCompressionHead
+
+        _t_comp_path = os.path.join(_teacher_ckpt, "compressor")
+        _t_rec_path = os.path.join(_teacher_ckpt, "reconstructor")
+        if not (os.path.isdir(_t_comp_path) and os.path.isdir(_t_rec_path)):
+            raise ValueError(
+                f"distill_teacher_checkpoint must be a dual-mode dir (compressor/+reconstructor/): {_teacher_ckpt}"
+            )
+        print(f"[KD] loading teacher dual ckpt from {_teacher_ckpt}")
+        _teacher_compressor = LlamaForCausalLMCompressionHead.from_pretrained(
+            _t_comp_path,
+            torch_dtype=torch_dtype,
+            attn_implementation=_attn_impl,
+        )
+        _teacher_reconstructor = AutoModelForCausalLM.from_pretrained(
+            _t_rec_path,
+            torch_dtype=torch_dtype,
+            attn_implementation=_attn_impl,
+        )
+        # Freeze teacher; move to compute device.
+        for p in _teacher_compressor.parameters():
+            p.requires_grad = False
+        for p in _teacher_reconstructor.parameters():
+            p.requires_grad = False
+        _teacher_compressor.eval()
+        _teacher_reconstructor.eval()
+        _t_dev = next(model.parameters()).device
+        _teacher_compressor.to(_t_dev)
+        _teacher_reconstructor.to(_t_dev)
+        trainer.teacher_compressor = _teacher_compressor
+        trainer.teacher_reconstructor = _teacher_reconstructor
+        print(f"[KD] teacher loaded; α={training_args.distill_alpha} T={training_args.distill_temperature}")
+
     training_artifacts = trainer.train()
     print(f"Saved compressed prefixes to: {training_artifacts}.")
 

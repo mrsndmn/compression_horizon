@@ -213,6 +213,34 @@ if __name__ == "__main__":
         default=None,
         help="Number of cross-attention layers in the Q-Former (default: 1).",
     )
+    parser.add_argument(
+        "--compression_head_query_proj_factor",
+        type=int,
+        default=None,
+        help=(
+            "Width multiplier for the Q-Former learnable query parameter. "
+            "When > 1, the trainable query is [N, factor*H] and a linear "
+            "projects it down to [N, H] before cross-attention."
+        ),
+    )
+    parser.add_argument(
+        "--distill_teacher_checkpoint",
+        type=str,
+        default=None,
+        help="Path to teacher dual checkpoint for KD.",
+    )
+    parser.add_argument(
+        "--distill_alpha",
+        type=float,
+        default=None,
+        help="KD α weight (loss = (1-α)·CE + α·KL).",
+    )
+    parser.add_argument(
+        "--distill_temperature",
+        type=float,
+        default=None,
+        help="KD temperature.",
+    )
 
     args = parser.parse_args()
     workdir = os.getcwd()
@@ -363,11 +391,24 @@ if __name__ == "__main__":
             if args.compression_head_num_heads is not None:
                 cmd_args.append(f"--compression_head_num_heads {args.compression_head_num_heads}")
                 exp_suffix = f"{exp_suffix}H{args.compression_head_num_heads}"
+            if args.compression_head_query_proj_factor is not None:
+                cmd_args.append(f"--compression_head_query_proj_factor {args.compression_head_query_proj_factor}")
+                exp_suffix = f"{exp_suffix}Q{args.compression_head_query_proj_factor}x"
 
-        if args.truncate_layers is not None:
+        if args.truncate_layers:
             cmd_args.append(f"--truncate_layers {args.truncate_layers}")
             _trunc_token = args.truncate_layers.replace(":", "").replace(",", "_")
             exp_suffix = f"{exp_suffix}_TRUNC_{_trunc_token}"
+
+        if args.distill_teacher_checkpoint:
+            cmd_args.append(f"--distill_teacher_checkpoint {args.distill_teacher_checkpoint}")
+            exp_suffix = f"{exp_suffix}_KD"
+        if args.distill_alpha is not None:
+            cmd_args.append(f"--distill_alpha {args.distill_alpha}")
+            exp_suffix = f"{exp_suffix}a{args.distill_alpha}".replace(".", "p")
+        if args.distill_temperature is not None:
+            cmd_args.append(f"--distill_temperature {args.distill_temperature}")
+            exp_suffix = f"{exp_suffix}T{args.distill_temperature}".replace(".", "p")
 
         if args.fineweb_edu_sample:
             cmd_args.append(f"--fineweb_edu_sample {args.fineweb_edu_sample}")

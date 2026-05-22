@@ -67,6 +67,12 @@ class CompressionHeadTrainer(BaseTrainer):
         if dual_mode:
             model_reconstructor.train()
 
+        # Move teacher to the accelerator device if it was loaded for KD.
+        if getattr(self, "teacher_compressor", None) is not None:
+            self.teacher_compressor.to(device).eval()
+            self.teacher_reconstructor.to(device).eval()
+            print(f"[KD] teacher moved to {device}")
+
         train_loader = DataLoader(
             self.train_dataset,
             batch_size=args.per_device_train_batch_size,
@@ -271,12 +277,55 @@ class CompressionHeadTrainer(BaseTrainer):
                             after_match_rate = correct_match.sum().float() / n_valid.float()
                         else:
                             after_match_rate = torch.zeros((), device=after_loss.device)
-                    del out2
-                    del token_embeddings, inputs_embeds_new, attention_mask_new, labels_new, compression_embeds
+                    # Knowledge distillation from teacher (if loaded).
+                    kd_loss = torch.zeros((), device=after_loss.device)
+                    teacher_comp = getattr(self, "teacher_compressor", None)
+                    teacher_rec = getattr(self, "teacher_reconstructor", None)
+                    if teacher_comp is not None and teacher_rec is not None:
+                        with torch.no_grad():
+                            t_out = teacher_comp(
+                                input_ids=input_ids,
+                                attention_mask=attention_mask,
+                                prefix_lengths=prefix_lengths,
+                                use_cache=False,
+                                output_hidden_states=False,
+                                return_dict=True,
+                            )
+                            t_embeds = t_out.compression_embeds  # [B, N_teacher, H]
+                            t_token_embeddings = teacher_rec.get_input_embeddings()(input_ids)
+                            t_in_embeds, t_attn, _t_labels = self._build_compressed_inputs(
+                                compression_embeds=t_embeds,
+                                token_embeddings=t_token_embeddings,
+                                input_ids=input_ids,
+                                attention_mask=attention_mask,
+                                prefix_lengths=prefix_lengths,
+                            )
+                            t_logits = teacher_rec(
+                                inputs_embeds=t_in_embeds,
+                                attention_mask=t_attn,
+                                use_cache=False,
+                                return_dict=True,
+                            ).logits  # [B, T+N_teacher, V]
+                        # Slice text positions from both (drop the compression prefix).
+                        N_student = compression_embeds.shape[1]
+                        N_teacher = t_embeds.shape[1]
+                        s_text = out2.logits[:, N_student:, :].float()  # [B, T, V]
+                        t_text = t_logits[:, N_teacher:, :].float()  # [B, T, V]
+                        # KL(student || teacher) with temperature.
+                        T = float(args.distill_temperature)
+                        kd_loss = torch.nn.functional.kl_div(
+                            torch.log_softmax(s_text / T, dim=-1),
+                            torch.softmax(t_text / T, dim=-1),
+                            reduction="batchmean",
+                        ) * (T * T)
+                        del t_out, t_embeds, t_token_embeddings, t_in_embeds, t_attn, t_logits, s_text, t_text
 
                     alpha = args.compression_head_distill_alpha
                     beta = args.compression_head_distill_beta
+                    distill_alpha = float(getattr(args, "distill_alpha", 0.5))
                     loss = base_loss * beta + after_loss * alpha
+                    if teacher_comp is not None:
+                        loss = (1.0 - distill_alpha) * loss + distill_alpha * kd_loss
 
                     if torch.isnan(loss) or torch.isinf(loss):
                         raise RuntimeError(f"NaN/Inf in total loss: {loss.item()}")

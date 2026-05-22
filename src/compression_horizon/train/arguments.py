@@ -404,6 +404,18 @@ class MyTrainingArguments(TrainingArguments):
         default=1,
         metadata={"help": "Number of cross-attention layers in the Q-Former."},
     )
+    compression_head_query_proj_factor: int = field(
+        default=1,
+        metadata={
+            "help": (
+                "Width multiplier for the Q-Former learnable query parameter. "
+                "When > 1, the trainable query lives in shape [N, factor*H] and a "
+                "linear projection maps it down to [N, H] before cross-attention. "
+                "Same final dim, more degrees of freedom for the optimiser "
+                "(wide-init / low-dim-projection trick from progressive cramming)."
+            )
+        },
+    )
     separate_reconstructor_model: bool = field(
         default=False,
         metadata={
@@ -426,6 +438,63 @@ class MyTrainingArguments(TrainingArguments):
                 "Applied to both compressor and reconstructor in dual-model mode."
             )
         },
+    )
+    replace_rmsnorm_with_identity: str = field(
+        default="off",
+        metadata={
+            "help": (
+                "Ablation: replace LlamaRMSNorm with nn.Identity. Modes: "
+                "'off' (default), 'final' (only the last norm before lm_head — tests output-direction bottleneck), "
+                "'all' (replaces every RMSNorm — usually NaNs without retraining)."
+            )
+        },
+    )
+    skip_input_layernorm_for_compression: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Ablation: in the RECONSTRUCTOR (dual mode), bypass `input_layernorm` for the first "
+                "N positions (the compression tokens), so compression embeddings pass through with "
+                "their magnitude preserved. N = compression_head_num_queries from config."
+            )
+        },
+    )
+    skip_post_attention_layernorm_for_compression: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Ablation: like skip_input_layernorm_for_compression but for `post_attention_layernorm` "
+                "(before the FFN). Skips magnitude stripping at the FFN input for compression positions."
+            )
+        },
+    )
+    enable_compression_residual_lm_head: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "D2 ablation: add a learnable Linear(H, V) projection that produces a per-vocab bias "
+                "from the compression embedding and adds it (broadcast over T) to logits before CE loss. "
+                "Gives compression embed an explicit residual pathway to output predictions, bypassing "
+                "attention-based information flow."
+            )
+        },
+    )
+    distill_teacher_checkpoint: str | None = field(
+        default=None,
+        metadata={
+            "help": (
+                "Path to a teacher dual checkpoint (compression-head model). Enables logit KD: "
+                "teacher's reconstructor logits at text positions become soft targets for student."
+            )
+        },
+    )
+    distill_alpha: float = field(
+        default=0.5,
+        metadata={"help": "Weight α for KD term: loss = (1-α)·CE + α·KL. Default 0.5."},
+    )
+    distill_temperature: float = field(
+        default=2.0,
+        metadata={"help": "Temperature T for KD softmax. KL is multiplied by T². Default 2.0."},
     )
 
     def __post_init__(self):

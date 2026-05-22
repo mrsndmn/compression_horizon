@@ -82,13 +82,36 @@ class QFormerLayer(nn.Module):
 
 class QFormerCompressionHead(nn.Module):
     """Q-Former-style compression head: N learnable queries cross-attend to the prefix
-    hidden states and emit N compression tokens of shape [B, N, H]."""
+    hidden states and emit N compression tokens of shape [B, N, H].
 
-    def __init__(self, hidden_size: int, num_queries: int = 4, num_heads: int = 8, num_layers: int = 1, dropout: float = 0.0):
+    With `query_proj_factor > 1`, the learnable query parameter is kept in a higher
+    dimension `factor * H` and projected down to `H` via a linear layer before being
+    fed into the cross-attention layers. Same final dimensionality, more degrees of
+    freedom for the optimizer — analogous to the wide-init / low-dim-projection trick
+    used in progressive cramming.
+    """
+
+    def __init__(
+        self,
+        hidden_size: int,
+        num_queries: int = 4,
+        num_heads: int = 8,
+        num_layers: int = 1,
+        dropout: float = 0.0,
+        query_proj_factor: int = 1,
+    ):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_queries = int(num_queries)
-        self.queries = nn.Parameter(torch.zeros(self.num_queries, hidden_size))
+        self.query_proj_factor = max(1, int(query_proj_factor))
+        self.query_dim = self.hidden_size * self.query_proj_factor
+        self.queries = nn.Parameter(torch.zeros(self.num_queries, self.query_dim))
+        if self.query_proj_factor > 1:
+            # No bias: keeps initialisation symmetric around zero, the same property
+            # we get from the bias-free identity-like baseline at factor=1.
+            self.query_proj = nn.Linear(self.query_dim, self.hidden_size, bias=False)
+        else:
+            self.query_proj = None
         self.layers = nn.ModuleList(
             [QFormerLayer(hidden_size, num_heads=num_heads, dropout=dropout) for _ in range(num_layers)]
         )
@@ -97,11 +120,20 @@ class QFormerCompressionHead(nn.Module):
 
     def reset_parameters(self) -> None:
         nn.init.normal_(self.queries, mean=0.0, std=0.02)
+        if self.query_proj is not None:
+            # 1/sqrt(factor) keeps the post-projection magnitude on the same scale as
+            # the baseline factor=1 queries (std≈0.02), so optimisation dynamics start
+            # comparable across factors.
+            std = 0.02 / (self.query_proj_factor**0.5)
+            nn.init.normal_(self.query_proj.weight, mean=0.0, std=std)
 
     def forward(self, hidden_states: torch.Tensor, key_padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         # hidden_states: [B, L, H]; key_padding_mask: [B, L] (True = mask).
         bsz = hidden_states.size(0)
-        q = self.queries.unsqueeze(0).expand(bsz, -1, -1).to(dtype=hidden_states.dtype)
+        q = self.queries.to(dtype=hidden_states.dtype)  # [N, query_dim]
+        if self.query_proj is not None:
+            q = self.query_proj(q)  # [N, H]
+        q = q.unsqueeze(0).expand(bsz, -1, -1)  # [B, N, H]
         for layer in self.layers:
             q = layer(q, hidden_states, key_padding_mask)
         return self.final_norm(q)
@@ -126,11 +158,13 @@ class LlamaForCausalLMCompressionHead(LlamaPreTrainedModel, GenerationMixin):
         if kind == "qformer":
             num_heads = int(getattr(config, "compression_head_num_heads", 8))
             num_layers = int(getattr(config, "compression_head_num_layers", 1))
+            query_proj_factor = int(getattr(config, "compression_head_query_proj_factor", 1) or 1)
             self.compression_head = QFormerCompressionHead(
                 hidden_size=hidden,
                 num_queries=n_queries,
                 num_heads=num_heads,
                 num_layers=num_layers,
+                query_proj_factor=query_proj_factor,
             )
         else:
             # Legacy MLP head: LayerNorm on the output keeps the compression-token embedding
@@ -166,6 +200,9 @@ class LlamaForCausalLMCompressionHead(LlamaPreTrainedModel, GenerationMixin):
             # The `queries` parameter is a bare nn.Parameter, not part of a Linear/LayerNorm,
             # so it would otherwise stay as uninit bf16 memory after from_pretrained.
             nn.init.normal_(module.queries, mean=0.0, std=0.02)
+            if module.query_proj is not None:
+                std = 0.02 / (module.query_proj_factor**0.5)
+                nn.init.normal_(module.query_proj.weight, mean=0.0, std=std)
         else:
             super()._init_weights(module)
 
