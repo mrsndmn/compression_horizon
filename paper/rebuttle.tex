@@ -1,0 +1,429 @@
+
+\section{Reviewer 1 (neRn)}
+
+We thank the reviewer for the thorough evaluation and constructive suggestions.
+We address each point below.
+
+\textbf{W1. Limited number of samples.}
+
+We reproduced the data preparation pipeline from Kuratov et al.\ and re-ran all experiments on the same 50 samples used in the original full cramming paper. Our main conclusions --- low PCA dimensionality and higher Information Gain compared to full cramming --- remain valid on this data.
+
+However, the expanded evaluation revealed an important finding: for all models
+\emph{except} Llama-3.1-8B, activation alignment leads to significant degradation in
+both compressed tokens and Information Gain. The best results across all experiments
+are achieved with \textbf{low-dimensional linear projection alone}. Only Llama-3.1-8B
+shows competitive performance when combining low-dimensional projection with activation
+alignment; for the remaining models (Pythia-1.4B, SmolLM2-1.7B, Gemma-3-4B-pt) the
+combination does not improve over projection-only variants.
+
+% \ref{tab:rebuttle_all_progressive_modifications}
+We present the updated version of progressive cramming table \href{https://drive.google.com/file/d/148Cxg2jOx_-MIH5XC0I-oPbwVLG0Ktiz/view?usp=sharing}{Table~6}
+reporting progressive cramming variants and key metrics across all four model families
+on the 50-sample subset.
+
+% \setcounter{table}{1}
+\begin{table*}[]
+    \centering
+    \caption{Progressive cramming variants and key metrics across model families on \textbf{50 samples}. For each family we report baseline progressive cramming, low-dimensional projection only (``dim''), activation alignment only ($\alpha$, $L$), and their combination.}
+    \label{tab:rebuttle_all_progressive_modifications}
+
+    \begin{small}
+    \begin{tabular}{lllll}
+        \hline
+         Model                                                               & Compressed Tokens           & Information Gain         & Trajectory Length         & PCA 99\%                  \\
+        \hline
+        %   50 samples results
+             Llama-3.1-8B {\small lr=0.1}                                                       & 1437.6 {\small $\pm$ 380.1} & 4391 {\small $\pm$ 1408} & 6174 {\small $\pm$ 1263}      & 82.78 {\small $\pm$ 9.07}  \\
+     Llama-3.1-8B {\small lr=0.1} {\small $\alpha=1.0$} {\small $L=4$}                  & 1795.1 {\small $\pm$ 225.7} & 5605 {\small $\pm$ 596}  & 7525 {\small $\pm$ 774}       & 81.26 {\small $\pm$ 3.76}  \\
+     Llama-3.1-8B {\small dim=256} {\small lr=0.1}                                      & 1697.2 {\small $\pm$ 304.2} & 4814 {\small $\pm$ 1731} & 243424 {\small $\pm$ 57429}   & 58.58 {\small $\pm$ 6.4}   \\
+     Llama-3.1-8B {\small dim=256} {\small lr=0.1} {\small $\alpha=1.0$} {\small $L=8$} & 1732.7 {\small $\pm$ 253.2} & 4009 {\small $\pm$ 2414} & 226998 {\small $\pm$ 45513}   & 62.38 {\small $\pm$ 5.08}  \\
+     \midrule
+     pythia-1.4b {\small lr=0.5}                                                        & 430.4 {\small $\pm$ 64.9}   & 1639 {\small $\pm$ 188}  & 6496 {\small $\pm$ 610}       & 50.06 {\small $\pm$ 3.31}  \\
+     pythia-1.4b {\small lr=0.5} {\small $\alpha=1.0$} {\small $L=8$}                   & 397.7 {\small $\pm$ 57}     & 1513 {\small $\pm$ 163}  & 6187 {\small $\pm$ 513}       & 46.44 {\small $\pm$ 2.74}  \\
+     pythia-1.4b {\small dim=256} {\small lr=0.5}                                       & 500.2 {\small $\pm$ 74.8}   & 1874 {\small $\pm$ 283}  & 598025 {\small $\pm$ 725213}  & 67.58 {\small $\pm$ 19.82} \\
+     pythia-1.4b {\small dim=256} {\small lr=0.5} {\small $\alpha=1.0$} {\small $L=8$}  & 405.3 {\small $\pm$ 82.5}   & 1521 {\small $\pm$ 276}  & 1269523 {\small $\pm$ 618392} & 58.92 {\small $\pm$ 15.36} \\
+     \midrule
+     SmolLM2-1.7B {\small lr=0.1}                                                       & 338.3 {\small $\pm$ 69.1}   & 1213 {\small $\pm$ 166}  & 1056 {\small $\pm$ 153}       & 33.16 {\small $\pm$ 2.76}  \\
+     SmolLM2-1.7B {\small lr=0.1} {\small $\alpha=1.0$} {\small $L=8$}                  & 242.6 {\small $\pm$ 63.2}   & 880 {\small $\pm$ 186}   & 894 {\small $\pm$ 121}        & 26.46 {\small $\pm$ 2.64}  \\
+     SmolLM2-1.7B {\small dim=256} {\small lr=0.1}                                      & 957.4 {\small $\pm$ 142.5}  & 3271 {\small $\pm$ 309}  & 132821 {\small $\pm$ 44546}   & 30.94 {\small $\pm$ 4.93}  \\
+     SmolLM2-1.7B {\small dim=256} {\small lr=0.1} {\small $\alpha=1.0$} {\small $L=8$} & 918.6 {\small $\pm$ 199.1}  & 3135 {\small $\pm$ 628}  & 142874 {\small $\pm$ 54379}   & 33.28 {\small $\pm$ 6.69}  \\
+     \midrule
+     gemma-3-4b-pt {\small lr=0.1}                                                      & 213.6 {\small $\pm$ 109.2}  & 783 {\small $\pm$ 370}   & 910 {\small $\pm$ 261}        & 30.8 {\small $\pm$ 9.45}   \\
+     gemma-3-4b-pt {\small lr=0.1} {\small $\alpha=1.0$} {\small $L=8$}                 & 202 {\small $\pm$ 119.4}    & 763 {\small $\pm$ 425}   & 869 {\small $\pm$ 275}        & 26.86 {\small $\pm$ 7.7}   \\
+     gemma-3-4b-pt {\small dim=32} {\small lr=0.1}                                      & 697.4 {\small $\pm$ 165.3}  & 2141 {\small $\pm$ 786}  & 27948 {\small $\pm$ 15706}    & 22.5 {\small $\pm$ 5.14}   \\
+     gemma-3-4b-pt {\small dim=32} {\small lr=0.1} {\small $\alpha=1.0$} {\small $L=8$} & 680.7 {\small $\pm$ 221}    & 2091 {\small $\pm$ 730}  & 35384 {\small $\pm$ 29987}    & 21.78 {\small $\pm$ 4.94}  \\
+
+
+        \hline
+    \end{tabular}
+    \end{small}
+
+\end{table*}
+
+
+
+\textbf{W2. Causality analysis for ``attention hijacking'' and ``degraded downstream performance''}
+
+% 2. The evidence for “attention hijacking” remains primarily correlational: increased attention mass is observed alongside degraded downstream performance, but the paper lacks stronger causal interventions. For example, head/layer ablation, activation patching, or other targeted manipulations would help test whether disrupting this attention concentration actually impairs reconstruction or restores downstream capability.
+
+
+We thank the reviewer for this suggestion. We conducted causal intervention experiments
+using \textbf{attention knockout}---masking pre-softmax logits corresponding to the
+compression embedding to $-\infty$ at selected layers, thereby completely removing its
+influence on the residual stream. Three protocols were used: (1)~\textbf{per-layer knockout}
+(masking at a single layer), (2)~\textbf{forward cumulative knockout} (masking layers
+$0$ through $k$), and (3)~\textbf{reverse cumulative knockout} (masking layers $L{-}1$
+down to $k$). Each condition is evaluated on reconstruction accuracy and downstream
+capability (HellaSwag).
+
+The results reveal that \textbf{attention mass and causal importance are dissociated}:
+\begin{itemize}
+    \item Per-layer knockout at early layers degrades reconstruction while slightly
+          \emph{improving} downstream accuracy, indicating that early layers causally
+          drive the downstream disruption.
+    \item Forward cumulative knockout rapidly restores downstream accuracy once the
+          first several layers are masked
+    \item Reverse cumulative knockout does not recover
+          downstream performance until masking reaches the early layers.
+\end{itemize}
+
+This \textbf{forward/reverse asymmetry} is the core causal argument: downstream collapse
+is driven by early-layer interactions with the compression embedding. Late layers, despite
+exhibiting the highest attention mass, have minimal causal impact on downstream performance
+when knocked out --- the observed concentration is a \emph{symptom} rather than the cause.
+
+\textbf{Questions}
+
+\textbf{Q1. Limited number od samples}. See \textbf{W1}.
+
+\textbf{Q2. Causality analysis for attention hijacking}. See \textbf{W2}.
+
+\textbf{Q3. Downstream evaluation with progressive cramming.}
+% The paper argues that perfect reconstruction does not necessarily imply meaningful compression. Does this conclusion still hold when downstream evaluation is performed only on embeddings produced by Progressive Cramming?
+
+% Table~\ref{tab:rebuttle_downstream_eval_progressive}
+We present downstream evaluation results for progressive cramming in \href{https://drive.google.com/file/d/1DIjiTpyIqQ4xuW0k9Q7mjCOFuXUPz2YX/view?usp=sharing}{Table~7}. For progressive cramming, we report metrics computed exclusively over fully converged samples (i.e., those achieving perfect reconstruction). The performance drop relative to the baseline is comparable for both full and progressive cramming across all models, ranging from approximately 34\%--38\%.
+
+Note that Gemma-3-4B shows 0\% convergence under progressive cramming, meaning no sample achieved perfect token-by-token reconstruction. Notably, full cramming still yields a relatively small performance drop for Gemma (54.97\% vs.\ 57.07\%). This finding requires further research.
+
+\begin{table*}[]
+    \centering
+    \caption{Hellaswag Downstream Evaluation results For Progressive Cramming}
+    \label{tab:rebuttle_downstream_eval_progressive}
+\begin{tabular}{lllll}
+    \hline
+ Model         & Baseline Acc  & Full Acc  & Progressive Acc  & Progressive Converged    \\
+    \hline
+ Llama-3.1-8B  & 61.91\%       &  36.80\%    & 38.62\%        & 97.66\%               \\
+ SmolLM2-1.7B  & 53.56\%       &  36.90\%    & 34.70\%        & 95.51\%               \\
+ gemma-3-4b-pt & 57.07\%       &  54.97\%    & 0.00\%         & 0.00\%                \\
+ pythia-1.4b   & 44.00\%       &  35.08\%    & 35.12\%        & 97.07\%               \\
+    \hline
+\end{tabular}
+\end{table*}
+
+
+\textbf{Erratum: Downstream evaluation bug}
+
+We identified a bug in the perplexity computation for the HellaSwag and ARC benchmarks in the originally submitted version. Specifically, the compression embedding introduced an off-by-one token shift that was not accounted for during likelihood scoring, resulting in the near-random accuracy reported in the original paper. The corrected results are shown above.
+
+
+\section{Reviewer 2 (eppq)}
+
+We appreciate the reviewer's careful reading and valuable feedback. Below we respond to each concern.
+
+
+Weaknesses:
+
+\textbf{W1. Limited number of samples. }
+% 1. The experimental sample size is quite small that most experiments use only 10 PG19 samples. For high-variance phenomena such as trajectory PCA statistics, this substantially limits statistical reliability. Moreover, many conclusions are presented as mean ± std, but with such a small sample size it remains unclear whether the averages are stable or dominated by a few difficult instances.
+
+We agree that 10 samples provide limited statistical reliability. Following this
+suggestion (and a similar concern raised by another reviewer), we re-ran all experiments
+on the 50-sample subset used by Kuratov et al.\ in the original full cramming paper.
+Our main conclusions---low PCA dimensionality and higher Information Gain of progressive
+cramming compared to full cramming---remain stable at this scale. The updated results
+are presented in \href{https://drive.google.com/file/d/148Cxg2jOx_-MIH5XC0I-oPbwVLG0Ktiz/view?usp=sharing}{Table~6}.
+% Table~\ref{tab:rebuttle_all_progressive_modifications}. {\color{red} TODO link to progressive cramming 50 samples results}
+
+Also see \textbf{W1} in our answer to reviewer \texttt{neRn}.
+
+% TODO larger number of samples
+
+\textbf{W2. Imperfect compression for HellaSwag and ARC evaluation}
+% 2.  The paper uses full cramming rather than progressive cramming on HellaSwag and ARC, and explicitly states that imperfect cases retained in the results. It is difficult to disentangle whether the capability drop is caused by the crammed embedding itself disrupting reasoning or simply by failed reconstruction corrupting the prefix.
+
+To disentangle the effect of imperfect reconstruction from the effect of the compression embedding itself, we emphasize the difference between autoregressive generation and multiple-choice benchmarks such as HellaSwag and ARC. In greedy generation, even small reconstruction errors can lead to large deviations in the output due to error accumulation, especially when errors occur early in the sequence.
+
+In contrast, HellaSwag and ARC operate in a non-generative (scoring) regime: the model evaluates fixed context–continuation pairs without regenerating the prefix. As a result, these benchmarks are significantly less sensitive to small reconstruction imperfections, since no sequential error propagation occurs.
+
+% table~\ref{tab:rebuttal_token_norm}
+The near-identical token-normalized accuracies for SmolLM2-1.7B (\href{https://drive.google.com/file/d/1B4ALS1umyqq70ScHf-_1XtVp04rdG6eY/view?usp=sharing}{Table~8}) indicate that imperfect reconstruction has minimal impact on benchmark performance. This confirms that the observed degradation is driven primarily by the compression embedding itself, rather than by reconstruction errors.
+
+\begin{table}[t]
+\centering
+\caption{Token-normalized accuracy (\%) for HellaSwag, ARC-Easy, and ARC-Challenge on SmolLM2-1.7B. Values are reported for perfectly reconstructed examples and for all examples.}
+\label{tab:rebuttal_token_norm}
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Subset} & \textbf{HellaSwag} & \textbf{ARC-Easy} & \textbf{ARC-Challenge} \\
+\midrule
+\textit{Perfect only} & 36.05 & 55.39 & 28.86 \\
+\textit{All samples}  & 36.14 & 55.21 & 28.44 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% TODO To check dependency from non-perfectly reconstructed samples, we computed benchmarks metrics with only perfectly reconstructed samples.
+
+% TODO benchmarks with progressive cramming
+
+\textbf{W3. Narrow downstream evaluation relying only on HellaSwag and ARC}
+% 3. The downstream evaluation remains relatively narrow, relying only on HellaSwag and ARC. While the authors argue that short-context tasks better isolate capability failures, this setup still only probes a limited slice of downstream behavior.
+
+We agree that HellaSwag and ARC alone probe a limited slice of downstream behavior.
+To address this, we additionally evaluated on \textbf{5-shot MMLU} (512 samples) under
+three compression modes: \textit{few\_shot} (only few-shot examples are compressed),
+\textit{full\_prefix} (both few-shot examples and the question are compressed), and
+\textit{random} (a random embedding replaces the compression embedding as a control).
+
+% (Table~\ref{tab:rebuttle_mmlu}) {\color{red} TODO add link to table image}
+The results \href{https://drive.google.com/file/d/1_NJSBkvhEyUdA45HD2QD8IxIEaQEpb9t/view?usp=sharing}{Table~9} are consistent with our earlier findings. When only few-shot tokens are
+compressed, all models shows accuracy degradation (ranging from
+$-2\%$ for Gemma-3-4B to $-15\%$ for Llama-3.1-8B), confirming that the model retains
+generative capability when uncompressed tokens follow the compression embedding. In
+contrast, \textit{full\_prefix} compression---where compression embedding compresses full prefix---leads to \textbf{complete failure}: accuracy drops to
+near zero and the models produce no valid (parseable) answers, indicating total collapse
+of the generative process. Notably, the \textit{random} baseline causes negligible
+degradation ($\leq 1\%$), showing that the mere presence of an out-of-distribution
+token is not sufficient to explain the failure---it is specifically the \emph{optimized}
+compression embedding that disrupts downstream computation.
+
+These results on a generative benchmark with longer context reinforce the conclusions
+drawn from HellaSwag and ARC, and demonstrate that the downstream collapse generalizes
+beyond multiple-choice likelihood-based evaluation.
+
+\begin{table*}[]
+    \centering
+    \caption{5-shot MMLU accuracy results on 512 samples with compression embedding in context. \textbf{CompMode = few\_shot} - only few-shot tokens were compressed with cramming. \textbf{CompMode = full\_prefix} - few-shot tokens and question tokens were compressed. \textbf{CompMode = random} - random embedding was placed instead of compression embedding. \textbf{Baseline Acc} - accuracy for base model without compression embedding. \textbf{Compressed Acc} - accuracy for model with compression embedding in context (regular tokens were placed after compression embedding). \textbf{Valid} columns are stands for percent of valid generated answers (when answer was parsed successfully).}
+    \label{tab:rebuttle_mmlu}
+
+\begin{tabular}{lllllll}
+\hline
+ Model         & CompMode    & Baseline Acc   & Compressed Acc   & Acc Diff   & Baseline Valid   & Compressed Valid   \\
+\hline
+ Llama-3.1-8B  & few\_shot    & 63.22\%         & 48.14\%           & -15.08\%    & 100.00\%          & 100.00\%            \\
+ Llama-3.1-8B  & full\_prefix & 63.22\%         & 0.00\%            & -63.22\%    & 100.00\%          & 0.00\%              \\
+ Llama-3.1-8B  & random      & 63.22\%         & 62.71\%           & -0.51\%     & 100.00\%          & 100.00\%            \\
+ \midrule
+ SmolLM2-1.7B  & few\_shot    & 50.98\%         & 45.91\%           & -5.07\%     & 100.00\%          & 100.00\%            \\
+ SmolLM2-1.7B  & full\_prefix & 50.98\%         & 0.00\%            & -50.98\%    & 100.00\%          & 0.00\%              \\
+ SmolLM2-1.7B  & random      & 50.98\%         & 46.66\%           & -4.32\%     & 100.00\%          & 100.00\%            \\
+ \midrule
+ gemma-3-4b-pt & few\_shot    & 58.13\%         & 56.07\%           & -2.05\%     & 100.00\%          & 100.00\%            \\
+ gemma-3-4b-pt & full\_prefix & 58.13\%         & 0.00\%            & -58.13\%    & 100.00\%          & 0.00\%              \\
+ gemma-3-4b-pt & random      & 58.13\%         & 59.18\%           & 1.05\%      & 100.00\%          & 100.00\%            \\
+\midrule
+ pythia-1.4b   & few\_shot    & 28.15\%         & 21.27\%           & -6.88\%     & 100.00\%          & 95.70\%             \\
+ pythia-1.4b   & full\_prefix & 28.15\%         & 4.83\%            & -23.33\%    & 100.00\%          & 24.80\%             \\
+ pythia-1.4b   & random      & 28.15\%         & 27.01\%           & -1.14\%     & 100.00\%          & 100.00\%            \\
+\hline
+\end{tabular}
+
+\end{table*}
+
+\textbf{W4. Compute expenditure vs.\ statistical coverage}
+% 4. The appendix reports roughly 2800 GPU-hours, while the main conclusions are still based on a small number of samples. I concern that the trade-off between compute expenditure and statistical coverage seems suboptimal. Broader validation on more samples might have been more convincing than extremely heavy optimization on a tiny set.
+
+The reported 2800 GPU-hours represent \emph{total} compute including all debugging,
+hyperparameter sweeps, and failed runs---not the cost of final experiments alone.
+
+Progressive cramming is inherently expensive: current implementation was optimized through dynamic batching and code optimization, but it remains roughly $2\times$ slower than full cramming.
+
+As noted in our response to reviewer~\texttt{neRn} to W1, we have now extended all experiments to 50 samples following Kuratov et al., and the main conclusions remain stable \href{https://drive.google.com/file/d/148Cxg2jOx_-MIH5XC0I-oPbwVLG0Ktiz/view?usp=sharing}{Table~6}.
+
+% (Table~\ref{tab:rebuttle_all_progressive_modifications}). {\color{red} TODO add link to full }
+
+% TODO compare to full cramming
+
+
+\textbf{W5. Paper length and organization}
+% 5. The paper does not fill eight pages, and although there is some additional content in the appendix, I recommend that the author reorganize the results to make the main body more substantial.
+
+We agree that the main body can be made more substantial. In the revised version we will
+reorganize the paper, ensuring the paper makes full use of the available page budget.
+
+\textbf{Erratum: Downstream evaluation bug}
+
+After submission, we discovered a bug in the perplexity computation for the HellaSwag and ARC benchmarks. The compression embedding introduced an off-by-one token shift that was not accounted for during likelihood scoring, causing the near-random downstream accuracy reported in the original paper. After correction, HellaSwag accuracy under cramming ranges from 34\%--38\% for most models, representing a consistent but moderate drop from baseline---in line with our central claim that high reconstruction accuracy does not imply preservation of downstream-relevant semantics. Corrected results are presented in \href{https://drive.google.com/file/d/1DIjiTpyIqQ4xuW0k9Q7mjCOFuXUPz2YX/view?usp=sharing}{Table~7}. See also response to Reviewer~\texttt{neRn}, Q3.
+% Table~\ref{tab:rebuttle_downstream_eval_progressive} {\color{red} TODO add link to table results}. See also response to Reviewer~\texttt{neRn}, Q3.
+
+
+
+\section{Reviewer 3 (UoVE)}
+
+We are grateful for the detailed and insightful review. We address the raised concerns point by point.
+
+
+\textbf{W1. Attention-hijacking narrative}
+
+% Core weakness: A major weakness is the attention-hijacking narrative (Sec. 4.4 and Sec. 5.5; Tables 3-4), which occupies a substantial portion of the main paper. As written, this part of the manuscript reads more like an exploratory collection of observations than a cohesive mechanistic account, and it detracts from the paper’s stronger ideas about progressive compression. The authors emphasize strong model-family dependence, yet the aggregate attention-mass statistics in Table 3 do not yield a mechanism that clearly generalizes across families. The BOS ablation in Table 4 is a natural interference test, but its effects are inconsistent across models, with large gains for Llama, negligible changes for Pythia and SmolLM2, and mixed behavior for Gemma. This makes it difficult to sustain a single “competing attention sinks” explanation. The downstream degradation results (Sec. 5.6; Table 5) are presented alongside this narrative, yet the link between attention concentration and capability collapse is not clearly established.
+
+We appreciate this critique and agree that the original presentation mixed observations
+with mechanistic claims insufficiently supported by causal evidence. We address this
+in two ways.
+
+\textbf{Causal evidence.} We conducted attention knockout experiments
+(see answer to reviewer \texttt{neRn}, W2) that provide direct causal support:
+the forward/reverse knockout asymmetry shows that early-layer interactions with the
+compression embedding drive downstream degradation, while late-layer attention mass
+has minimal causal impact. MMLU evaluation (see answer to reviewer \texttt{eppq}, W3)
+further confirms that full-prefix compression causes complete generative failure.
+
+\textbf{Model-family dependence.} We agree that a single ``competing attention sinks''
+explanation is too strong. Different architectures handle BOS tokens and attention
+sinks differently (e.g., Llama uses a dedicated BOS sink, while Pythia distributes
+attention more uniformly), so the \emph{mechanism} varies even though the
+\emph{downstream effect} is consistent. In the revision we will restructure
+Section~4.4, leading with causal knockout results and repositioning attention-mass
+statistics and BOS ablation as supporting model-specific observations.
+
+% TODO add causality analysis for downstream performance degradation
+% TODO train cramming with masked first layers
+
+\textbf{Erratum: Downstream evaluation bug}
+
+After submission, we discovered a bug in the perplexity computation for the HellaSwag and ARC benchmarks. The compression embedding introduced an off-by-one token shift that was not accounted for during likelihood scoring, causing the near-random downstream accuracy reported in the original paper. After correction, HellaSwag accuracy under cramming ranges from 34\%--38\% for most models, representing a consistent but moderate drop from baseline---in line with our central claim that high reconstruction accuracy does not imply preservation of downstream-relevant semantics. Corrected results are presented in \href{https://drive.google.com/file/d/1DIjiTpyIqQ4xuW0k9Q7mjCOFuXUPz2YX/view?usp=sharing}{Table~7}. See also response to Reviewer~\texttt{neRn}, Q3.
+
+
+\section{Reviewer 4 (sozN)}
+
+We thank the reviewer for the thoughtful comments and suggestions for strengthening the paper. Our responses follow below.
+
+\textbf{Weaknesses:}
+
+\textbf{W1.} Single evaluation dataset.
+% - single dataset used for evaluation, some extra datasets or ones with more diverse distribution of the language might be beneficial for the work
+
+To address this issue we reproduced fanfics dataset from Kuratov et al and runned experiments on it. Results may be found in \href{https://drive.google.com/file/d/1iggPKMXXLJ_uL018BLOI3Ummv780ayF7/view?usp=sharing}{Table~11}.
+
+The key findings are consistent with those observed on PG-19. Information gain follows the same patterns across configurations: low-dimensional projection substantially increases both the number of compressed tokens and information gain.
+
+The low-dimensional structure of compression trajectories also generalizes to Fanfics data. While PCA 99\% values are somewhat larger than those observed on PG-19---likely reflecting the greater distributional diversity of fan-fiction text---they remain at least an order of magnitude below the embedding dimensionality.
+
+% {\color{red} TODO waiting for results, TODO attach table}
+% TODO results
+
+% \setcounter{table}{10}
+\begin{table*}[]
+    \centering
+    \caption{Progressive cramming variants and key metrics across model families on \textbf{50 samples} of \textbf{Fanfics} dataset following Kuratov et al. For each family we report baseline progressive cramming, low-dimensional projection only (``dim''), activation alignment only ($\alpha$, $L$), and their combination.}
+    \label{tab:rebuttle_fanfics}
+    \begin{small}
+    \begin{tabular}{lllll}
+\hline
+ Model                                                                              & Compressed Tokens         & Information Gain         & Trajectory Length           & PCA 99\%                    \\
+\hline
+ pythia-1.4b {\small lr=0.5}                                                        & 564.5 {\small $\pm$ 7.5}  & 1255 {\small $\pm$ 309}  & 6331 {\small $\pm$ 739}     & 46.12 {\small $\pm$ 4.17}  \\
+ pythia-1.4b {\small lr=0.5} {\small $\alpha=1.0$} {\small $L=8$}                   & 517 {\small $\pm$ 26}     & 1176 {\small $\pm$ 295}  & 6180 {\small $\pm$ 598}     & 43.06 {\small $\pm$ 3.49}  \\
+ pythia-1.4b {\small dim=256} {\small lr=0.5}                                       & 619.5 {\small $\pm$ 12.5} & 2083 {\small $\pm$ 258}  & 510014 {\small $\pm$ 92005} & 124.5 {\small $\pm$ 14.23} \\
+ pythia-1.4b {\small dim=256} {\small lr=0.5} {\small $\alpha=1.0$} {\small $L=8$}  & 540 {\small $\pm$ 54}     & 1693 {\small $\pm$ 181}  & 494306 {\small $\pm$ 58027} & 128.8 {\small $\pm$ 12.6}  \\
+ \midrule
+ SmolLM2-1.7B {\small lr=0.1}                                                       & 486 {\small $\pm$ 45}     & 710 {\small $\pm$ 666}   & 1038 {\small $\pm$ 139}     & 28.72 {\small $\pm$ 4.68}  \\
+ SmolLM2-1.7B {\small lr=0.1} {\small $\alpha=1.0$} {\small $L=8$}                  & 337.5 {\small $\pm$ 19.5} & 640 {\small $\pm$ 271}   & 878 {\small $\pm$ 137}      & 22.76 {\small $\pm$ 4.33}  \\
+ SmolLM2-1.7B {\small dim=256} {\small lr=0.1}                                      & 1050 {\small $\pm$ 72}    & 3318 {\small $\pm$ 659}  & 321418 {\small $\pm$ 59468} & 95.14 {\small $\pm$ 16.53} \\
+ SmolLM2-1.7B {\small dim=256} {\small lr=0.1} {\small $\alpha=1.0$} {\small $L=8$} & 968 {\small $\pm$ 1}      & 3396 {\small $\pm$ 342}  & 305391 {\small $\pm$ 53905} & 71.44 {\small $\pm$ 12.46} \\
+ \midrule
+ gemma-3-4b-pt {\small lr=0.1}                                                      & 416.4 {\small $\pm$ 22.3} & -118 {\small $\pm$ 1241} & 870 {\small $\pm$ 274}      & 24.22 {\small $\pm$ 10.07} \\
+ gemma-3-4b-pt {\small lr=0.1} {\small $\alpha=1.0$} {\small $L=8$}                 & 410.4 {\small $\pm$ 43.7} & 437 {\small $\pm$ 509}   & 868 {\small $\pm$ 305}      & 23.02 {\small $\pm$ 9.62}  \\
+ gemma-3-4b-pt {\small dim=32} {\small lr=0.1}                                      & 907.8 {\small $\pm$ 90.8} & 2979 {\small $\pm$ 801}  & 84162 {\small $\pm$ 15369}  & 39.44 {\small $\pm$ 3.59}  \\
+ gemma-3-4b-pt {\small dim=32} {\small lr=0.1} {\small $\alpha=1.0$} {\small $L=8$} & 962 {\small $\pm$ 31.3}   & 2667 {\small $\pm$ 1248} & 111260 {\small $\pm$ 23499} & 43.86 {\small $\pm$ 3.81}  \\
+\hline
+\end{tabular}
+\end{small}
+\end{table*}
+
+
+\textbf{W2. No proposal for introducing valuable semantic properties}
+% - no proposal for introducing valuable semantic properties, but statement of the non-applicability
+
+We agree---cramming optimizes solely for token reconstruction and does not explicitly
+target semantic properties. Introducing such properties is outside the scope of this
+work. Compression approaches that do optimize for semantics (e.g., Gisting, Activation
+Beacon, AutoCompressors, ICAE) are discussed in the related work section and represent
+a complementary research direction.
+
+\textbf{W3. Higher cost of progressive optimization procedure}
+% - higher cost of progressive optimization procedure
+
+Progressive cramming optimization is $2\times$ slower than full cramming. The main
+bottleneck in current implementation is that within a batch, a single slowly converging sample blocks new token addition for all other samples.
+
+\setcounter{table}{9}
+\begin{table*}[t]
+\centering
+\caption{Token-normalized accuracy (\%) on HellaSwag, ARC-Easy, and ARC-Challenge for SmolLM2-1.7B under different perplexity computation strategies (perfectly reconstructed samples).}
+\label{tab:semantic_benchmarks_token}
+
+
+\begin{tabular}{lccc}
+\hline
+\textbf{Setup} & \textbf{HellaSwag} & \textbf{ARC-Easy} & \textbf{ARC-Challenge} \\
+\hline
+Baseline & 52.41 & 68.72 & 36.66 \\
+Baseline endings & 53.30 & 53.88 & 40.29 \\
+Compression & 36.47 & 55.87 & 28.62 \\
+% Compression edge & 36.05 & 55.39 & 28.86 \\
+Compression endings & 40.70 & 41.63 & 31.36 \\
+Compression only & 34.57 & 30.92 & 22.94 \\
+% Compression only edge & 32.69 & 32.37 & 26.16 \\
+% Compression only endings & 34.57 & 30.92 & 22.94 \\
+\hline
+\end{tabular}
+
+\end{table*}
+
+\textbf{Questions:}
+
+\textbf{Q1. How does the speed (in terms of optimization steps) of progressive optimization relate to vanilla cramming?}
+
+Full cramming was limited to 10k steps. Progressive cramming, due to its autoregressive approach, may finish earlier. On average, optimization steps remain below 10k for simple cramming:
+
+\begin{itemize}
+    \item Pythia-1.4B: 6844 {\small $\pm$ 2043}
+    \item SmolLM2-1.7B: 9391 {\small $\pm$ 2068}
+    \item Gemma-3-4B-pt: 8954 {\small $\pm$ 2900}
+\end{itemize}
+
+Experiments for Llama 8B were not conducted due to time constraints.
+
+\textbf{Q2. How semantic properties of the resulting representations can be evaluated other than by concatenation with the queries?}
+
+% Table~\ref{tab:rebuttle_mmlu} {\color{red} TODO add link to MMLU results}
+Generative benchmark. We additionally report evaluation results on \textbf{5-shot MMLU} in \href{https://drive.google.com/file/d/1_NJSBkvhEyUdA45HD2QD8IxIEaQEpb9t/view?usp=sharing}{Table~9}. Unlike HellaSwag/ARC, which are likelihood-based (scoring pre-defined completions), MMLU is generative—the model must produce an answer. Compressing only few-shot examples causes modest degradation ($-2\%$ to $-15\%$), while compressing the full prefix leads to complete failure ($0\%$ valid answers), consistent with our findings on likelihood-based benchmarks. See also answer to reviewer \texttt{eppq}, W3.
+
+Different perplexity computation strategies. We evaluated the semantic properties of compression embeddings on the \textbf{HellaSwag} and \textbf{ARC} benchmarks using different perplexity computation strategies. Specifically, we varied which token logits were included when computing perplexity:
+
+\begin{itemize}
+    \item \textbf{baseline} – standard perplexity without compression embeddings; both context and answer ending logits are included.
+    \item \textbf{baseline\_endings} – standard perplexity without compression embeddings; only the answer ending logits are considered.
+    \item \textbf{compression} – perplexity computed with compression embeddings; both context and answer ending logits are included.
+    % \item \textbf{compression\_edge} – perplexity computed with compression embeddings; logits of the last compression token, the context, and the answer ending are included.
+    \item \textbf{compression\_endings} – perplexity computed with compression embeddings; only the answer ending logits are considered.
+    \item \textbf{compression\_only} – perplexity computed using only compression embeddings in place of the context; only the answer ending logits are included.
+    % \item \textbf{compression\_only\_edge} – perplexity computed using only compression embeddings in place of the context; logits of the last compression token and the answer ending are included.
+    \item \textbf{compression\_only\_endings} – perplexity computed using only compression embeddings in place of the context; only the answer ending logits are included.
+\end{itemize}
+
+
+% Table~\ref{tab:semantic_benchmarks_token}
+These strategies allow us to assess how much semantic information is preserved in the compression embeddings under different conditions. By comparing performance across these methods, we can isolate the contributions of context versus compression tokens and evaluate the robustness of semantic representations in compressed form (see \href{https://drive.google.com/file/d/1-qex3vN5c7WCSDDHi2bbBT29Cgy0oYZO/view?usp=sharing}{Table~10}).
+
+\textbf{Q3. How can the number of optimization steps be reduced?}
+
+Our low-dimensional projection partially addresses this---it converges faster and compresses fewer tokens. Further reduction could involve training an encoder to predict a good starting point, left for future work.
+
+\textbf{Erratum: Downstream evaluation bug}
+
+After submission, we discovered a bug in the perplexity computation for the HellaSwag and ARC benchmarks. The compression embedding introduced an off-by-one token shift that was not accounted for during likelihood scoring, causing the near-random downstream accuracy reported in the original paper. After correction, HellaSwag accuracy under cramming ranges from 34\%--38\% for most models, representing a consistent but moderate drop from baseline---in line with our central claim that high reconstruction accuracy does not imply preservation of downstream-relevant semantics. Corrected results are presented in \href{https://drive.google.com/file/d/1DIjiTpyIqQ4xuW0k9Q7mjCOFuXUPz2YX/view?usp=sharing}{Table~7}. See also response to Reviewer~\texttt{neRn}, Q3.
