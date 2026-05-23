@@ -467,6 +467,13 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             if state.update(convergence_per_sample):
                 return last_loss, last_convergence, True
 
+            # Hard cap on cumulative per-sample steps across stages within this batch.
+            # An exhausted sample is permanently skipped; if that drains the batch,
+            # exit the stage as "converged" so the outer retry path doesn't fire
+            # (a budget-exhausted sample can't make progress on retry).
+            if state.mark_exhausted(self.args.max_optimization_steps_per_sample):
+                return last_loss, last_convergence, True
+
         return last_loss, last_convergence, False
 
     def _step_per_sample_optimizers(self, batch_ctx: _BatchContext, state: ProgressiveSampleStateMachine) -> None:

@@ -362,7 +362,7 @@ if __name__ == "__main__":
         if args.num_alignment_layers is not None and args.num_alignment_layers != 1:
             exp_suffix = f"{exp_suffix}_align_{args.num_alignment_layers}"
 
-        out_dir_name = f"artifacts/experiments_progressive/{exp_suffix}"
+        out_dir_name = f"artifacts/experiments_progressive/{exp_suffix}_fix_max_steps"
         if os.path.exists(out_dir_name):
             print("Experiment", out_dir_name, "exists, skip.")
             continue
@@ -370,7 +370,7 @@ if __name__ == "__main__":
         # Add output_dir to command
         cmd_args.append(f"--output_dir {out_dir_name}")
         script = f" cd {workdir} && {python_path} scripts/activation_distillation.py  {' '.join(cmd_args)}"
-        job_desc = f"CH: progressive {exp_suffix} #{author_name} #multimodal #notify_completed @mrsndmn"
+        job_desc = f"CH: progressive_fix_max_steps {exp_suffix} #{author_name} #multimodal #notify_completed @mrsndmn"
 
         # Check if job with same description already exists in queue
         if job_desc in in_progress_job_descs:
