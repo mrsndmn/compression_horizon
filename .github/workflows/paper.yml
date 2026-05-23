@@ -1,0 +1,137 @@
+name: Build Paper
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'paper/**'
+      - '.github/workflows/paper.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'paper/**'
+      - '.github/workflows/paper.yml'
+
+env:
+  TINYTEX_DIR: /home/jovyan/.TinyTeX
+  TEX_BIN: /home/jovyan/.TinyTeX/bin/x86_64-linux
+  TEX_PACKAGES: >-
+    collection-latexrecommended
+    collection-mathscience
+    collection-fontsrecommended
+    microtype graphics subcaption booktabs ulem cancel
+    pgf hyperref amsfonts cleveref todonotes xcolor lipsum
+    psnfss mathtools amscls etoolbox tools caption float listings
+    url enumitem multirow algorithms algorithmicx fancyhdr
+    pdftexcmds infwarerr kvoptions ltxcmds forloop
+
+jobs:
+  build-paper:
+    runs-on: self-hosted
+    outputs:
+      short_sha: ${{ steps.meta.outputs.short_sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache TinyTeX installation
+        id: cache-tinytex
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.TINYTEX_DIR }}
+          key: tinytex-pdflatex-paper-v1-${{ hashFiles('.github/workflows/paper.yml') }}
+          restore-keys: |
+            tinytex-pdflatex-paper-v1-
+
+      - name: Install TinyTeX and TeX packages
+        if: steps.cache-tinytex.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          if [ ! -x "${TEX_BIN}/pdflatex" ]; then
+            tmpdir="$(mktemp -d)"
+            curl -fsSL "https://yihui.org/tinytex/install-bin-unix.sh" -o "${tmpdir}/install-tinytex.sh"
+            sh "${tmpdir}/install-tinytex.sh"
+            rm -rf "${tmpdir}"
+          fi
+          "${TEX_BIN}/tlmgr" install ${TEX_PACKAGES} || true
+          "${TEX_BIN}/pdflatex" --version | head -1
+
+      - name: Verify pdflatex
+        run: |
+          "${TEX_BIN}/pdflatex" --version | head -1
+
+      - name: Build paper PDF
+        working-directory: paper
+        run: |
+          set -euo pipefail
+          "${TEX_BIN}/latexmk" -pdf -interaction=nonstopmode -halt-on-error example_paper.tex
+          ls -la example_paper.pdf
+
+      - name: Compute build metadata
+        id: meta
+        run: echo "short_sha=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload PDF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-pdf
+          path: paper/example_paper.pdf
+          if-no-files-found: error
+
+      - name: Send PDF to Telegram
+        if: success()
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_REF: ${{ github.ref_name }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_EVENT: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TG_BOT_TOKEN:-}" ] || [ -z "${TG_CHAT_ID:-}" ]; then
+            echo "TG_BOT_TOKEN or TG_CHAT_ID not configured; skipping Telegram upload."
+            exit 0
+          fi
+          short_sha="${GITHUB_SHA:0:7}"
+          caption="📄 Paper build: ${GITHUB_REPO}@${GITHUB_REF} (${short_sha})"
+          caption="${caption}"$'\n'"event=${GITHUB_EVENT} by @${GITHUB_ACTOR}"
+          if [ -n "${PR_NUMBER:-}" ]; then
+            caption="${caption}"$'\n'"PR #${PR_NUMBER}"
+          fi
+          unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+          curl -fsS \
+            -F "chat_id=${TG_CHAT_ID}" \
+            -F "document=@paper/example_paper.pdf;filename=example_paper-${short_sha}.pdf;type=application/pdf" \
+            -F "caption=${caption}" \
+            "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument"
+
+  upload-s3:
+    runs-on: self-hosted
+    needs: build-paper
+    steps:
+      - name: Download paper PDF artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: paper-pdf
+          path: ./pdf
+
+      - name: Upload to Yandex Object Storage
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+            echo "AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY not configured; skipping S3 upload."
+            exit 0
+          fi
+          unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+          ls -la ./pdf
+          /home/jovyan/.mlspace/envs/compression_horizon/bin/s3cmd \
+            -c /dev/null \
+            --host=storage.yandexcloud.net \
+            --host-bucket='%(bucket)s.storage.yandexcloud.net' \
+            --region=ru-central1 \
+            put ./pdf/example_paper.pdf s3://papers-drafts/progressive_cramming.pdf
