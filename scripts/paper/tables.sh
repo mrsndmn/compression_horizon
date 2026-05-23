@@ -1,7 +1,7 @@
 
 set -x
 
-tab:all_learning_rates
+# tab:all_learning_rates
 PYTHONPATH=./src:. python scripts/paper/low_dimesional.py \
   --checkpoints \
     artifacts/experiments_progressive/sl_4096_Meta-Llama-3.1-8B/progressive_prefixes \
