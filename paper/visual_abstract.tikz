@@ -1,0 +1,63 @@
+\resizebox{\columnwidth}{!}{%
+\begin{tikzpicture}[
+    box/.style={rectangle, rounded corners=2pt, minimum height=0.55cm, draw, thick, font=\footnotesize\sffamily},
+    arrow/.style={-{Stealth[length=2mm]}, thick},
+    label/.style={font=\scriptsize\sffamily},
+]
+
+% === FULL CRAMMING ===
+\node[font=\small\sffamily\bfseries, text=fullred] at (-1.5, 0.15) {Full Cramming};
+\node[font=\scriptsize\sffamily, text=gray] at (-1.5, -0.2) {optimize for all tokens at once};
+
+% Trainable Embedding (distinct style) -> Target Tokens -> Outputs
+\node[box, fill=fullred!35, draw=fullred, line width=1.2pt, minimum width=0.8cm, double, double distance=1pt] (full-emb) at (-2.8, -0.85) {$\mathbf{e}$};
+% \node[font=\tiny\sffamily, text=fullred!70, above=0.02cm of full-emb] {trainable};
+\node[box, fill=white, draw=gray!60, minimum width=2cm] (full-target) at (-0.5, -0.85) {$t_1, \ldots, t_N$};
+\draw[arrow, fullred] (full-emb) -- node[above, font=\tiny\sffamily, text=gray] {} (full-target);
+
+% Branch to Train/Gen
+\node[box, fill=fullred!10, draw=fullred!70, minimum width=1.1cm] (full-train) at (3.4, -0.5) {Train};
+\node[box, fill=failgray!30, draw=failgray, minimum width=1.1cm] (full-gen) at (3.4, -1.2) {Gen};
+
+\draw[arrow, fullred!70] (full-target.east) -- ++(0.2,0) |- (full-train.west);
+\draw[arrow, failgray] (full-target.east) -- ++(0.2,0) |- (full-gen.west);
+
+% Labels
+\node[label, right=0.1cm of full-train, text=fullred!80] {${\sim}$1\% err};
+\node[label, right=0.1cm of full-gen, text=failgray] {0\% acc};
+
+% === DIVIDER ===
+\draw[dashed, gray!50, thick] (-3.5, -1.7) -- (5.1, -1.7);
+
+% === PROGRESSIVE CRAMMING ===
+\node[font=\small\sffamily\bfseries, text=progblue] at (-1.5, -2.0) {Progressive Cramming};
+\node[font=\scriptsize\sffamily, text=gray] at (-1.5, -2.35) {incrementally extend target};
+
+% Trainable Embedding (distinct style)
+\node[box, fill=progblue!40, draw=progblue, line width=1.2pt, minimum width=0.8cm, double, double distance=1pt] (prog-emb) at (-2.8, -3.0) {$\mathbf{e}^*$};
+% \node[font=\tiny\sffamily, text=progblue!70, above=0.02cm of prog-emb] {trainable};
+
+% Progressive target sequence (regular tokens - white/light fill)
+\node[box, fill=white, draw=gray!50, minimum width=0.5cm] (p1) at (-1.6, -3.0) {\small$t_1$};
+\node[box, fill=white, draw=gray!50, minimum width=0.6cm] (p2) at (-0.7, -3.0) {\small$t_{1:2}$};
+\node[font=\small, text=gray!70] at (0.05, -3.0) {$\cdots$};
+\node[box, fill=white, draw=gray!50, minimum width=0.7cm] (pn) at (0.85, -3.0) {\small$t_{1:N}$};
+
+\draw[arrow, progblue] (prog-emb) -- (p1);
+\draw[arrow, gray!50, shorten >=1pt, shorten <=1pt] (p1) -- (p2);
+\draw[arrow, gray!50, shorten >=1pt, shorten <=1pt] (p2) -- (-0.2, -3.0);
+\draw[arrow, gray!50, shorten >=1pt, shorten <=1pt] (0.3, -3.0) -- (pn);
+
+% Branch to Train/Gen
+\node[box, fill=successgreen!20, draw=successgreen, minimum width=1.1cm] (prog-train) at (3.4, -2.65) {Train};
+\node[box, fill=successgreen!20, draw=successgreen, minimum width=1.1cm] (prog-gen) at (3.4, -3.35) {Gen};
+
+\draw[arrow, successgreen] (pn.east) -- ++(0.2,0) |- (prog-train.west);
+\draw[arrow, successgreen] (pn.east) -- ++(0.2,0) |- (prog-gen.west);
+
+% Labels
+\node[label, right=0.1cm of prog-train, text=successgreen!80] {0\% err};
+\node[label, right=0.1cm of prog-gen, text=successgreen!80] {100\%};
+
+\end{tikzpicture}%
+}
