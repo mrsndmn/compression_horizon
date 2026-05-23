@@ -603,7 +603,7 @@ def plot_cumulative_knockout(
             color="#2563eb",
             linewidth=1.5,
             markersize=4,
-            label="Forward knockout MMLU Accuracy (layers 0..k)",
+            label="Forward knockout HellaSwag Accuracy (layers 0..k)",
         )
 
     if "cumulative_reconstruction" in summary:
@@ -628,7 +628,7 @@ def plot_cumulative_knockout(
     ax_fwd.set_xlabel("Number of layers knocked out (0 = Cram, L = Base)")
     ax_fwd.set_ylabel("Accuracy")
     ax_fwd.set_xlim(-0.5, num_layers + 0.5)
-    ax_fwd.set_title("Forward knockout MMLU Accuracy (layers 0..k)")
+    ax_fwd.set_title("Forward knockout HellaSwag Accuracy (layers 0..k)")
     ax_fwd.legend(loc="best", fontsize=8)
     ax_fwd.grid(True, alpha=0.3)
 

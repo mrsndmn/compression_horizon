@@ -1,11 +1,12 @@
-\begin{tabular}{lllll}
+\begin{tabular}{lllllllllll}
 \hline
-                   & \multicolumn{2}{c}{\textbf{HellaSwag}} & \multicolumn{2}{c}{\textbf{ARC-E}} \\
- Model               & Base            & Cram            & Base            & Cram            \\
+ & \multicolumn{5}{c}{\textbf{HellaSwag}} & \multicolumn{5}{c}{\textbf{ARC-E}} \\
+\cline{2-6}\cline{7-11}
+ Model               & Base            & Prog Acc        & Prog Conv\\%     & Full Acc        & Full Conv\\%     & Base            & Prog Acc   & Prog Conv\\%   & Full Acc   & Full Conv\\%   \\
 \hline
- \small pythia-1.4b  & 44.00{\small \%} & 35.47{\small \%} & 45.95{\small \%} & 24.32{\small \%} \\
- \small SLM2-1.7B    & 53.56{\small \%} & 36.90{\small \%} & 58.77{\small \%} & 49.67{\small \%} \\
- \small Llama-3.1-8B & 61.91{\small \%} & 38.62{\small \%} & 55.84{\small \%} & 46.72{\small \%} \\
- \small gemma-3-4b   & 57.07{\small \%} & 54.97{\small \%} & 60.53{\small \%} & 24.29{\small \%} \\
+ \small pythia-1.4b  & 44.00{\small \%} & 37.63{\small \%} & 97.07{\small \%} & 37.83{\small \%} & 97.07{\small \%} & 45.95{\small \%} & --         & --            & --         & --            \\
+ \small SLM2-1.7B    & 53.56{\small \%} & 37.01{\small \%} & 95.51{\small \%} & 38.71{\small \%} & 96.88{\small \%} & 58.77{\small \%} & --         & --            & --         & --            \\
+ \small Llama-3.1-8B & 61.91{\small \%} & 40.80{\small \%} & 97.66{\small \%} & 40.00{\small \%} & 97.66{\small \%} & 55.84{\small \%} & --         & --            & --         & --            \\
+ \small gemma-3-4b   & 57.07{\small \%} & --              & 0.00{\small \%}  & 46.67{\small \%} & 5.86{\small \%}  & 60.53{\small \%} & --         & --            & --         & --            \\
 \hline
 \end{tabular}
