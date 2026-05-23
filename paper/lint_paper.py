@@ -17,6 +17,10 @@ ATTACHMENT_DIRS = ("figures", "styles")
 
 COMMENT_RE = re.compile(r"(?<!\\)%.*")
 
+# Matches a standalone ``nan`` token (any case) so we don't trip on words
+# like "nano" or model names that happen to contain the substring.
+NAN_RE = re.compile(r"(?<![A-Za-z])nan(?![A-Za-z])", re.IGNORECASE)
+
 REF_PATTERNS = [
     re.compile(r"\\includegraphics(?:\s*\[[^\]]*\])?\s*\{([^}]+)\}"),
     re.compile(r"\\input\s*\{([^}]+)\}"),
@@ -66,8 +70,28 @@ def check_unused_attachments() -> list[str]:
     ]
 
 
+def check_table_nans() -> list[str]:
+    """No table row may carry a NaN value (e.g. from a missing metric).
+
+    Scans every ``.tex`` source for ``nan`` tokens on lines that look like
+    table rows (those with an ``&`` column separator), after stripping
+    comments so commented-out rows are ignored."""
+    errors: list[str] = []
+    for src in sorted(PAPER_DIR.rglob("*.tex")):
+        text = src.read_text(encoding="utf-8", errors="ignore")
+        for lineno, raw in enumerate(text.splitlines(), start=1):
+            line = COMMENT_RE.sub("", raw)
+            if "&" not in line:
+                continue
+            if NAN_RE.search(line):
+                rel = src.relative_to(PAPER_DIR)
+                errors.append(f"{rel}:{lineno} table row contains NaN: {line.strip()}")
+    return errors
+
+
 CHECKS: list[tuple[str, Callable[[], list[str]]]] = [
     ("unused-attachments", check_unused_attachments),
+    ("table-nans", check_table_nans),
 ]
 
 
