@@ -70,6 +70,14 @@ jobs:
         id: meta
         run: echo "short_sha=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
 
+      - name: Upload PR artifact
+        if: success() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-pdf-${{ steps.meta.outputs.short_sha }}
+          path: paper/example_paper.pdf
+          retention-days: 1
+
       - name: Upload to Yandex Object Storage
         if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
