@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Fail the pipeline if any file under paper/figures or paper/styles is never
-referenced from a .tex source in the paper directory.
+"""Run all automated paper lint checks.
 
-Matching is by basename (with and without extension), since LaTeX resolves
-includes via TEXINPUTS / \\graphicspath rather than literal paths.
+Each check is a callable returning a list of human-readable error strings
+(empty list = pass). Add new checks by appending to ``CHECKS``.
 """
 
 from __future__ import annotations
@@ -11,9 +10,12 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from typing import Callable
 
 PAPER_DIR = Path(__file__).resolve().parent
 ATTACHMENT_DIRS = ("figures", "styles")
+
+COMMENT_RE = re.compile(r"(?<!\\)%.*")
 
 REF_PATTERNS = [
     re.compile(r"\\includegraphics(?:\s*\[[^\]]*\])?\s*\{([^}]+)\}"),
@@ -25,10 +27,8 @@ REF_PATTERNS = [
     re.compile(r"\\bibliography\s*\{([^}]+)\}"),
 ]
 
-COMMENT_RE = re.compile(r"(?<!\\)%.*")
 
-
-def collect_reference_names() -> set[str]:
+def _collect_reference_names() -> set[str]:
     """Scan .tex and .sty sources for file references. Style files are
     included because LaTeX classes pull in other styles via \\RequirePackage."""
     refs: set[str] = set()
@@ -47,7 +47,7 @@ def collect_reference_names() -> set[str]:
     return refs
 
 
-def attachment_files() -> list[Path]:
+def _attachment_files() -> list[Path]:
     files: list[Path] = []
     for sub in ATTACHMENT_DIRS:
         d = PAPER_DIR / sub
@@ -56,23 +56,33 @@ def attachment_files() -> list[Path]:
     return files
 
 
+def check_unused_attachments() -> list[str]:
+    """Every file under figures/ and styles/ must be referenced from a source."""
+    refs = _collect_reference_names()
+    return [
+        f"{f.relative_to(PAPER_DIR)} is not referenced from any .tex/.sty source"
+        for f in sorted(_attachment_files())
+        if f.stem not in refs and f.name not in refs
+    ]
+
+
+CHECKS: list[tuple[str, Callable[[], list[str]]]] = [
+    ("unused-attachments", check_unused_attachments),
+]
+
+
 def main() -> int:
-    refs = collect_reference_names()
-    files = attachment_files()
-    unused = [f for f in files if f.stem not in refs and f.name not in refs]
-
-    if unused:
-        print("ERROR: unused attachment files in paper/:", file=sys.stderr)
-        for f in sorted(unused):
-            print(f"  - {f.relative_to(PAPER_DIR)}", file=sys.stderr)
-        print(
-            "\nEither reference these files from a .tex source or delete them.",
-            file=sys.stderr,
-        )
-        return 1
-
-    print(f"OK: all {len(files)} attachments under {', '.join(ATTACHMENT_DIRS)}/ are referenced.")
-    return 0
+    overall_ok = True
+    for name, check in CHECKS:
+        errors = check()
+        if errors:
+            overall_ok = False
+            print(f"FAIL [{name}]", file=sys.stderr)
+            for err in errors:
+                print(f"  - {err}", file=sys.stderr)
+        else:
+            print(f"OK   [{name}]")
+    return 0 if overall_ok else 1
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ paper/
 ├── example_paper.bib            # bibliography
 ├── figures/                     # all .pdf figures and .tikz sources
 ├── styles/                      # ICML class + auxiliary .sty / .bst files
-├── check_unused_attachments.py  # CI gate: fails on unreferenced attachments
+├── lint_paper.py                # CI gate: runs all paper lint checks
 ├── .latexmkrc                   # sets TEXINPUTS for figures//, styles// and out_dir=build
 └── build/                       # latexmk output (PDF + aux files, git-ignored)
 ```
@@ -22,7 +22,7 @@ From the repository root:
 make paper
 ```
 
-The target runs `check_unused_attachments.py` first, then invokes `latexmk -pdf`.
+The target runs `lint_paper.py` first, then invokes `latexmk -pdf`.
 The compiled PDF is written to `paper/build/example_paper.pdf`; all aux files
 stay inside `paper/build/`.
 
@@ -39,6 +39,7 @@ make paper-clean
    `\input{<basename.tikz>}`, or `\usepackage{<basename>}`. No subdir prefix
    is needed because `paper/.latexmkrc` extends `TEXINPUTS` to cover both
    subdirectories.
-3. Run `make paper`. The unused-attachments check will fail if you forget to
-   reference the file (or, after removing a reference, forget to delete the
-   file).
+3. Run `make paper`. `lint_paper.py` runs the unused-attachments check (and
+   any future paper-lint checks) and will fail the build if you forget to
+   reference the file — or, after removing a reference, forget to delete the
+   file.

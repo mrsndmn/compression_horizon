@@ -8,7 +8,7 @@ paper: paper-check
 	@echo "PDF written to paper/build/example_paper.pdf"
 
 paper-check:
-	$(PYTHON) paper/check_unused_attachments.py
+	$(PYTHON) paper/lint_paper.py
 
 paper-clean:
 	cd paper && $(LATEXMK) -C

@@ -51,10 +51,10 @@ jobs:
         run: |
           "${TEX_BIN}/pdflatex" --version | head -1
 
-      - name: Check for unused attachments
+      - name: Lint paper sources
         run: |
           set -euo pipefail
-          python3 paper/check_unused_attachments.py
+          python3 paper/lint_paper.py
 
       - name: Build paper PDF
         working-directory: paper
