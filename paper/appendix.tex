@@ -218,3 +218,21 @@ The near-identical token-normalized accuracies for SmolLM2-1.7B (Table~\ref{tab:
 \end{small}
 \end{table}
 
+\section{Generative Benchmark Evaluation (5-shot MMLU)}
+\label{app:mmlu}
+
+The downstream evaluation in Section~\ref{sec:semantic_evaluation} relies on HellaSwag and ARC, which probe a limited slice of downstream behavior. To broaden this evaluation, we additionally evaluate on 5-shot MMLU (512 samples) under three compression modes: \textit{few\_shot} (only the few-shot examples are compressed), \textit{full\_prefix} (both the few-shot examples and the question are compressed), and \textit{random} (a random embedding replaces the compression embedding as a control).
+
+The results (Table~\ref{tab:rebuttle_mmlu}) are consistent with our earlier findings. When only the few-shot tokens are compressed, all models show accuracy degradation (ranging from $-2\%$ for Gemma-3-4B to $-15\%$ for Llama-3.1-8B), confirming that the model retains generative capability when uncompressed tokens follow the compression embedding. In contrast, \textit{full\_prefix} compression---where the compression embedding compresses the full prefix---leads to near-complete failure: for Llama-3.1-8B, SmolLM2-1.7B, and Gemma-3-4B accuracy drops to $0\%$ with no valid (parseable) answers, while the smaller Pythia-1.4B retains only partial output validity ($24.8\%$) at near-chance accuracy ($4.83\%$). In every case the generative process collapses. Notably, the \textit{random} baseline causes only minor degradation (at most $-4.3\%$, and slightly \emph{positive} for Gemma-3-4B), nowhere near the catastrophic collapse under \textit{full\_prefix}; this shows that the mere presence of an out-of-distribution token is not sufficient to explain the failure---it is specifically the \emph{optimized} compression embedding that disrupts downstream computation.
+
+These results on a generative benchmark with longer context reinforce the conclusions drawn from HellaSwag and ARC, and demonstrate that the downstream collapse generalizes beyond multiple-choice likelihood-based evaluation.
+
+\begin{table*}[tb]
+\centering
+\caption{5-shot MMLU accuracy on 512 samples with a compression embedding in context. \textbf{CompMode = few\_shot}: only the few-shot tokens were compressed with cramming. \textbf{CompMode = full\_prefix}: few-shot tokens and question tokens were compressed. \textbf{CompMode = random}: a random embedding was placed instead of the compression embedding. \textbf{Baseline Acc}: accuracy of the base model without a compression embedding. \textbf{Compressed Acc}: accuracy with a compression embedding in context (regular tokens placed after the compression embedding). \textbf{Valid} columns report the percentage of valid generated answers (answers parsed successfully).}
+\label{tab:rebuttle_mmlu}
+\begin{small}
+\input{tables/manual/rebuttle_mmlu}
+\end{small}
+\end{table*}
+

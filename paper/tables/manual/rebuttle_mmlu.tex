@@ -1,0 +1,21 @@
+\begin{tabular}{lllllll}
+\toprule
+\textbf{Model} & \textbf{CompMode} & \textbf{Baseline Acc} & \textbf{Compressed Acc} & \textbf{Acc Diff} & \textbf{Baseline Valid} & \textbf{Compressed Valid} \\
+\midrule
+Llama-3.1-8B  & few\_shot    & 63.22\% & 48.14\% & -15.08\% & 100.00\% & 100.00\% \\
+Llama-3.1-8B  & full\_prefix & 63.22\% & 0.00\%  & -63.22\% & 100.00\% & 0.00\%   \\
+Llama-3.1-8B  & random       & 63.22\% & 62.71\% & -0.51\%  & 100.00\% & 100.00\% \\
+\midrule
+SmolLM2-1.7B  & few\_shot    & 50.98\% & 45.91\% & -5.07\%  & 100.00\% & 100.00\% \\
+SmolLM2-1.7B  & full\_prefix & 50.98\% & 0.00\%  & -50.98\% & 100.00\% & 0.00\%   \\
+SmolLM2-1.7B  & random       & 50.98\% & 46.66\% & -4.32\%  & 100.00\% & 100.00\% \\
+\midrule
+gemma-3-4b-pt & few\_shot    & 58.13\% & 56.07\% & -2.05\%  & 100.00\% & 100.00\% \\
+gemma-3-4b-pt & full\_prefix & 58.13\% & 0.00\%  & -58.13\% & 100.00\% & 0.00\%   \\
+gemma-3-4b-pt & random       & 58.13\% & 59.18\% & 1.05\%   & 100.00\% & 100.00\% \\
+\midrule
+pythia-1.4b   & few\_shot    & 28.15\% & 21.27\% & -6.88\%  & 100.00\% & 95.70\%  \\
+pythia-1.4b   & full\_prefix & 28.15\% & 4.83\%  & -23.33\% & 100.00\% & 24.80\%  \\
+pythia-1.4b   & random       & 28.15\% & 27.01\% & -1.14\%  & 100.00\% & 100.00\% \\
+\bottomrule
+\end{tabular}
