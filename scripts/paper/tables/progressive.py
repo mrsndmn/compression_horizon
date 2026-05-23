@@ -441,14 +441,26 @@ def main():
         parser.error("--save-name only applies to single-table renders (omit it with --all)")
 
     if args.all:
+        failures: List[Tuple[str, str]] = []
         for spec in TABLES:
             print(f"\n=== Rendering {spec.name} ===")
-            render_table(
-                spec,
-                tablefmt_override=args.tablefmt,
-                save_dir=args.save_dir,
-                save_name=None,
-            )
+            try:
+                render_table(
+                    spec,
+                    tablefmt_override=args.tablefmt,
+                    save_dir=args.save_dir,
+                    save_name=None,
+                )
+            except (FileNotFoundError, ValueError) as e:
+                # Keep going — a single broken spec shouldn't block the rest of
+                # the batch when the user just wants whatever can be rendered.
+                print(f"!! SKIPPED {spec.name}: {e}")
+                failures.append((spec.name, str(e)))
+        if failures:
+            print(f"\n{len(failures)} table(s) skipped:")
+            for name, msg in failures:
+                print(f"  - {name}: {msg}")
+            sys.exit(1)
         return
 
     if args.name not in TABLES_BY_NAME:
