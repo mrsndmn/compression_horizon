@@ -1,0 +1,52 @@
+\begin{tabular}{lllll}
+\hline
+ Model                                                               & Compressed Tokens           & Information Gain         & Trajectory Length         & PCA 99\%                  \\
+\hline
+ Llama-3.1-8B {\small $\alpha=1.0$} {\small $L=2$}                   & 1532.3 {\small $\pm$ 280}   & 4694 {\small $\pm$ 341}  & 812 {\small $\pm$ 167}    & 45.8 {\small $\pm$ 5.29} \\
+ Llama-3.1-8B {\small $\alpha=1.0$} {\small $L=4$}                   & 1593.6 {\small $\pm$ 306.6} & 4961 {\small $\pm$ 603}  & 958 {\small $\pm$ 207}    & 42.9 {\small $\pm$ 3.01} \\
+ Llama-3.1-8B {\small $\alpha=1.0$} {\small $L=8$}                   & 1633.3 {\small $\pm$ 275.4} & 5130 {\small $\pm$ 247}  & 1146 {\small $\pm$ 137}   & 40 {\small $\pm$ 1.26}   \\
+ Llama-3.1-8B {\small $\alpha=1.0$} {\small $L=16$}                  & 1487.3 {\small $\pm$ 255.4} & 4686 {\small $\pm$ 276}  & 1146 {\small $\pm$ 112}   & 33.6 {\small $\pm$ 2.2}  \\
+ Llama-3.1-8B {\small $\alpha=1.0$} {\small $L=24$}                  & 664.8 {\small $\pm$ 99.2}   & 2095 {\small $\pm$ 247}  & 570 {\small $\pm$ 87}     & 20.5 {\small $\pm$ 1.75} \\
+ Llama-3.1-8B {\small $\alpha=1.0$} {\small $L=32$}                  & 192.7 {\small $\pm$ 50.6}   & 614 {\small $\pm$ 169}   & 150 {\small $\pm$ 31}     & 12.6 {\small $\pm$ 1.69} \\
+ Llama-3.1-8B {\small dim=32} {\small $\alpha=1.0$} {\small $L=8$}   & 1804.8 {\small $\pm$ 297.8} & 5103 {\small $\pm$ 748}  & 13584 {\small $\pm$ 3823} & 34.7 {\small $\pm$ 5.37} \\
+ Llama-3.1-8B {\small dim=64} {\small $\alpha=1.0$} {\small $L=8$}   & 1853.3 {\small $\pm$ 256.2} & 5512 {\small $\pm$ 456}  & 14367 {\small $\pm$ 3209} & 30.8 {\small $\pm$ 5.27} \\
+ Llama-3.1-8B {\small dim=128} {\small $\alpha=1.0$} {\small $L=8$}  & 1858.9 {\small $\pm$ 283.6} & 5145 {\small $\pm$ 1695} & 18967 {\small $\pm$ 3766} & 33.5 {\small $\pm$ 2.84} \\
+ Llama-3.1-8B {\small dim=256} {\small $\alpha=1.0$} {\small $L=8$}  & 1810.6 {\small $\pm$ 236}   & 5105 {\small $\pm$ 1693} & 23576 {\small $\pm$ 5844} & 34.1 {\small $\pm$ 5.5}  \\
+ \midrule
+ pythia-1.4b {\small $\alpha=1.0$} {\small $L=4$}                    & 182.7 {\small $\pm$ 31.1}   & 553 {\small $\pm$ 63}    & 83 {\small $\pm$ 9}       & 14.6 {\small $\pm$ 1.96} \\
+ pythia-1.4b {\small $\alpha=1.0$} {\small $L=8$}                    & 178.7 {\small $\pm$ 33.1}   & 524 {\small $\pm$ 92}    & 80 {\small $\pm$ 13}      & 14.3 {\small $\pm$ 1.79} \\
+ pythia-1.4b {\small $\alpha=1.0$} {\small $L=16$}                   & 155.5 {\small $\pm$ 35.5}   & 427 {\small $\pm$ 66}    & 69 {\small $\pm$ 16}      & 13.5 {\small $\pm$ 1.5}  \\
+ pythia-1.4b {\small $\alpha=1.0$} {\small $L=20$}                   & 116.6 {\small $\pm$ 26.1}   & 307 {\small $\pm$ 35}    & 58 {\small $\pm$ 10}      & 11.9 {\small $\pm$ 0.83} \\
+ pythia-1.4b {\small dim=32} {\small $\alpha=1.0$} {\small $L=8$}    & 423.1 {\small $\pm$ 104.4}  & 1317 {\small $\pm$ 221}  & 2498 {\small $\pm$ 1438}  & 15.5 {\small $\pm$ 4.57} \\
+ pythia-1.4b {\small dim=64} {\small $\alpha=1.0$} {\small $L=8$}    & 447.8 {\small $\pm$ 81.9}   & 1398 {\small $\pm$ 186}  & 3309 {\small $\pm$ 2569}  & 16.9 {\small $\pm$ 4.01} \\
+ pythia-1.4b {\small dim=128} {\small $\alpha=1.0$} {\small $L=8$}   & 468.3 {\small $\pm$ 68.6}   & 1448 {\small $\pm$ 106}  & 4699 {\small $\pm$ 2414}  & 20 {\small $\pm$ 4.96}   \\
+ pythia-1.4b {\small dim=256} {\small $\alpha=1.0$} {\small $L=8$}   & 498.2 {\small $\pm$ 92.7}   & 1555 {\small $\pm$ 146}  & 5396 {\small $\pm$ 3309}  & 19.6 {\small $\pm$ 5.89} \\
+ \midrule
+ SmolLM2-1.7B {\small $\alpha=1.0$} {\small $L=8$}                   & 148.1 {\small $\pm$ 56.7}   & 432 {\small $\pm$ 157}   & 75 {\small $\pm$ 18}      & 11.9 {\small $\pm$ 1.97} \\
+ SmolLM2-1.7B {\small $\alpha=1.0$} {\small $L=4$}                   & 186.9 {\small $\pm$ 47.3}   & 530 {\small $\pm$ 104}   & 85 {\small $\pm$ 8}       & 13.3 {\small $\pm$ 1.73} \\
+ SmolLM2-1.7B {\small $\alpha=1.0$} {\small $L=16$}                  & 126.5 {\small $\pm$ 63.3}   & 366 {\small $\pm$ 155}   & 66 {\small $\pm$ 22}      & 11.3 {\small $\pm$ 2.19} \\
+ SmolLM2-1.7B {\small $\alpha=1.0$} {\small $L=20$}                  & 96.1 {\small $\pm$ 56.2}    & 254 {\small $\pm$ 114}   & 50 {\small $\pm$ 20}      & 8.8 {\small $\pm$ 3.54}  \\
+ SmolLM2-1.7B {\small dim=32} {\small $\alpha=1.0$} {\small $L=8$}   & 292.7 {\small $\pm$ 113.3}  & 851 {\small $\pm$ 327}   & 1144 {\small $\pm$ 705}   & 11.1 {\small $\pm$ 3.99} \\
+ SmolLM2-1.7B {\small dim=64} {\small $\alpha=1.0$} {\small $L=8$}   & 321.4 {\small $\pm$ 148.3}  & 914 {\small $\pm$ 305}   & 1668 {\small $\pm$ 2014}  & 10.4 {\small $\pm$ 2.29} \\
+ SmolLM2-1.7B {\small dim=128} {\small $\alpha=1.0$} {\small $L=8$}  & 363.2 {\small $\pm$ 67.2}   & 1065 {\small $\pm$ 213}  & 2236 {\small $\pm$ 1198}  & 10.4 {\small $\pm$ 1.5}  \\
+ SmolLM2-1.7B {\small dim=256} {\small $\alpha=1.0$} {\small $L=8$}  & 468 {\small $\pm$ 243.7}    & 1350 {\small $\pm$ 621}  & 6544 {\small $\pm$ 9765}  & 11.6 {\small $\pm$ 3.61} \\
+ \midrule
+ gemma-3-4b-pt {\small $\alpha=1.0$} {\small $L=4$}                  & 60.3 {\small $\pm$ 52.7}    & 224 {\small $\pm$ 163}   & 60 {\small $\pm$ 20}      & 9.6 {\small $\pm$ 3.01}  \\
+ gemma-3-4b-pt {\small $\alpha=1.0$} {\small $L=8$}                  & 75.1 {\small $\pm$ 84.9}    & 268 {\small $\pm$ 256}   & 65 {\small $\pm$ 44}      & 9.3 {\small $\pm$ 3.93}  \\
+ gemma-3-4b-pt {\small $\alpha=1.0$} {\small $L=16$}                 & 55.8 {\small $\pm$ 42.8}    & 217 {\small $\pm$ 156}   & 57 {\small $\pm$ 19}      & 8.4 {\small $\pm$ 2.65}  \\
+ gemma-3-4b-pt {\small $\alpha=1.0$} {\small $L=20$}                 & 48.3 {\small $\pm$ 31.4}    & 191 {\small $\pm$ 104}   & 55 {\small $\pm$ 16}      & 8.3 {\small $\pm$ 2.45}  \\
+ gemma-3-4b-pt {\small dim=32} {\small $\alpha=1.0$} {\small $L=8$}  & 121.3 {\small $\pm$ 127.9}  & 393 {\small $\pm$ 317}   & 429 {\small $\pm$ 277}    & 9.3 {\small $\pm$ 3.93}  \\
+ gemma-3-4b-pt {\small dim=64} {\small $\alpha=1.0$} {\small $L=8$}  & 327.5 {\small $\pm$ 224.5}  & 1082 {\small $\pm$ 708}  & 807 {\small $\pm$ 502}    & 13.4 {\small $\pm$ 3.58} \\
+ gemma-3-4b-pt {\small dim=128} {\small $\alpha=1.0$} {\small $L=8$} & 361.3 {\small $\pm$ 214.4}  & 1209 {\small $\pm$ 672}  & 1511 {\small $\pm$ 801}   & 14.5 {\small $\pm$ 2.06} \\
+ gemma-3-4b-pt {\small dim=256} {\small $\alpha=1.0$} {\small $L=8$} & 217.1 {\small $\pm$ 146.2}  & 719 {\small $\pm$ 425}   & 1091 {\small $\pm$ 557}   & 13.3 {\small $\pm$ 2.69} \\
+ \midrule
+ Qwen3-4B {\small $\alpha=1.0$} {\small $L=4$}                       & 166.9 {\small $\pm$ 56.1}   & 699 {\small $\pm$ 193}   & 104 {\small $\pm$ 18}     & 13.8 {\small $\pm$ 1.54} \\
+ Qwen3-4B {\small $\alpha=1.0$} {\small $L=8$}                       & 197.1 {\small $\pm$ 74}     & 792 {\small $\pm$ 243}   & 118 {\small $\pm$ 25}     & 15.1 {\small $\pm$ 2.12} \\
+ Qwen3-4B {\small $\alpha=1.0$} {\small $L=16$}                      & 170.9 {\small $\pm$ 71.3}   & 711 {\small $\pm$ 265}   & 109 {\small $\pm$ 28}     & 13.9 {\small $\pm$ 2.47} \\
+ Qwen3-4B {\small $\alpha=1.0$} {\small $L=20$}                      & 168.9 {\small $\pm$ 39.6}   & 695 {\small $\pm$ 132}   & 106 {\small $\pm$ 12}     & 13.9 {\small $\pm$ 1.37} \\
+ Qwen3-4B {\small dim=32} {\small $\alpha=1.0$} {\small $L=8$}       & 774.9 {\small $\pm$ 156.4}  & 3063 {\small $\pm$ 556}  & 4243 {\small $\pm$ 1543}  & 25.9 {\small $\pm$ 4.48} \\
+ Qwen3-4B {\small dim=64} {\small $\alpha=1.0$} {\small $L=8$}       & 811.8 {\small $\pm$ 189.1}  & 3181 {\small $\pm$ 567}  & 7120 {\small $\pm$ 2953}  & 30.7 {\small $\pm$ 4.17} \\
+ Qwen3-4B {\small dim=128} {\small $\alpha=1.0$} {\small $L=8$}      & 870.8 {\small $\pm$ 160.5}  & 3400 {\small $\pm$ 300}  & 9040 {\small $\pm$ 3358}  & 31 {\small $\pm$ 5.42}   \\
+ Qwen3-4B {\small dim=256} {\small $\alpha=1.0$} {\small $L=8$}      & 895.7 {\small $\pm$ 219.4}  & 3470 {\small $\pm$ 476}  & 9813 {\small $\pm$ 3019}  & 32.5 {\small $\pm$ 4.25} \\
+\hline
+\end{tabular}

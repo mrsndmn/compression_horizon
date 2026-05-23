@@ -106,36 +106,39 @@ TABLES: List[TableSpec] = [
             f"{_EXP}/sl_4096_gemma-3-4b-pt_lr_0.1/progressive_prefixes",
         ],
     ),
-    TableSpec(
-        # ``tables.sh`` listed 5 names for 4 checkpoints — the lr_0.5 entry was
-        # missing from its --checkpoints flag. Restored here so the sweep is
-        # complete and the names_mapping length matches.
-        name="tab:lr_sweep_llama_3.1_8b",
-        checkpoints=[
-            f"{_EXP}/sl_4096_Meta-Llama-3.1-8B_lr_0.01/progressive_prefixes",
-            f"{_EXP}/sl_4096_Meta-Llama-3.1-8B_lr_0.1/progressive_prefixes",
-            f"{_EXP}/sl_4096_Meta-Llama-3.1-8B_lr_0.5/progressive_prefixes",
-            f"{_EXP}/sl_4096_Meta-Llama-3.1-8B_lr_1.0/progressive_prefixes",
-            f"{_EXP}/sl_4096_Meta-Llama-3.1-8B_lr_5.0/progressive_prefixes",
-        ],
-        names_mapping="0.01,0.1,0.5,1.0,5.0",
-    ),
-    TableSpec(
-        name="tab:full_llama_3.1_8b",
-        checkpoints=[f"{_EXP}/sl_4096_Meta-Llama-3.1*/progressive_prefixes"],
-    ),
-    TableSpec(
-        name="tab:full_pythia_1.4b",
-        checkpoints=[f"{_EXP}/sl_4096_pythia-1.4b*/progressive_prefixes"],
-    ),
-    TableSpec(
-        name="tab:full_smollm2_1.7b",
-        checkpoints=[f"{_EXP}/sl_4096_SmolLM2-1.7B*/progressive_prefixes"],
-    ),
-    TableSpec(
-        name="tab:full_qwen3_4b",
-        checkpoints=[f"{_EXP}/sl_4096_Qwen3-4B*/progressive_prefixes"],
-    ),
+    # ---- Disabled: not referenced by paper/example_paper.tex ----
+    # Re-enable individually if a future revision of the manuscript needs them.
+    # TableSpec(
+    #     # ``tables.sh`` listed 5 names for 4 checkpoints — the lr_0.5 entry was
+    #     # missing from its --checkpoints flag. Restored here so the sweep is
+    #     # complete and the names_mapping length matches.
+    #     name="tab:lr_sweep_llama_3.1_8b",
+    #     checkpoints=[
+    #         f"{_EXP}/sl_4096_Meta-Llama-3.1-8B_lr_0.01/progressive_prefixes",
+    #         f"{_EXP}/sl_4096_Meta-Llama-3.1-8B_lr_0.1/progressive_prefixes",
+    #         f"{_EXP}/sl_4096_Meta-Llama-3.1-8B_lr_0.5/progressive_prefixes",
+    #         f"{_EXP}/sl_4096_Meta-Llama-3.1-8B_lr_1.0/progressive_prefixes",
+    #         f"{_EXP}/sl_4096_Meta-Llama-3.1-8B_lr_5.0/progressive_prefixes",
+    #     ],
+    #     names_mapping="0.01,0.1,0.5,1.0,5.0",
+    # ),
+    # TableSpec(
+    #     name="tab:full_llama_3.1_8b",
+    #     checkpoints=[f"{_EXP}/sl_4096_Meta-Llama-3.1*/progressive_prefixes"],
+    # ),
+    # TableSpec(
+    #     name="tab:full_pythia_1.4b",
+    #     checkpoints=[f"{_EXP}/sl_4096_pythia-1.4b*/progressive_prefixes"],
+    # ),
+    # TableSpec(
+    #     name="tab:full_smollm2_1.7b",
+    #     checkpoints=[f"{_EXP}/sl_4096_SmolLM2-1.7B*/progressive_prefixes"],
+    # ),
+    # TableSpec(
+    #     name="tab:full_qwen3_4b",
+    #     checkpoints=[f"{_EXP}/sl_4096_Qwen3-4B*/progressive_prefixes"],
+    # ),
+    # ---- end disabled ----
     TableSpec(
         name="tab:low_dim_projection_results",
         checkpoints=[
@@ -359,6 +362,7 @@ def render_table(
         if positional_names is not None:
             checkpoint_names.append(positional_names[idx])
         elif checkpoint_path in path_mapping:
+
             checkpoint_names.append(path_mapping[checkpoint_path])
         else:
             name = os.path.basename(os.path.dirname(checkpoint_path))
