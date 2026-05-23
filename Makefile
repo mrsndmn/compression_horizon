@@ -5,9 +5,11 @@ LATEXMK ?= /home/jovyan/.TinyTeX/bin/x86_64-linux/latexmk
 
 paper: paper-check
 	cd paper && $(LATEXMK) -pdf -interaction=nonstopmode -halt-on-error example_paper.tex
+	@echo "PDF written to paper/build/example_paper.pdf"
 
 paper-check:
 	$(PYTHON) paper/check_unused_attachments.py
 
 paper-clean:
 	cd paper && $(LATEXMK) -C
+	rm -rf paper/build

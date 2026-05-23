@@ -1,10 +1,1 @@
-*.aux
-*.bbl
-*.blg
-*.fdb_latexmk
-*.fls
-*.log
-*.out
-*.synctex.gz
-*.toc
-example_paper.pdf
+build/
