@@ -51,12 +51,17 @@ jobs:
         run: |
           "${TEX_BIN}/pdflatex" --version | head -1
 
+      - name: Lint paper sources
+        run: |
+          set -euo pipefail
+          python3 paper/lint_paper.py
+
       - name: Build paper PDF
         working-directory: paper
         run: |
           set -euo pipefail
           "${TEX_BIN}/latexmk" -pdf -interaction=nonstopmode -halt-on-error example_paper.tex
-          ls -la example_paper.pdf
+          ls -la build/example_paper.pdf
 
       - name: Compute build metadata
         id: meta
@@ -67,7 +72,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: paper-pdf-${{ steps.meta.outputs.short_sha }}
-          path: paper/example_paper.pdf
+          path: paper/build/example_paper.pdf
           retention-days: 1
 
       - name: Upload to Yandex Object Storage
@@ -82,10 +87,10 @@ jobs:
             exit 0
           fi
           unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
-          ls -la paper/example_paper.pdf
+          ls -la paper/build/example_paper.pdf
           /home/jovyan/.mlspace/envs/compression_horizon/bin/s3cmd \
             -c /dev/null \
             --host=storage.yandexcloud.net \
             --host-bucket='%(bucket)s.storage.yandexcloud.net' \
             --region=ru-central1 \
-            put ./paper/example_paper.pdf s3://papers-drafts/progressive_cramming.pdf
+            put ./paper/build/example_paper.pdf s3://papers-drafts/progressive_cramming.pdf
