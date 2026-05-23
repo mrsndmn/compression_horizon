@@ -43,7 +43,11 @@ from compression_horizon.analysis import (  # noqa: E402
 
 METHODS = ("pca", "tsne", "umap")
 _TITLES = {"pca": "PCA", "tsne": "t-SNE", "umap": "UMAP"}
-_COLORBAR_LABEL = "номер стадии оптимизации k"
+_AXIS_LABELS = {
+    "pca": ("Главная компонента 1", "Главная компонента 2"),
+    "tsne": ("Компонента t-SNE 1", "Компонента t-SNE 2"),
+    "umap": ("Компонента UMAP 1", "Компонента UMAP 2"),
+}
 
 
 def _load_progressive_dataset(source_dir: str) -> Dataset:
@@ -60,16 +64,19 @@ def _build_trajectory(rows: list[dict]) -> torch.Tensor:
     return torch.stack(tensors, dim=0)
 
 
-def _scatter(ax, coords: np.ndarray, method: str):
-    """Scatter the trajectory coloured by stage index; PCA also draws the path."""
-    n = coords.shape[0]
-    if method == "pca":
-        ax.plot(coords[:, 0], coords[:, 1], color="0.75", linewidth=0.6, zorder=1)
-    sc = ax.scatter(coords[:, 0], coords[:, 1], c=np.arange(n), cmap="viridis", s=12, zorder=2)
+def _scatter(ax, coords: np.ndarray, method: str) -> None:
+    """Paper-Figure-3-style trajectory plot: black points + thin grey path.
+
+    Style matches ``run_trajectory_landscape.py``: ``s=10`` black markers, a
+    grey connecting line (``color="0.35"``, ``linewidth=0.7``) showing
+    optimization order, default axis ticks, and Russian axis labels.
+    """
+    ax.plot(coords[:, 0], coords[:, 1], color="0.35", linewidth=0.7, zorder=1)
+    ax.scatter(coords[:, 0], coords[:, 1], c="black", s=10, zorder=2)
     ax.set_title(_TITLES.get(method, method))
-    ax.set_xticks([])
-    ax.set_yticks([])
-    return sc
+    x_label, y_label = _AXIS_LABELS.get(method, ("Компонента 1", "Компонента 2"))
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
 
 
 def _mean_std(values: list[float]) -> dict:
@@ -158,9 +165,8 @@ def main() -> None:
     projections = {method: project_2d(figure_trajectory, method=method, seed=args.seed) for method in methods}
 
     for method in methods:
-        fig, ax = plt.subplots(figsize=(4.2, 4.0))
-        scatter = _scatter(ax, projections[method], method)
-        fig.colorbar(scatter, ax=ax).set_label(_COLORBAR_LABEL)
+        fig, ax = plt.subplots(figsize=(5.0, 4.5))
+        _scatter(ax, projections[method], method)
         fig.tight_layout()
         path = Path(output_dir) / f"dimreduction_sample{figure_sample_id}_{method}.png"
         fig.savefig(path, dpi=150)
@@ -168,11 +174,10 @@ def main() -> None:
         print(f"  wrote {path}")
 
     if len(methods) > 1:
-        fig, axes = plt.subplots(1, len(methods), figsize=(4.2 * len(methods), 4.0))
-        scatter = None
+        fig, axes = plt.subplots(1, len(methods), figsize=(5.0 * len(methods), 4.5))
         for ax, method in zip(axes, methods):
-            scatter = _scatter(ax, projections[method], method)
-        fig.colorbar(scatter, ax=axes, fraction=0.025).set_label(_COLORBAR_LABEL)
+            _scatter(ax, projections[method], method)
+        fig.tight_layout()
         path = Path(output_dir) / f"dimreduction_sample{figure_sample_id}_panel.png"
         fig.savefig(path, dpi=150, bbox_inches="tight")
         plt.close(fig)
