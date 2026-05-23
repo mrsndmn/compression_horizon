@@ -432,19 +432,7 @@ However, adding regularization via activation alignment and low-dimensional proj
     \label{tab:full_vs_progressive}
 
     \begin{small}
-    \begin{tabular}{llll}
-        \hline
-         Type                                           & Tokens                  & Info Gain                & Accuracy                   \\
-        \hline
-         \multicolumn{4}{l}{\textbf{Llama-3.1-8B}} \\
-         Full                                           & 1568                    & 5002 {\small $\pm$ 850}  & 0.997 {\small $\pm$ 0.003} \\
-         Progr.                                         & 1064 {\small $\pm$ 394} & 3028 {\small $\pm$ 1321} & 1.0                        \\
-         \midrule \midrule
-         \multicolumn{4}{l}{\textbf{Pythia1.4b}} \\
-         Full                                           & 256                     & 802 {\small $\pm$ 113}   & 0.985 {\small $\pm$ 0.031} \\
-         Progr.                                         & 544 {\small $\pm$ 57}   & 1694 {\small $\pm$ 125}  & 1.0                        \\
-        \hline
-        \end{tabular}
+    \input{tables/full_vs_progressive}
     \end{small}
 
 \end{table}
@@ -630,21 +618,7 @@ Under this 4-way multiple-choice protocol, random guessing yields 25\% accuracy.
     \label{tab:semantic_evaluation}
 
     \begin{small}
-    \begin{tabular}{lllll}
-        \hline
-                           & \multicolumn{2}{c}{\textbf{HellaSwag}} & \multicolumn{2}{c}{\textbf{ARC-E}} \\
-         Model                           & Base            & Cram            & Base            & Cram            \\
-        \hline
-         \small Llama-3.1-8B             & 40.79{\small \%} & 23.24{\small \%} & 38.48{\small \%} & 27.87{\small \%} \\
-         \small Llama-3.1-8B \bcancel{B} & 38.84{\small \%} & 22.30{\small \%} & 37.69{\small \%} & 29.34{\small \%} \\
-         \small pythia-1.4b              & 43.06{\small \%} & 26.32{\small \%} & 45.95{\small \%} & 24.32{\small \%} \\
-         \small pythia-1.4b \bcancel{B}  & 43.06{\small \%} & 26.32{\small \%} & 45.95{\small \%} & 24.32{\small \%} \\
-         \small SLM2-1.7B                & 51.54{\small \%} & 23.17{\small \%} & 58.77{\small \%} & 30.69{\small \%} \\
-         \small SLM2-1.7B \bcancel{B}    & 51.54{\small \%} & 23.17{\small \%} & 58.77{\small \%} & 30.69{\small \%} \\
-         \small gemma-3-4b               & 29.27{\small \%} & 26.18{\small \%} & 39.70{\small \%} & 24.29{\small \%} \\
-         \small gemma-3-4b \bcancel{B}   & 28.84{\small \%} & 26.18{\small \%} & 34.62{\small \%} & 24.16{\small \%} \\
-        \hline
-    \end{tabular}
+    \input{tables/semantic_evaluation}
     \end{small}
 
 \end{table}
@@ -735,35 +709,7 @@ In Table~\ref{tab:full_vs_progressive_appendix} we present results from Section~
     \label{tab:full_vs_progressive_appendix}
     \begin{center}
     \begin{small}
-    \begin{tabular}{llll}
-        \hline
-         Type                                           & Tokens                  & Info Gain                & Accuracy                   \\
-        \hline
-         \multicolumn{4}{l}{\textbf{Llama-3.2-1B}} \\
-         Full                                           & 512                     & 1965 {\small $\pm$ 244}  & 0.998 {\small $\pm$ 0}     \\
-         Progr.                                         & 402 {\small $\pm$ 85}   & 1500 {\small $\pm$ 282}  & 1.0                        \\
-         \midrule
-         \multicolumn{4}{l}{\textbf{Llama-3.2-3B}} \\
-         Full                                           & 1024                    & 3572 {\small $\pm$ 549}  & 0.996 {\small $\pm$ 0.007} \\
-         Progr.                                         & 902 {\small $\pm$ 207}  & 3074 {\small $\pm$ 527}  & 1.0                        \\
-         \midrule
-         \multicolumn{4}{l}{\textbf{Llama-3.1-8B}} \\
-         Full                                           & 1568                    & 5002 {\small $\pm$ 850}  & 0.997 {\small $\pm$ 0.003} \\
-         Progr.                                         & 1064 {\small $\pm$ 394} & 3028 {\small $\pm$ 1321} & 1.0                        \\
-         \midrule \midrule
-         \multicolumn{4}{l}{\textbf{Pythia160m}} \\
-         Full                                           & 32                      & 105 {\small $\pm$ 20}    & 0.684 {\small $\pm$ 0.175} \\
-         Progr.                                         & 11 {\small $\pm$ 2}     & 19 {\small $\pm$ 26}     & 1.0                        \\
-         \midrule
-         \multicolumn{4}{l}{\textbf{Pythia410m}} \\
-         Full                                           & 128                     & 365 {\small $\pm$ 40}    & 0.891 {\small $\pm$ 0.062} \\
-         Progr.                                         & 102 {\small $\pm$ 41}   & 323 {\small $\pm$ 105}   & 1.0                        \\
-         \midrule
-         \multicolumn{4}{l}{\textbf{Pythia1.4b}} \\
-         Full                                           & 256                     & 802 {\small $\pm$ 113}   & 0.985 {\small $\pm$ 0.031} \\
-         Progr.                                         & 544 {\small $\pm$ 57}   & 1694 {\small $\pm$ 125}  & 1.0                        \\
-        \hline
-        \end{tabular}
+    \input{tables/full_vs_progressive_appendix}
     \end{small}
     \end{center}
 \vskip -0.1in
@@ -835,44 +781,7 @@ For Pythia, the prefix-tuning setup increases the compression limit by about \(2
     \caption{Prefix-tuning reconstruction accuracy compared to progressive cramming. ``Tokens'' denotes the number of learned prefix tokens (or reconstructed tokens for progressive cramming).}
     \label{tab:prefix_tuning_accuracy}
     \begin{small}
-
-\begin{tabular}{llll}
-\hline
- Experiment      & Type          & Tokens                  & Accuracy                   \\
-\hline
- \midrule
- Llama-3.2-1B         & Progr.        & 402 {\small $\pm$ 85}   & 1.0                        \\
- Llama-3.2-1B         & Full PrefixT. & 4096                    & 1 {\small $\pm$ 0}         \\
- Llama-3.2-1B         & Full PrefixT. & 8192                    & 0.977 {\small $\pm$ 0.032} \\
- Llama-3.2-1B         & Full PrefixT. & 16384                   & 0.767 {\small $\pm$ 0.105} \\
- \midrule
- Llama-3.2-3B         & Progr.        & 902 {\small $\pm$ 207}  & 1.0                        \\
- Llama-3.2-3B         & Full PrefixT. & 8192                    & 1 {\small $\pm$ 0}         \\
- \midrule
- Llama-3.1-8B         & Progr.        & 1064 {\small $\pm$ 394} & 1.0                        \\
- Llama-3.1-8B         & Full PrefixT. & 8192                    & 1 {\small $\pm$ 0}         \\
- \midrule
- Pythia160m          & Progr.        & 11 {\small $\pm$ 2}     & 1.0                        \\
- Pythia160m          & Full PrefixT. & 1024                    & 0.488 {\small $\pm$ 0.06}  \\
- Pythia160m          & Full PrefixT. & 2048                    & 0.394 {\small $\pm$ 0.034} \\
- Pythia160m          & Full PrefixT. & 4096                    & 0.263 {\small $\pm$ 0.025} \\
- Pythia160m          & Full PrefixT. & 8192                    & 0.168 {\small $\pm$ 0.018} \\
- Pythia160m          & Full PrefixT. & 16384                   & 0.139 {\small $\pm$ 0.026} \\
- \midrule
- Pythia410m          & Progr.        & 102 {\small $\pm$ 41}   & 1.0                        \\
- Pythia410m          & Full PrefixT. & 2048                    & 1 {\small $\pm$ 0}         \\
- Pythia410m          & Full PrefixT. & 4096                    & 0.964 {\small $\pm$ 0.071} \\
- Pythia410m          & Full PrefixT. & 8192                    & 0.588 {\small $\pm$ 0.106} \\
- Pythia410m          & Full PrefixT. & 16384                   & 0.418 {\small $\pm$ 0.158} \\
- \midrule
- Pythia1.4b          & Progr.        & 544 {\small $\pm$ 57}   & 1.0                        \\
- Pythia1.4b          & Full PrefixT. & 4096                    & 1 {\small $\pm$ 0}         \\
- Pythia1.4b          & Full PrefixT. & 8192                    & 0.979 {\small $\pm$ 0.015} \\
- Pythia1.4b          & Full PrefixT. & 16384                   & 0.663 {\small $\pm$ 0.12}  \\
-\hline
-\end{tabular}
-
-
+    \input{tables/prefix_tuning_accuracy}
     \end{small}
 \vskip -0.1in
 \end{table}
