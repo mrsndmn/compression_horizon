@@ -15,7 +15,18 @@ from typing import Callable
 PAPER_DIR = Path(__file__).resolve().parent
 ATTACHMENT_DIRS = ("figures", "styles")
 
+# Body sources that make up the compiled paper. Raw tabular content is
+# prohibited here: every table must live under tables/ (generated) or
+# tables/manual/ (hand-edited) and be pulled in with \input. rebuttle.tex is a
+# standalone reviewer-response document (not part of the paper) and is exempt.
+BODY_TEX = ("example_paper.tex", "appendix.tex")
+
 COMMENT_RE = re.compile(r"(?<!\\)%.*")
+
+# Matches the start of a tabular-like environment (tabular, tabular*,
+# tabularx, longtable). ``array`` is intentionally excluded: it is a math
+# environment, not a table.
+TABLE_ENV_RE = re.compile(r"\\begin\{(tabularx?\*?|longtable)\}")
 
 # Matches a standalone ``nan`` token (any case) so we don't trip on words
 # like "nano" or model names that happen to contain the substring.
@@ -89,9 +100,35 @@ def check_table_nans() -> list[str]:
     return errors
 
 
+def check_raw_tables() -> list[str]:
+    """The paper body may not embed a raw tabular environment.
+
+    Tables must live under ``tables/`` (generated) or ``tables/manual/``
+    (hand-edited) and be pulled into the main text or appendix with
+    ``\\input``. Scans the body sources (comments stripped) for a
+    ``\\begin{tabular...}`` / ``\\begin{longtable}`` and flags any hit."""
+    errors: list[str] = []
+    for name in BODY_TEX:
+        src = PAPER_DIR / name
+        if not src.is_file():
+            continue
+        text = src.read_text(encoding="utf-8", errors="ignore")
+        for lineno, raw in enumerate(text.splitlines(), start=1):
+            line = COMMENT_RE.sub("", raw)
+            match = TABLE_ENV_RE.search(line)
+            if match:
+                errors.append(
+                    f"{name}:{lineno} raw table \\begin{{{match.group(1)}}} "
+                    "in paper body -- move it to tables/ (or tables/manual/) "
+                    "and \\input it instead"
+                )
+    return errors
+
+
 CHECKS: list[tuple[str, Callable[[], list[str]]]] = [
     ("unused-attachments", check_unused_attachments),
     ("table-nans", check_table_nans),
+    ("raw-tables", check_raw_tables),
 ]
 
 

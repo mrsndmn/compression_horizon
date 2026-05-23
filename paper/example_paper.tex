@@ -597,6 +597,7 @@ Under this 4-way multiple-choice protocol, random guessing yields 25\% accuracy.
 Table~\ref{tab:semantic_evaluation} shows that prepending a crammed compression embedding consistently reduces downstream accuracy across model families, often collapsing to (or below) random guessing.
 Together with the attention analysis, these results suggest that high reconstruction performance can coincide with brittle steering (attention hijacking) rather than a transferable semantic representation.
 This highlights a key limitation of using reconstruction accuracy alone: perfect reconstruction is insufficient, and future work must explicitly evaluate capability preservation in any downstream semantic evaluation and broader capability benchmarks overall.
+Appendix~\ref{app:imperfect_reconstruction} further confirms that this drop reflects the compression embedding itself rather than residual reconstruction errors: because HellaSwag and ARC score fixed context--continuation pairs without regenerating the prefix, restricting the evaluation to perfectly reconstructed instances leaves accuracy essentially unchanged.
 
 
 % =============================================================================

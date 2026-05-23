@@ -9,7 +9,7 @@
 
 \section{Hyperparameters}
 
-We used 10 samples from PG19 for most experiments.
+We used 50 or 10 samples from PG19 for most experiments.
 Across all settings, the base language model was frozen; only the compression-token parameters were optimized (either the compression embeddings, or the low-dimensional embedding together with its projection).
 We optimized with AdamW. For each model, we swept the learning rate over \(\{0.01, 0.1, 0.5, 1.0\}\); the resulting metrics are summarized in Table~\ref{tab:all_learning_rates}. For the low-dimensional embedding and projection variant, we used a learning rate of 0.01.
 We ran up to 10{,}000 optimization steps per sample in all experiments; for progressive runs, we additionally capped the optimization of each newly added token at 1{,}000 steps.
@@ -197,4 +197,24 @@ the loss of the first two tokens by a factor of three (2 leading).}
 \label{app:I}
 
 As noted in Section~\ref{sec:prior_limitations}, a 99\% token-level accuracy threshold is insufficient to guarantee correct reconstruction when evaluation is performed without \emph{teacher forcing} (i.e., when generated tokens are fed back into the prefix rather than replacing them with the ground-truth tokens). Table~\ref{tab:compression_reconstruction_summary} shows that under non-progressive training, the remaining $\sim$1\% error is concentrated in the first few positions (indices 0-2); these early mistakes then compound, leading to divergent generations.
+
+
+\section{Effect of Imperfect Reconstruction on HellaSwag and ARC}
+\label{app:imperfect_reconstruction}
+
+The downstream evaluation in Section~\ref{sec:semantic_evaluation} retains benchmark instances whose prefixes are not perfectly reconstructed, which raises the question of whether the observed capability drop is caused by the compression embedding itself disrupting reasoning, or simply by failed reconstruction corrupting the prefix.
+To disentangle the effect of imperfect reconstruction from the effect of the compression embedding itself, we emphasize the difference between autoregressive generation and multiple-choice benchmarks such as HellaSwag and ARC. In greedy generation, even small reconstruction errors can lead to large deviations in the output due to error accumulation, especially when errors occur early in the sequence (Section~\ref{sec:prior_limitations}).
+
+In contrast, HellaSwag and ARC operate in a non-generative (scoring) regime: the model evaluates fixed context--continuation pairs without regenerating the prefix. As a result, these benchmarks are significantly less sensitive to small reconstruction imperfections, since no sequential error propagation occurs.
+
+The near-identical token-normalized accuracies for SmolLM2-1.7B (Table~\ref{tab:rebuttal_token_norm}) indicate that imperfect reconstruction has minimal impact on benchmark performance. This confirms that the observed degradation is driven primarily by the compression embedding itself, rather than by reconstruction errors.
+
+\begin{table}[t]
+\centering
+\caption{Token-normalized accuracy (\%) for HellaSwag, ARC-Easy, and ARC-Challenge on SmolLM2-1.7B. Values are reported for perfectly reconstructed examples and for all examples.}
+\label{tab:rebuttal_token_norm}
+\begin{small}
+\input{tables/manual/rebuttal_token_norm}
+\end{small}
+\end{table}
 
