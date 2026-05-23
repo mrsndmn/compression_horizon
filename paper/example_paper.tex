@@ -842,27 +842,7 @@ Variants include ignoring the BOS loss during training (no BOS) and upweighting
 the loss of the first two tokens by a factor of three (2 leading).}
 \label{tab:compression_reconstruction_summary}
 \begin{small}
-
-\begin{tabular}{lll r c c c c}
-\toprule
-Model & Tokens & Setup & Final conv. & Greedy conv. & \multicolumn{3}{c}{Mismatch (\%)} \\
-\cmidrule(lr){6-8}
- &  &  &  &  & @0 & @1 & @2 \\
-\midrule
-Llama-3.2-1B & 512  & common    & 0.9881 & 0.0073 & 90.0\%  & 100.0\% & 0.0\% \\
-Llama-3.2-1B & 512  & no BOS    & 0.9902 & 0.0006 & 100.0\% & 100.0\% & 0.0\% \\
-Llama-3.2-1B & 512  & 2 leading & 0.9902 & 0.0203 & 0.0\%   & 100.0\% & 0.0\% \\
-\midrule
-Llama-3.2-3B & 1024 & common    & 0.9672 & 0.0005 & 100.0\% & 100.0\% & 0.0\% \\
-Llama-3.2-3B & 1024 & no BOS    & 0.9578 & 0.0079 & 100.0\% & 100.0\% & 0.0\% \\
-Llama-3.2-3B & 1024 & 2 leading & 0.9605 & 0.0156 & 0.0\%   & 100.0\% & 0.0\% \\
-\midrule
-Llama-3.1-8B & 1568 & common    & 0.9706 & 0.0030 & 100.0\% & 100.0\% & 0.0\% \\
-Llama-3.1-8B & 1568 & no BOS    & 0.9670 & 0.0078 & 100.0\% & 100.0\% & 0.0\% \\
-Llama-3.1-8B & 1568 & 2 leading & 0.9670 & 0.0165 & 20.0\%  & 100.0\% & 0.0\% \\
-\bottomrule
-\end{tabular}
-
+\input{tables/manual/compression_reconstruction_summary}
 \end{small}
 \vskip -0.1in
 \end{table*}
