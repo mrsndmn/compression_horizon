@@ -33,25 +33,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache TinyTeX installation
-        id: cache-tinytex
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.TINYTEX_DIR }}
-          key: tinytex-pdflatex-paper-v1-${{ hashFiles('.github/workflows/paper.yml') }}
-          restore-keys: |
-            tinytex-pdflatex-paper-v1-
-
       - name: Install TinyTeX and TeX packages
-        if: steps.cache-tinytex.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
-          if [ ! -x "${TEX_BIN}/pdflatex" ]; then
-            tmpdir="$(mktemp -d)"
-            curl -fsSL "https://yihui.org/tinytex/install-bin-unix.sh" -o "${tmpdir}/install-tinytex.sh"
-            sh "${tmpdir}/install-tinytex.sh"
-            rm -rf "${tmpdir}"
+          if [ -x "${TEX_BIN}/pdflatex" ]; then
+            echo "pdflatex already present at ${TEX_BIN}/pdflatex; skipping install."
+            exit 0
           fi
+          tmpdir="$(mktemp -d)"
+          curl -fsSL "https://yihui.org/tinytex/install-bin-unix.sh" -o "${tmpdir}/install-tinytex.sh"
+          sh "${tmpdir}/install-tinytex.sh"
+          rm -rf "${tmpdir}"
           "${TEX_BIN}/tlmgr" install ${TEX_PACKAGES} || true
           "${TEX_BIN}/pdflatex" --version | head -1
 
