@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import re
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -457,27 +458,18 @@ def format_mean_std_cell(
     )
 
 
-def print_attention_mass_table(
+def format_attention_mass_table(
     checkpoint_names: List[str],
     statistics: List[Dict[str, Any]],
     midrule_indicies: Optional[List[int]] = None,
     tablefmt: str = "grid",
-):
-    """Print attention mass statistics table using tabulate.
-
-    Args:
-        checkpoint_names: List of experiment labels
-        statistics: List of statistics dicts, each containing 'compression', 'original', and 'diff'
-        midrule_indicies: Optional list of indices where to insert midrule (for LaTeX)
-        tablefmt: Table format (grid, simple, latex, etc.)
-    """
+) -> str:
+    """Build the attention mass statistics table as a string."""
     if len(checkpoint_names) == 0 or len(statistics) == 0:
-        return
+        return ""
 
-    # Prepare table data
     table_data = []
     for i, (name, stats) in enumerate(zip(checkpoint_names, statistics)):
-        # Clean up name for display
         table_name = name
         table_name = table_name.replace("pt_sl_1024_", "")
         table_name = table_name.replace("sl_4096_", "")
@@ -490,12 +482,8 @@ def print_attention_mass_table(
         table_name = re.sub(r"_lowdim_(\d+)", r" {\\small dim=\1}", table_name)
         table_name = re.sub(r"_lr_(\d+(\.?\d+)?)", r" {\\small lr=\1}", table_name)
 
-        # Format correlation
         correlation = stats.get("correlation")
-        if correlation is not None:
-            correlation_str = f"{correlation:.4f}"
-        else:
-            correlation_str = "N/A"
+        correlation_str = f"{correlation:.4f}" if correlation is not None else "N/A"
 
         table_data.append(
             [
@@ -519,7 +507,6 @@ def print_attention_mass_table(
     ]
     result = tabulate(table_data, headers=headers, tablefmt=tablefmt, numalign="right", stralign="left")
 
-    # Clean up LaTeX formatting
     result = result.replace("\\textbackslash{}", "\\")
     result = result.replace("\\$", "$")
     result = result.replace("\\{", "{")
@@ -529,9 +516,20 @@ def print_attention_mass_table(
     result = result.replace("L3.2-", "Llama-3.2-")
     result = result.replace("L3.1-", "Llama-3.1-")
 
-    # Remove midrule markers
     result = re.sub(r"REMOVE.+", "", result)
+    return result
 
+
+def print_attention_mass_table(
+    checkpoint_names: List[str],
+    statistics: List[Dict[str, Any]],
+    midrule_indicies: Optional[List[int]] = None,
+    tablefmt: str = "grid",
+):
+    """Print attention mass statistics table using tabulate."""
+    result = format_attention_mass_table(checkpoint_names, statistics, midrule_indicies, tablefmt)
+    if not result:
+        return
     print("\n" + "=" * 80)
     print("Attention Mass Statistics")
     print("=" * 80)
@@ -624,6 +622,18 @@ def main():
     )
     parser.add_argument(
         "--midrule_indicies", nargs="+", type=int, default=None, help="Indices where to insert midrule (for LaTeX)"
+    )
+    parser.add_argument(
+        "--save-dir",
+        type=str,
+        default=None,
+        help="If set, write the rendered table to <save-dir>/<save-name>.tex.",
+    )
+    parser.add_argument(
+        "--save-name",
+        type=str,
+        default="attn_hijacking",
+        help="Output slug (without extension) used together with --save-dir.",
     )
 
     args = parser.parse_args()
@@ -726,6 +736,20 @@ def main():
         midrule_indicies=args.midrule_indicies,
         tablefmt=args.tablefmt,
     )
+
+    if args.save_dir is not None:
+        rendered = format_attention_mass_table(
+            checkpoint_names,
+            statistics_list,
+            midrule_indicies=args.midrule_indicies,
+            tablefmt=args.tablefmt,
+        )
+        if rendered:
+            out_dir = Path(args.save_dir)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            out_path = out_dir / f"{args.save_name}.tex"
+            out_path.write_text(rendered + "\n", encoding="utf-8")
+            print(f"Saved 'tab:{args.save_name}' to {out_path}")
 
 
 if __name__ == "__main__":

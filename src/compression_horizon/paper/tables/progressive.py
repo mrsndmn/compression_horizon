@@ -1,4 +1,3 @@
-import argparse
 import json
 import math
 import os
@@ -17,7 +16,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from compression_horizon.utils import to_mean_std_cell
 
-# This experiments finished before information gain was computed during experiment trainng. information gain computed with scripts/visualize_multiple_trajectories.py
+# This experiments finished before information gain was computed during experiment traning. information gain computed with scripts/visualize_multiple_trajectories.py
 PRECOMPUTED_INFO_GAIN = {
     "artifacts/experiments_progressive/sl_4096_Meta-Llama-3.1-8B_ds_pg19_loss_cosine_hybrid_1.0_align_2/progressive_prefixes": {
         "mean": 4694.2772,
@@ -1306,22 +1305,26 @@ def format_embedding_statistics(
     return f"{comp} / {vocab}"
 
 
-def print_statistics_table(
+def format_statistics_table(
     checkpoint_names: List[str],
     statistics: List[Dict[str, Any]],
     midrule_indicies,
     tablefmt: str = "grid",
     short: bool = False,
-):
-    """Print a statistics table using tabulate.
+) -> str:
+    """Build the formatted statistics table as a string.
 
     Args:
         checkpoint_names: List of experiment labels
         statistics: List of statistics dicts, each containing 'num_embeddings' and 'total_steps'
-        short: If True, print the table without the last two columns
+        short: If True, build the table without the last two columns
+
+    Returns:
+        The fully post-processed table text, or an empty string if there is
+        nothing to render.
     """
     if len(checkpoint_names) == 0 or len(statistics) == 0:
-        return
+        return ""
 
     if short:
         headers = [
@@ -1396,6 +1399,27 @@ def print_statistics_table(
     result = result.replace("L3.1-", "Llama-3.1-")
 
     result = re.sub(r"REMOVE.+", "", result)
+
+    return result
+
+
+def print_statistics_table(
+    checkpoint_names: List[str],
+    statistics: List[Dict[str, Any]],
+    midrule_indicies,
+    tablefmt: str = "grid",
+    short: bool = False,
+) -> None:
+    """Print the formatted statistics table to stdout, framed by a banner."""
+    result = format_statistics_table(
+        checkpoint_names,
+        statistics,
+        midrule_indicies,
+        tablefmt=tablefmt,
+        short=short,
+    )
+    if not result:
+        return
 
     print("\n" + "=" * 80)
     print("Progressive Embeddings Statistics")
@@ -1475,154 +1499,3 @@ def print_pairwise_distances_table(
     cos_table = tabulate(cos_table_data, headers=cos_headers, tablefmt=tablefmt, numalign="right", stralign="left")
     print(cos_table)
     print("=" * 80 + "\n")
-
-
-def parse_names_mapping(names_str: Optional[str]) -> Tuple[Dict[str, str], Optional[List[str]]]:
-    """Parse names mapping from string.
-
-    Supports two formats:
-    1. Path-based: 'path1:name1,path2:name2' (returns dict, None)
-    2. Positional list: 'name1,name2,name3' (returns empty dict, list of names)
-
-    Returns:
-        Tuple of (path_mapping_dict, positional_names_list)
-    """
-    if names_str is None:
-        return {}, None
-
-    # Check if it contains colons (path-based mapping)
-    if ":" in names_str:
-        mapping = {}
-        for pair in names_str.split(","):
-            if ":" in pair:
-                key, value = pair.split(":", 1)
-                mapping[key.strip()] = value.strip()
-        return mapping, None
-    else:
-        # Positional list format
-        names = [name.strip() for name in names_str.split(",") if name.strip()]
-        return {}, names if names else None
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Visualize multiple progressive embeddings training trajectories on one PCA plot"
-    )
-    parser.add_argument(
-        "--checkpoints",
-        type=str,
-        nargs="+",
-        required=True,
-        help="Paths to progressive embeddings datasets (checkpoints)",
-    )
-    parser.add_argument(
-        "--only_stat_table",
-        required=True,
-        action="store_true",
-    )
-    parser.add_argument(
-        "--sample_id",
-        type=int,
-        default=None,
-        help="Sample ID to visualize (default: first available sample)",
-    )
-    parser.add_argument(
-        "--n_components",
-        type=int,
-        default=2,
-        choices=[2, 4],
-        help="Number of PCA components (2 or 4)",
-    )
-    parser.add_argument(
-        "--show_labels",
-        action="store_true",
-        help="Show stage labels on trajectory points",
-    )
-    parser.add_argument(
-        "--names_mapping",
-        type=str,
-        default=None,
-        help="Optional mapping of checkpoint paths to display names. "
-        "Two formats supported: 1) Path-based: 'path1:name1,path2:name2' "
-        "2) Positional list: 'name1,name2,name3' (corresponds to --checkpoints order)",
-    )
-    parser.add_argument(
-        "--tablefmt",
-        type=str,
-        default="grid",
-        help="Tabulate table format for printed statistics (e.g., grid, simple, github). Default: grid.",
-    )
-    parser.add_argument(
-        "--short",
-        action="store_true",
-        help="Print a shortened statistics table without 'Trajectory Length' and 'PCA 99%' columns.",
-    )
-    parser.add_argument("--midrule_indicies", nargs="+", type=int)
-
-    args = parser.parse_args()
-
-    # Parse names mapping
-    path_mapping, positional_names = parse_names_mapping(args.names_mapping)
-
-    # Validate positional names length if provided
-    if positional_names is not None and len(positional_names) != len(args.checkpoints):
-        raise ValueError(
-            f"Number of names in --names_mapping ({len(positional_names)}) "
-            f"does not match number of checkpoints ({len(args.checkpoints)})"
-        )
-
-    not_exists_checkpoints = []
-    for checkpoint in args.checkpoints:
-        if not os.path.isdir(checkpoint):
-            not_exists_checkpoints.append(checkpoint)
-    assert len(not_exists_checkpoints) == 0, f"checkpoints not exists: {not_exists_checkpoints}"
-
-    # Extract trajectories from each checkpoint
-    trajectories = []
-    checkpoint_names = []
-    labels_list = []
-    statistics_list = []
-    final_embeddings = []
-
-    for idx, checkpoint_path in tqdm(enumerate(args.checkpoints), desc="Checkpoints", total=len(args.checkpoints)):
-        traj, labels, stats, final_emb = extract_trajectory(checkpoint_path, sample_id=args.sample_id)
-        trajectories.append(traj)
-        labels_list.append(labels)
-        statistics_list.append(stats)
-        final_embeddings.append(final_emb)
-
-        # Determine name for this checkpoint
-        if positional_names is not None:
-            # Use positional mapping
-            checkpoint_names.append(positional_names[idx])
-        elif checkpoint_path in path_mapping:
-            # Use path-based mapping
-            checkpoint_names.append(path_mapping[checkpoint_path])
-        else:
-            # Extract a short name from the path
-            name = os.path.basename(os.path.dirname(checkpoint_path))
-            if not name or name == ".":
-                name = os.path.basename(checkpoint_path)
-            checkpoint_names.append(name)
-
-        print(f"Loaded trajectory from {checkpoint_path}: {traj.shape[0]} stages, {traj.shape[1]} features")
-
-    if len(trajectories) == 0:
-        raise ValueError("No valid trajectories loaded")
-
-    # Print statistics table
-    if len(statistics_list) > 0:
-        print_statistics_table(
-            checkpoint_names,
-            statistics_list,
-            midrule_indicies=args.midrule_indicies,
-            tablefmt=args.tablefmt,
-            short=args.short,
-        )
-
-    if args.only_stat_table:
-        return
-
-
-if __name__ == "__main__":
-    main()

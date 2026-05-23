@@ -1,19 +1,35 @@
 import argparse
 import glob
+import importlib.util
 import json
 import os
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 
-from scripts.results.results import (
-    aggregate_non_progressive,
-    aggregate_prefix_tuning,
-    aggregate_progressive,
-    load_dataset_rows,
-)
-from tabulate import tabulate
-from tqdm.auto import tqdm
+# Load scripts/results/results.py directly: the sibling scripts/results.py
+# file (unrelated, broken) shadows the package on `import scripts.results...`.
+_RESULTS_PATH = Path(__file__).resolve().parents[2] / "results" / "results.py"
+_spec = importlib.util.spec_from_file_location("_paper_results_helpers", _RESULTS_PATH)
+assert _spec is not None and _spec.loader is not None
+_results = importlib.util.module_from_spec(_spec)
+sys.modules.setdefault("_paper_results_helpers", _results)
+_spec.loader.exec_module(_results)
+aggregate_non_progressive = _results.aggregate_non_progressive
+aggregate_prefix_tuning = _results.aggregate_prefix_tuning
+aggregate_progressive = _results.aggregate_progressive
+load_dataset_rows = _results.load_dataset_rows
 
-from compression_horizon.utils import to_mean_std_cell
+from tabulate import tabulate  # noqa: E402
+from tqdm.auto import tqdm  # noqa: E402
+
+from compression_horizon.utils import to_mean_std_cell  # noqa: E402
+
+TYPE_TO_SLUG = {
+    "full_cramming": "full_vs_progressive",
+    "full_cramming_apendix": "full_vs_progressive_appendix",
+    "prefix_tuning": "prefix_tuning_accuracy",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -27,6 +43,12 @@ def parse_args() -> argparse.Namespace:
         "--type",
         choices=["full_cramming", "prefix_tuning", "full_cramming_apendix"],
         default="full_cramming",
+    )
+    parser.add_argument(
+        "--save-dir",
+        type=str,
+        default=None,
+        help="If set, write the rendered table to <save-dir>/<slug>.tex (slug derived from --type).",
     )
     return parser.parse_args()
 
@@ -325,6 +347,14 @@ def main() -> None:
     result = re.sub(r"REMOVE.+", "", result)
 
     print(result)
+
+    if args.save_dir is not None:
+        slug = TYPE_TO_SLUG[args.type]
+        out_dir = Path(args.save_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"{slug}.tex"
+        out_path.write_text(result + "\n", encoding="utf-8")
+        print(f"\nSaved 'tab:{slug}' to {out_path}")
 
 
 if __name__ == "__main__":

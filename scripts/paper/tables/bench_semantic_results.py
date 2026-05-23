@@ -113,6 +113,12 @@ def main() -> int:
         default="github",
         help="Tabulate table format (e.g., github, grid, latex, plain).",
     )
+    parser.add_argument(
+        "--save-dir",
+        type=str,
+        default=None,
+        help="If set, write the rendered table to <save-dir>/semantic_evaluation.tex.",
+    )
     args = parser.parse_args()
 
     hs_results = []
@@ -192,6 +198,13 @@ def main() -> int:
     result = result.replace("\\}", "}")
 
     print(result)
+
+    if args.save_dir is not None:
+        out_dir = Path(args.save_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / "semantic_evaluation.tex"
+        out_path.write_text(result + "\n", encoding="utf-8")
+        print(f"\nSaved 'tab:semantic_evaluation' to {out_path}")
     return 0
 
 
