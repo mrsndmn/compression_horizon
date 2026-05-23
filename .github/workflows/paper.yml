@@ -70,54 +70,8 @@ jobs:
         id: meta
         run: echo "short_sha=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
 
-      - name: Upload PDF artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: paper-pdf
-          path: paper/example_paper.pdf
-          if-no-files-found: error
-
-      - name: Send PDF to Telegram
-        if: success()
-        env:
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          GITHUB_REPO: ${{ github.repository }}
-          GITHUB_REF: ${{ github.ref_name }}
-          GITHUB_SHA: ${{ github.sha }}
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_EVENT: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          if [ -z "${TG_BOT_TOKEN:-}" ] || [ -z "${TG_CHAT_ID:-}" ]; then
-            echo "TG_BOT_TOKEN or TG_CHAT_ID not configured; skipping Telegram upload."
-            exit 0
-          fi
-          short_sha="${GITHUB_SHA:0:7}"
-          caption="📄 Paper build: ${GITHUB_REPO}@${GITHUB_REF} (${short_sha})"
-          caption="${caption}"$'\n'"event=${GITHUB_EVENT} by @${GITHUB_ACTOR}"
-          if [ -n "${PR_NUMBER:-}" ]; then
-            caption="${caption}"$'\n'"PR #${PR_NUMBER}"
-          fi
-          unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
-          curl -fsS \
-            -F "chat_id=${TG_CHAT_ID}" \
-            -F "document=@paper/example_paper.pdf;filename=example_paper-${short_sha}.pdf;type=application/pdf" \
-            -F "caption=${caption}" \
-            "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument"
-
-  upload-s3:
-    runs-on: self-hosted
-    needs: build-paper
-    steps:
-      - name: Download paper PDF artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: paper-pdf
-          path: ./pdf
-
       - name: Upload to Yandex Object Storage
+        if: success()
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -128,10 +82,10 @@ jobs:
             exit 0
           fi
           unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
-          ls -la ./pdf
+          ls -la paper/example_paper.pdf
           /home/jovyan/.mlspace/envs/compression_horizon/bin/s3cmd \
             -c /dev/null \
             --host=storage.yandexcloud.net \
             --host-bucket='%(bucket)s.storage.yandexcloud.net' \
             --region=ru-central1 \
-            put ./pdf/example_paper.pdf s3://papers-drafts/progressive_cramming.pdf
+            put ./paper/example_paper.pdf s3://papers-drafts/progressive_cramming.pdf
