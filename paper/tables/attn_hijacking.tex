@@ -1,0 +1,25 @@
+\begin{tabular}{llllr}
+\hline
+ Model                               & Compression Token (\%)      & BOS Token Original (\%)     & Diff (\%)                    &   Correlation \\
+\hline
+ Llama-3.2-1B {\small lr=0.1}        & 20.71 {\small $\pm$ 5.74}  & 67.37 {\small $\pm$ 1.41}  & -46.66 {\small $\pm$ 6.5}   &        0.2884 \\
+ Llama-3.2-3B {\small lr=0.1}        & 15.97 {\small $\pm$ 1.15}  & 70 {\small $\pm$ 1.14}     & -54.03 {\small $\pm$ 1.01}  &       -0.1907 \\
+ Llama-3.1-8B {\small lr=0.1}        & 38.07 {\small $\pm$ 17.98} & 70.56 {\small $\pm$ 1.26}  & -32.49 {\small $\pm$ 18.96} &        0.4104 \\
+ Llama-3.1-8B\ \bcancel{B} {\small lr=0.1}  & 18.93 {\small $\pm$ 10.43} & 70.05 {\small $\pm$ 1.29}  & -51.12 {\small $\pm$ 10.33} &        0.4688 \\
+ \midrule
+ pythia-160m {\small lr=0.5}         & 50.88 {\small $\pm$ 16.11} & 36.15 {\small $\pm$ 2.75}  & 14.72 {\small $\pm$ 15.65}  &        0.7877 \\
+ pythia-410m {\small lr=0.5}         & 34.69 {\small $\pm$ 15.35} & 39.96 {\small $\pm$ 1.86}  & -5.27 {\small $\pm$ 15.63}  &        0.7883 \\
+ pythia-1.4b {\small lr=0.5}         & 37.41 {\small $\pm$ 4.12}  & 24.03 {\small $\pm$ 2.49}  & 13.37 {\small $\pm$ 5.17}   &        0.8315 \\
+ pythia-1.4b\ \bcancel{B} {\small lr=0.5}   & 38 {\small $\pm$ 4.72}     & 24.74 {\small $\pm$ 2.49}  & 13.27 {\small $\pm$ 5.89}   &        0.8454 \\
+ \midrule
+ SmolLM2-135M {\small lr=0.1}        & 60.79 {\small $\pm$ 17.6}  & 74.04 {\small $\pm$ 11.45} & -13.25 {\small $\pm$ 23.9}  &        0.8475 \\
+ SmolLM2-360M {\small lr=0.1}        & 65.71 {\small $\pm$ 16.07} & 69.05 {\small $\pm$ 9.6}   & -3.34 {\small $\pm$ 19.42}  &        0.9843 \\
+ SmolLM2-1.7B {\small lr=0.1}        & 49.85 {\small $\pm$ 2.75}  & 56.47 {\small $\pm$ 9.19}  & -6.62 {\small $\pm$ 9.32}   &        0.9532 \\
+ SmolLM2-1.7B\ \bcancel{B} {\small lr=0.1}  & 49.95 {\small $\pm$ 2.82}  & 56.47 {\small $\pm$ 9.19}  & -6.52 {\small $\pm$ 9.44}   &        0.9535 \\
+ \midrule
+ gemma-3-270m {\small lr=0.1}        & 12.94 {\small $\pm$ 3.04}  & 60.87 {\small $\pm$ 1.43}  & -47.93 {\small $\pm$ 3.87}  &        0.3448 \\
+ gemma-3-1b-pt {\small lr=0.1}       & 18.67 {\small $\pm$ 3.14}  & 61.27 {\small $\pm$ 1.73}  & -42.6 {\small $\pm$ 3.01}   &        0.0998 \\
+ gemma-3-4b-pt {\small lr=0.1}       & 7.97 {\small $\pm$ 2.09}   & 61.17 {\small $\pm$ 1.02}  & -53.19 {\small $\pm$ 2.05}  &        0.0497 \\
+ gemma-3-4b-pt\ \bcancel{B} {\small lr=0.1} & 6.84 {\small $\pm$ 0.4}    & 63.56 {\small $\pm$ 1.02}  & -56.72 {\small $\pm$ 1.22}  &       -0.1461 \\
+\hline
+\end{tabular}
