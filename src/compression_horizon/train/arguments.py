@@ -236,6 +236,13 @@ class MyTrainingArguments(TrainingArguments):
         default=8,
         metadata={"help": "Q-Former: number of attention heads per block."},
     )
+    compression_head_query_proj_factor: int = field(
+        default=1,
+        metadata={
+            "help": "Q-Former wide-init: keep the learnable query in dimension factor*H and "
+            "project down to H (more optimizer degrees of freedom). 1 disables it."
+        },
+    )
 
     # --- Other trainer modes --------------------------------------------
     train_prefix_tuning: bool = field(default=False, metadata={"help": "Run the PEFT prefix tuning trainer."})

@@ -275,6 +275,7 @@ if __name__ == "__main__":
             ch_config.compression_head_num_queries = training_args.compression_head_num_queries
             ch_config.compression_head_num_layers = training_args.compression_head_num_layers
             ch_config.compression_head_num_heads = training_args.compression_head_num_heads
+            ch_config.compression_head_query_proj_factor = training_args.compression_head_query_proj_factor
         model = LlamaForCausalLMCompressionHead.from_pretrained(
             training_args.model_checkpoint,
             config=ch_config,

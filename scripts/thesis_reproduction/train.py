@@ -74,6 +74,7 @@ def main() -> None:
             ch_config.compression_head_num_queries = args.compression_head_num_queries
             ch_config.compression_head_num_layers = args.compression_head_num_layers
             ch_config.compression_head_num_heads = args.compression_head_num_heads
+            ch_config.compression_head_query_proj_factor = args.compression_head_query_proj_factor
         model = LlamaForCausalLMCompressionHead.from_pretrained(
             args.model_checkpoint, config=ch_config, dtype=torch_dtype, attn_implementation=attn_implementation
         )
