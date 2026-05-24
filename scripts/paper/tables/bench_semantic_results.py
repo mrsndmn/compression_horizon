@@ -270,35 +270,63 @@ def main() -> int:
             ]
         )
 
+    # Leaf headers are kept short ("Acc"/"Conv%"); the "Prog"/"Full" variant
+    # labels are lifted into a spanning sub-header row (built below) so the
+    # numeric columns stay narrow and the table fits the page width.
     headers = [
         "Model",
         "Base",
-        "Prog Acc",
-        "Prog Conv\\%",
-        "Full Acc",
-        "Full Conv\\%",
+        "Acc",
+        "Conv%",
+        "Acc",
+        "Conv%",
         "Base",
-        "Prog Acc",
-        "Prog Conv\\%",
-        "Full Acc",
-        "Full Conv\\%",
+        "Acc",
+        "Conv%",
+        "Acc",
+        "Conv%",
     ]
     result = tabulate(rows, headers=headers, tablefmt=args.tablefmt)
 
     if args.tablefmt == "latex":
         result_lines = result.split("\n")
-        # Insert a multicolumn header row (with cline rules underneath) above the column headers.
-        # tabulate latex emits:
+        # Center the numeric columns (Model stays left-aligned); tabulate emits
+        # all-`l` columns for string data.
+        result_lines[0] = "\\begin{tabular}{lcccccccccc}"
+        # Build a 3-row header above tabulate's leaf-header row. tabulate emits:
         #   \begin{tabular}{...}      (index 0)
         #   \hline                    (index 1)
-        #   Model & Base & ... \\     (index 2)
-        # We insert the group-header row at index 2 and a cline separator immediately after,
-        # so the rendered table has a rule under each group label.
+        #   Model & Base & Acc & ...  (index 2, leaf headers)
+        # We insert, in order at index 2: the benchmark group row, its rule, the
+        # Prog/Full variant row, and its rule. The leaf-header row then follows.
         result_lines.insert(
             2,
             " & \\multicolumn{5}{c}{\\textbf{HellaSwag}} " "& \\multicolumn{5}{c}{\\textbf{ARC-E}} \\\\",
         )
-        result_lines.insert(3, "\\cline{2-6}\\cline{7-11}")
+        # Trimmed booktabs rules (cmidrule with (lr)) inset each group's underline,
+        # leaving a visible gap between the HellaSwag and ARC-E group rules
+        # (plain \cline{2-6}\cline{7-11} abut and render as one continuous line).
+        result_lines.insert(3, "\\cmidrule(lr){2-6}\\cmidrule(lr){7-11}")
+        result_lines.insert(
+            4,
+            " & & \\multicolumn{2}{c}{Progressive} & \\multicolumn{2}{c}{Full}"
+            " & & \\multicolumn{2}{c}{Progressive} & \\multicolumn{2}{c}{Full} \\\\",
+        )
+        result_lines.insert(
+            5,
+            "\\cmidrule(lr){3-4}\\cmidrule(lr){5-6}\\cmidrule(lr){8-9}\\cmidrule(lr){10-11}",
+        )
+        # Replace tabulate's plain \hline rules with booktabs rules, which carry
+        # \aboverulesep/\belowrulesep spacing (more breathing room than \hline):
+        # first -> \toprule, last -> \bottomrule, the remaining one -> \midrule.
+        hline_idx = [i for i, ln in enumerate(result_lines) if ln.strip() == "\\hline"]
+        for i in hline_idx:
+            if i == hline_idx[0]:
+                result_lines[i] = "\\toprule"
+            elif i == hline_idx[-1]:
+                result_lines[i] = "\\bottomrule"
+            else:
+                result_lines[i] = "\\midrule"
         result = "\n".join(result_lines)
         result = result.replace("\\textbackslash{}", "\\")
         result = result.replace("\\$", "$")
