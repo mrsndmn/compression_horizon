@@ -236,3 +236,43 @@ These results on a generative benchmark with longer context reinforce the conclu
 \end{small}
 \end{table*}
 
+\section{Transformer-Depth Ablation}
+\label{app:layer_ablation}
+
+To probe how progressive-cramming capacity depends on model depth, we ablate the number of transformer layers in SmolLM2-1.7B. Starting from the pretrained 24-layer model, we keep only the first $N$ and the last $N$ decoder layers---discarding the middle block---for $N \in \{1, 2, 4, 8\}$, yielding models with $2N \in \{2, 4, 8, 16\}$ layers. Each retained layer keeps its original pretrained weights, the input embedding and (tied) output projection are preserved, and we renumber the layer indices and update \texttt{num\_hidden\_layers} so that each truncated model is a self-contained checkpoint. We then run the baseline progressive-cramming procedure (cross-entropy reconstruction, single-layer activation alignment, no low-dimensional projection) on each checkpoint, using the same PG19 sample set, learning rate ($0.1$), and optimization budget as our main SmolLM2-1.7B run; the unmodified 24-layer model serves as the reference row.
+
+Because the input/output vocabulary mapping and every optimization hyperparameter are held fixed, this ablation isolates the contribution of network \emph{depth} to compression capacity. Table~\ref{tab:layer_ablation} reports, for each depth, the achieved compressed-token count, information gain, trajectory length, and the number of principal components explaining 99\% of trajectory variance (PCA 99\%).
+% BEGIN AUTOGEN layer-ablation-trend (filled by scripts/jobs/watch_layer_ablation.py after the runs finish)
+Concretely, the mean number of perfectly reconstructed (compressed) tokens is 76.9, 270.9, 240.8, 272.5, and 335.1 for the 2-, 4-, 8-, 16-, and 24-layer variants, respectively, varying non-monotonically with depth.
+% END AUTOGEN layer-ablation-trend
+
+\begin{table*}[t]
+    \centering
+    \caption{Transformer-depth ablation on SmolLM2-1.7B. The model is truncated to its first $N$ and last $N$ decoder layers ($2N$ layers total); the full 24-layer model is the reference. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
+    \label{tab:layer_ablation}
+    \begin{small}
+    \input{tables/layer_ablation}
+    \end{small}
+\vskip -0.1in
+\end{table*}
+
+\section{Initialization Ablation}
+\label{app:init_ablation}
+
+To identify which pretrained components are load-bearing for progressive cramming, we ablate \emph{initialization} on SmolLM2-1.7B: starting from the pretrained model, we randomly re-initialize exactly one component and keep the rest pretrained. We consider three variants: (i) \emph{random transformer layers}, where the decoder layers are re-initialized while the input embedding and (tied) output projection are preserved; (ii) \emph{random LM head}, where only the output projection is re-initialized; and (iii) \emph{random input embeddings}, where only the input token-embedding matrix is re-initialized. Because SmolLM2-1.7B ties its input and output embeddings, for variants (ii) and (iii) we first \emph{untie} them---cloning the shared matrix into an independent output projection and setting \texttt{tie\_word\_embeddings=false}---so that exactly one matrix is randomized while the other retains its pretrained values. Re-initialized weights are drawn from the model's own initialization distribution $\mathcal{N}(0, \sigma^2)$ (with $\sigma$ the configured initializer range), and normalization gains are reset to one.
+
+We then run the baseline progressive-cramming procedure (cross-entropy reconstruction, single-layer activation alignment, no low-dimensional projection) on each checkpoint, using the same PG19 sample set, learning rate ($0.1$), and optimization budget as our main run; the fully pretrained model is the reference. Table~\ref{tab:init_ablation} reports, for each variant, the achieved compressed-token count, information gain, trajectory length, and the number of principal components explaining 99\% of trajectory variance (PCA 99\%).
+% BEGIN AUTOGEN init-ablation-trend (filled by scripts/jobs/watch_ablation.py after the runs finish)
+Concretely, the mean number of perfectly reconstructed (compressed) tokens is 335.1 (pretrained), 148.5 (random transformer layers), 33.6 (random lm head), 173.9 (random input embeddings).
+% END AUTOGEN init-ablation-trend
+
+\begin{table*}[t]
+    \centering
+    \caption{Initialization ablation on SmolLM2-1.7B. Exactly one component is randomly re-initialized---transformer layers, LM head, or input embeddings---while the rest stay pretrained; the fully pretrained model is the reference. For the LM-head and input-embedding variants the tied embeddings are first untied so a single matrix is randomized. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
+    \label{tab:init_ablation}
+    \begin{small}
+    \input{tables/init_ablation}
+    \end{small}
+\vskip -0.1in
+\end{table*}
+

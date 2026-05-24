@@ -29,6 +29,8 @@ PROGRESSIVE_TABLES=(
   tab:full_activation_alignment_and_low_dim_projections
   tab:all_progressive_modifications
   tab:progressive_no_bos_token
+  tab:layer_ablation
+  tab:init_ablation
 )
 
 for name in "${PROGRESSIVE_TABLES[@]}"; do
