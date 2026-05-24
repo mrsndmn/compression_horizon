@@ -445,11 +445,7 @@ def plot_per_layer_knockout(
     base_acc = data.get("baseline", {}).get("accuracy")
     cram_acc = data.get("compressed", {}).get("accuracy")
 
-    fig, ax1 = plt.subplots(figsize=(12, 5))
-
-    title = "Per-Layer Attention Knockout"
-    if model_label:
-        title += f" ({model_label})"
+    fig, ax1 = plt.subplots(figsize=(12, 4))
 
     color_acc = "#2563eb"
     ax1.plot(layers, accuracies, "o-", color=color_acc, linewidth=1.5, markersize=4, label="KO accuracy")
@@ -468,25 +464,32 @@ def plot_per_layer_knockout(
         ax1.axhline(y=base_acc, color="#16a34a", linestyle="--", linewidth=1, label=f"Base = {base_acc:.3f}")
     if cram_acc is not None:
         ax1.axhline(y=cram_acc, color="#dc2626", linestyle="--", linewidth=1, label=f"Cram = {cram_acc:.3f}")
-    ax1.set_xlabel("Layer index")
-    ax1.set_ylabel("Accuracy (KO at layer)", color=color_acc)
-    ax1.tick_params(axis="y", labelcolor=color_acc)
+    ax1.set_xlabel("Layer index", fontsize=18)
+    ax1.set_ylabel("Accuracy (KO at layer)", color=color_acc, fontsize=18)
+    ax1.tick_params(axis="y", labelcolor=color_acc, labelsize=15)
+    ax1.tick_params(axis="x", labelsize=15)
     ax1.set_xlim(-0.5, num_layers - 0.5)
 
     if attention_mass is not None and len(attention_mass) == num_layers:
         color_attn = "#f97316"
         ax2 = ax1.twinx()
         ax2.bar(layers, attention_mass, alpha=0.3, color=color_attn, label="Attention mass %")
-        ax2.set_ylabel("Attention mass on compression token (%)", color=color_attn)
-        ax2.tick_params(axis="y", labelcolor=color_attn)
+        ax2.set_ylabel("Attention mass on\ncompression token (%)", color=color_attn, fontsize=18)
+        ax2.tick_params(axis="y", labelcolor=color_attn, labelsize=15)
         # Combine legends
         lines1, labels1 = ax1.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
-        ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper right", fontsize=8)
+        ax2.legend(
+            lines2 + lines1,
+            labels2 + labels1,
+            loc="upper right",
+            bbox_to_anchor=(1.0, 0.63),
+            fontsize=14,
+            framealpha=0.9,
+        )
     else:
-        ax1.legend(loc="upper right", fontsize=8)
+        ax1.legend(loc="upper right", fontsize=14, framealpha=1.0)
 
-    ax1.set_title(title)
     ax1.grid(True, alpha=0.3)
     fig.tight_layout()
     fig.savefig(output_path, dpi=150, bbox_inches="tight")
@@ -595,12 +598,7 @@ def plot_cumulative_knockout(
     base_acc = data.get("baseline", {}).get("accuracy")
     cram_acc = data.get("compressed", {}).get("accuracy")
 
-    fig, (ax_fwd, ax_rev) = plt.subplots(1, 2, figsize=(16, 5), sharey=True)
-
-    suptitle = "Cumulative Knockout Recovery Curve"
-    if model_label:
-        suptitle += f" ({model_label})"
-    fig.suptitle(suptitle)
+    fig, (ax_fwd, ax_rev) = plt.subplots(1, 2, figsize=(16, 4), sharey=True)
 
     # --- Left subplot: Forward cumulative knockout (layers 0..k) ---
     if has_forward:
@@ -636,11 +634,12 @@ def plot_cumulative_knockout(
         ax_fwd.axhline(y=base_acc, color="#16a34a", linestyle="--", linewidth=1, label=f"Base = {base_acc:.3f}")
     if cram_acc is not None:
         ax_fwd.axhline(y=cram_acc, color="#dc2626", linestyle="--", linewidth=1, label=f"Cram = {cram_acc:.3f}")
-    ax_fwd.set_xlabel("Number of layers knocked out (0 = Cram, L = Base)")
-    ax_fwd.set_ylabel("Accuracy")
+    ax_fwd.set_xlabel("Number of layers knocked out (0 = Cram, L = Base)", fontsize=18)
+    ax_fwd.set_ylabel("Accuracy", fontsize=18)
     ax_fwd.set_xlim(-0.5, num_layers + 0.5)
-    ax_fwd.set_title("Forward knockout HellaSwag Accuracy (layers 0..k)")
-    ax_fwd.legend(loc="best", fontsize=8)
+    ax_fwd.set_title("Forward knockout HellaSwag Accuracy (layers 0..k)", fontsize=18)
+    ax_fwd.tick_params(labelsize=15)
+    ax_fwd.legend(loc="best", fontsize=14)
     ax_fwd.grid(True, alpha=0.3)
 
     # --- Right subplot: Reverse cumulative knockout (layers k..L-1) ---
@@ -671,10 +670,11 @@ def plot_cumulative_knockout(
         ax_rev.axhline(y=base_acc, color="#16a34a", linestyle="--", linewidth=1, label=f"Base = {base_acc:.3f}")
     if cram_acc is not None:
         ax_rev.axhline(y=cram_acc, color="#dc2626", linestyle="--", linewidth=1, label=f"Cram = {cram_acc:.3f}")
-    ax_rev.set_xlabel("Number of layers knocked out (0 = Cram, L = Base)")
+    ax_rev.set_xlabel("Number of layers knocked out (0 = Cram, L = Base)", fontsize=18)
     ax_rev.set_xlim(-0.5, num_layers + 0.5)
-    ax_rev.set_title("Reverse knockout (layers k..L-1)")
-    ax_rev.legend(loc="best", fontsize=8)
+    ax_rev.set_title("Reverse knockout (layers k..L-1)", fontsize=18)
+    ax_rev.tick_params(labelsize=15)
+    ax_rev.legend(loc="best", fontsize=14)
     ax_rev.grid(True, alpha=0.3)
 
     fig.tight_layout()
