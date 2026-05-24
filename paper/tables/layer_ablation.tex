@@ -1,11 +1,19 @@
 \begin{tabular}{lllll}
-\hline
- Model            & Compressed Tokens         & Information Gain         & Trajectory Length       & PCA 99\%                   \\
-\hline
- 2 layers         & 76.9 {\small $\pm$ 39.3}  & 2082 {\small $\pm$ 1285} & 1060 {\small $\pm$ 345} & 23.12 {\small $\pm$ 5.14} \\
- 4 layers         & 270.9 {\small $\pm$ 50.4} & 5198 {\small $\pm$ 857}  & 1665 {\small $\pm$ 253} & 32.48 {\small $\pm$ 1.99} \\
- 8 layers         & 240.8 {\small $\pm$ 54.7} & 5585 {\small $\pm$ 1998} & 1036 {\small $\pm$ 234} & 27.78 {\small $\pm$ 3.37} \\
- 16 layers        & 272.5 {\small $\pm$ 38.3} & 1544 {\small $\pm$ 223}  & 1083 {\small $\pm$ 120} & 34.48 {\small $\pm$ 3.09} \\
- 24 layers (full) & 335.1 {\small $\pm$ 61.3} & 1208 {\small $\pm$ 162}  & 1051 {\small $\pm$ 147} & 33.22 {\small $\pm$ 2.82} \\
-\hline
+\toprule
+ Model                 & Compressed Tokens         & Information Gain         & Trajectory Length       & PCA 99\%                   \\
+\midrule
+ 2 layers              & 76.9 {\small $\pm$ 39.3}  & 2082 {\small $\pm$ 1285} & 1060 {\small $\pm$ 345} & 23.12 {\small $\pm$ 5.14} \\
+ 2 layers (finetuned)  & 218 {\small $\pm$ 27.1}   & 1269 {\small $\pm$ 120}  & 1877 {\small $\pm$ 216} & 33.08 {\small $\pm$ 1.21} \\
+ \midrule
+ 4 layers              & 270.9 {\small $\pm$ 50.4} & 5198 {\small $\pm$ 857}  & 1665 {\small $\pm$ 253} & 32.48 {\small $\pm$ 1.99} \\
+ 4 layers (finetuned)  & 393.4 {\small $\pm$ 50}   & 2224 {\small $\pm$ 114}  & 2028 {\small $\pm$ 194} & 34.56 {\small $\pm$ 1.98} \\
+ \midrule
+ 8 layers              & 240.8 {\small $\pm$ 54.7} & 5585 {\small $\pm$ 1998} & 1036 {\small $\pm$ 234} & 27.78 {\small $\pm$ 3.37} \\
+ 8 layers (finetuned)  & 393.8 {\small $\pm$ 57.8} & 1990 {\small $\pm$ 191}  & 1358 {\small $\pm$ 184} & 31.14 {\small $\pm$ 2.58} \\
+ \midrule
+ 16 layers             & 272.5 {\small $\pm$ 38.3} & 1544 {\small $\pm$ 223}  & 1083 {\small $\pm$ 120} & 34.48 {\small $\pm$ 3.09} \\
+ 16 layers (finetuned) & 379.4 {\small $\pm$ 69.8} & 1561 {\small $\pm$ 180}  & 1172 {\small $\pm$ 143} & 32.82 {\small $\pm$ 3.57} \\
+ \midrule
+ 24 layers (full)      & 335.1 {\small $\pm$ 61.3} & 1208 {\small $\pm$ 162}  & 1051 {\small $\pm$ 147} & 33.22 {\small $\pm$ 2.82} \\
+\bottomrule
 \end{tabular}
