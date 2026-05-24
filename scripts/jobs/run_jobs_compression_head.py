@@ -44,6 +44,8 @@ LOGGING_STEPS = 50
 LR_SCHEDULER_TYPE = "cosine_with_min_lr"
 LR_SCHEDULER_KWARGS = "min_lr=0.00001"
 FREEZE_BASE_MODEL = False
+# Bump to give a fresh output dir and avoid colliding with earlier (e.g. failed) runs of the same config.
+RUN_TAG = "v2"
 
 # 8-GPU training; keep the global batch at 256k tokens. gradient_accumulation_steps is derived so that
 # per_device_batch * grad_accum * num_gpus * seq_len == TARGET_GLOBAL_TOKENS.
@@ -120,6 +122,7 @@ def render_ch_job(experiment: dict) -> tuple[list[str], str, str]:
     exp_suffix = f"{exp_suffix}_lr_{LEARNING_RATE}_a_{DISTILL_ALPHA}_b_{DISTILL_BETA}"
     if not FREEZE_BASE_MODEL:
         exp_suffix = f"{exp_suffix}_unfrozen"
+    exp_suffix = f"{exp_suffix}_{RUN_TAG}"
     out_dir_name = f"artifacts/experiments_compression_head/{exp_suffix}"
 
     cmd_args = [
