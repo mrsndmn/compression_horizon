@@ -265,20 +265,36 @@ TABLES: List[TableSpec] = [
     TableSpec(
         # Transformer-depth ablation: SmolLM2-1.7B truncated to its first N and
         # last N decoder layers (N in {1,2,4,8} -> 2/4/8/16 of 24 layers), plus
-        # the full-depth (24-layer) baseline as the reference row. All five runs
-        # share the same dataset / sample count / lr (pg19_1k, 50, 0.1) so the
-        # rows are directly comparable. Checkpoints built by
-        # scripts/checkpoints/make_first_last_layers_ckpt.py and trained via
-        # scripts/jobs/run_jobs_layer_ablation.py.
+        # the full-depth (24-layer) baseline as the reference row. Each truncated
+        # depth is shown twice -- as-is and after causal-LM finetuning on
+        # fineweb-edu ("(finetuned)") -- so the before/after recovery is visible.
+        # All runs share the same progressive eval config (pg19_1k, 50, 0.1).
+        # Un-finetuned checkpoints: make_first_last_layers_ckpt.py +
+        # run_jobs_layer_ablation.py. Finetuning: run_jobs_finetune_truncated.py
+        # (-> "-ft" checkpoints); finetuned eval: run_jobs_layer_ablation_ft.py.
         name="tab:layer_ablation",
         checkpoints=[
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast1_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast1-ft_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            MIDRULE,
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast2_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast2-ft_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            MIDRULE,
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ft_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            MIDRULE,
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast8_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast8-ft_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            MIDRULE,
             f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
         ],
-        names_mapping="2 layers,4 layers,8 layers,16 layers,24 layers (full)",
+        names_mapping=(
+            "2 layers,2 layers (finetuned),"
+            "4 layers,4 layers (finetuned),"
+            "8 layers,8 layers (finetuned),"
+            "16 layers,16 layers (finetuned),"
+            "24 layers (full)"
+        ),
     ),
     TableSpec(
         # Initialization ablation: SmolLM2-1.7B with exactly one component randomly
