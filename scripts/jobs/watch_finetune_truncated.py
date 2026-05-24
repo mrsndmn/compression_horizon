@@ -102,6 +102,69 @@ def save_logs(name: str, tail: int = 400) -> str:
     return path
 
 
+def tb_progress(out_dir: str, max_steps: int):
+    """Return ``(step, loss, eta_str)`` from the latest TB event file, or ``None``.
+
+    ETA is extrapolated from the step rate across the logged scalars so the
+    watcher log shows live training progress without tailing the (buffered) job
+    stdout.
+    """
+    import glob
+
+    runs = sorted(glob.glob(os.path.join(PROJ, out_dir, "runs", "*", "events*")))
+    if not runs:
+        return None
+    try:
+        from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
+
+        ea = EventAccumulator(runs[-1])
+        ea.Reload()
+        if "train/loss" not in ea.Tags().get("scalars", []):
+            return None
+        ev = ea.Scalars("train/loss")
+    except Exception:
+        return None
+    if not ev:
+        return None
+    last = ev[-1]
+    eta = "?"
+    if len(ev) >= 2 and last.step < max_steps:
+        dstep = last.step - ev[0].step
+        dt = last.wall_time - ev[0].wall_time
+        if dstep > 0 and dt > 0:
+            rem = (max_steps - last.step) / (dstep / dt)
+            h, m = int(rem // 3600), int((rem % 3600) // 60)
+            eta = f"{h}h{m:02d}m" if h else f"{m}m"
+    return last.step, last.value, eta
+
+
+def wait_with_progress(name: str, model_short: str, out_dir: str, max_steps: int, poll: int) -> bool:
+    """Poll the job until it terminates, logging step/loss/ETA each cycle.
+
+    Returns True on a clean finish (``completed_at`` set, ``error_code==0``).
+    """
+    import time
+
+    while True:
+        st = mls_status(name)
+        status = str(st.get("status", "")).lower()
+        completed_at = int(st.get("completed_at", 0) or 0)
+        error_code = int(st.get("error_code", 0) or 0)
+
+        prog = tb_progress(out_dir, max_steps)
+        if prog:
+            step, loss, eta = prog
+            log(f"{model_short}: step {step}/{max_steps} loss {loss:.3f} ETA {eta} (status={status})")
+        else:
+            log(f"{model_short}: status={status} (waiting for first metrics)")
+
+        if completed_at > 0 or status in ("completed", "succeeded", "finished", "done"):
+            return error_code == 0
+        if status in ("failed", "error", "cancelled", "canceled", "stopped", "killed", "aborted"):
+            return False
+        time.sleep(poll)
+
+
 def ft_done(out_dir: str) -> bool:
     """A finetune job is done when the checkpoint dir holds a saved model."""
     abs_dir = os.path.join(PROJ, out_dir)
@@ -158,14 +221,13 @@ def ensure_finetune(checkpoint: str, opts: dict, max_retries: int, poll: int) ->
                 return False
 
         log(f"{model_short}: waiting on {name} (attempt {attempt + 1}/{max_retries + 1})")
-        rc = mls_wait(name, poll)
-        status = str(mls_status(name).get("status", "")).lower()
+        ok = wait_with_progress(name, model_short, out_dir, opts["max_steps"], poll)
 
-        if rc == 0 and ft_done(out_dir):
-            log(f"{model_short}: SUCCESS (status={status or 'ok'})")
+        if ok and ft_done(out_dir):
+            log(f"{model_short}: SUCCESS")
             return True
 
-        log(f"{model_short}: ended badly (wait_rc={rc}, status={status}, ckpt={ft_done(out_dir)})")
+        log(f"{model_short}: ended badly (clean_finish={ok}, ckpt={ft_done(out_dir)})")
         log_path = save_logs(name)
         log(f"{model_short}: logs saved to {os.path.relpath(log_path, PROJ)}")
         _print_log_tail(log_path)
@@ -177,8 +239,26 @@ def ensure_finetune(checkpoint: str, opts: dict, max_retries: int, poll: int) ->
         name = None
 
 
+def submit_eval_jobs() -> None:
+    """Submit all progressive re-eval jobs upfront so they run in parallel.
+
+    watch_ablation's ``ensure_job_success`` would otherwise submit them one at a
+    time (submit -> wait -> next), serializing the eval phase. Submitting here
+    first means watch_ablation just discovers the already-running jobs and waits.
+    """
+    import run_jobs_layer_ablation_ft as E
+    from mls.manager.job.utils import get_in_progress_jobs
+
+    client, extra = E.make_client()
+    in_progress = {j.get("job_desc", "") for j in get_in_progress_jobs()}
+    for exp in E.EXPERIMENTS:
+        E.submit_experiment(exp, client, extra, in_progress_descs=in_progress)
+
+
 def run_phase2(poll: int) -> int:
-    log("Phase 1 complete -> delegating Phase 2 to watch_ablation.py (run_jobs_layer_ablation_ft)")
+    log("Phase 1 complete -> submitting all progressive re-eval jobs (parallel)")
+    submit_eval_jobs()
+    log("delegating wait + table regen + paper update to watch_ablation.py (run_jobs_layer_ablation_ft)")
     cp = subprocess.run(
         [
             PYTHON,

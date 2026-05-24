@@ -55,7 +55,10 @@ DEFAULTS = {
     "warmup_steps": 500,
     "weight_decay": 0.1,
     "lr_scheduler_type": "cosine",
-    "limit_dataset_items": 400000,
+    # ~3M docs -> ~3.06M packed blocks -> ~12k steps/epoch, so a 10k-step run is a
+    # single pass over the data (no epoch repetition). The 10BT sample has ~9.67M
+    # docs available, so this stays well within one epoch.
+    "limit_dataset_items": 3000000,
     "dtype": "bf16",
 }
 

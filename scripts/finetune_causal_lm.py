@@ -143,9 +143,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--limit_dataset_items",
         type=int,
-        default=400000,
+        default=3000000,
         help="Cap on raw documents tokenized (bounds packing time/cache size). "
-        "Trainer repeats data if --max_steps exceeds one epoch.",
+        "~3M docs ~= 1 epoch over a 10k-step / 256-seq run; Trainer repeats data "
+        "only if --max_steps exceeds one epoch.",
     )
     p.add_argument("--max_steps", type=int, default=10000)
     p.add_argument("--per_device_train_batch_size", type=int, default=8)
