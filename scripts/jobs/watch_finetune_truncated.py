@@ -246,6 +246,8 @@ def submit_eval_for(checkpoint: str) -> None:
     remaining (slower) finetune jobs instead of waiting for all four. watch_ablation
     later just discovers these already-running jobs and waits on them.
     """
+    import time
+
     import run_jobs_layer_ablation_ft as E
 
     ft = F.finetuned_dir(checkpoint)
@@ -254,8 +256,18 @@ def submit_eval_for(checkpoint: str) -> None:
         log(f"  WARN: no eval experiment matches {ft}; eval not submitted")
         return
     client, extra = _ensure_client()
-    E.submit_experiment(exp, client, extra)
-    log(f"  submitted progressive re-eval for {os.path.basename(ft)}")
+    # Verify the submission actually created a job; the cluster API occasionally
+    # returns without scheduling one. Retry a couple of times before giving up
+    # (watch_ablation's ensure_job_success is still a final backstop in Phase 2).
+    for attempt in range(3):
+        result = E.submit_experiment(exp, client, extra)
+        name = (result or {}).get("job_name")
+        if name:
+            log(f"  submitted progressive re-eval for {os.path.basename(ft)} -> {name}")
+            return
+        log(f"  re-eval submit for {os.path.basename(ft)} returned no job (attempt {attempt + 1}/3); retrying")
+        time.sleep(5)
+    log(f"  WARN: re-eval for {os.path.basename(ft)} not submitted after retries; watch_ablation will retry")
 
 
 def run_phase2(poll: int) -> int:
