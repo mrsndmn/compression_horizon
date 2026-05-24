@@ -239,26 +239,27 @@ def ensure_finetune(checkpoint: str, opts: dict, max_retries: int, poll: int) ->
         name = None
 
 
-def submit_eval_jobs() -> None:
-    """Submit all progressive re-eval jobs upfront so they run in parallel.
+def submit_eval_for(checkpoint: str) -> None:
+    """Submit the progressive re-eval job for one finetuned checkpoint immediately.
 
-    watch_ablation's ``ensure_job_success`` would otherwise submit them one at a
-    time (submit -> wait -> next), serializing the eval phase. Submitting here
-    first means watch_ablation just discovers the already-running jobs and waits.
+    Called the moment a checkpoint's finetuning finishes, so its eval overlaps the
+    remaining (slower) finetune jobs instead of waiting for all four. watch_ablation
+    later just discovers these already-running jobs and waits on them.
     """
     import run_jobs_layer_ablation_ft as E
-    from mls.manager.job.utils import get_in_progress_jobs
 
-    client, extra = E.make_client()
-    in_progress = {j.get("job_desc", "") for j in get_in_progress_jobs()}
-    for exp in E.EXPERIMENTS:
-        E.submit_experiment(exp, client, extra, in_progress_descs=in_progress)
+    ft = F.finetuned_dir(checkpoint)
+    exp = next((e for e in E.EXPERIMENTS if e["model_checkpoint"] == ft), None)
+    if exp is None:
+        log(f"  WARN: no eval experiment matches {ft}; eval not submitted")
+        return
+    client, extra = _ensure_client()
+    E.submit_experiment(exp, client, extra)
+    log(f"  submitted progressive re-eval for {os.path.basename(ft)}")
 
 
 def run_phase2(poll: int) -> int:
-    log("Phase 1 complete -> submitting all progressive re-eval jobs (parallel)")
-    submit_eval_jobs()
-    log("delegating wait + table regen + paper update to watch_ablation.py (run_jobs_layer_ablation_ft)")
+    log("All finetuning done -> waiting on (already-submitted) re-eval jobs + table/paper update")
     cp = subprocess.run(
         [
             PYTHON,
@@ -295,16 +296,22 @@ def main() -> int:
         return 0
 
     log(f"=== finetune-truncated watcher start (max_retries={args.max_retries}, poll={args.poll}s) ===")
-    results = {
-        os.path.basename(ck.rstrip("/")): ensure_finetune(ck, opts, args.max_retries, args.poll)
-        for ck in F.FINETUNE_CHECKPOINTS
-    }
+    results = {}
+    for ck in F.FINETUNE_CHECKPOINTS:
+        ms = os.path.basename(ck.rstrip("/"))
+        ok = ensure_finetune(ck, opts, args.max_retries, args.poll)
+        results[ms] = ok
+        # Submit this checkpoint's progressive re-eval as soon as its finetune
+        # finishes, so eval overlaps the remaining (slower) finetune jobs.
+        if ok and not args.skip_phase2:
+            submit_eval_for(ck)
+
     if not all(results.values()):
         failed = [k for k, v in results.items() if not v]
-        log(f"NOT all finetuning jobs succeeded: {failed}. See {os.path.relpath(LOG_DIR, PROJ)}/. Phase 2 skipped.")
+        log(f"NOT all finetuning jobs succeeded: {failed}. See {os.path.relpath(LOG_DIR, PROJ)}/.")
         return 1
 
-    log("All finetuning checkpoints present.")
+    log("All finetuning checkpoints present + re-eval jobs submitted.")
     if args.skip_phase2:
         return 0
     return run_phase2(args.poll)
