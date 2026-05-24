@@ -193,6 +193,79 @@ def _filter_experiments(experiments: list[dict], model_filters: list[str] | None
     return filtered
 
 
+AUTHOR_NAME = "d.tarasov"
+PYTHON_PATH = "/workspace-SR004.nfs2/d.tarasov/envs/compression_horizon/bin/python"
+
+
+def cluster_workdir() -> str:
+    """Normalize the dev-shell NFS mount to the compute-node mount (/workspace-SR004.nfs2),
+    preserving the worktree suffix so emitted job paths resolve on the cluster."""
+    cwd = os.getcwd()
+    marker = "/d.tarasov/compression_horizon"
+    return "/workspace-SR004.nfs2" + cwd[cwd.index(marker) :] if marker in cwd else cwd
+
+
+def make_client():
+    """Return (client, extra_options) for the default training-job profile."""
+    return training_job_api_from_profile("default")
+
+
+def checkpoint_ready(out_dir: str) -> bool:
+    """A compression-head run is finished only once its output dir holds a saved model.
+
+    The training job creates ``<out_dir>/logs`` at startup, so plain directory existence is not a
+    completion signal; require ``config.json`` plus a ``.safetensors`` weights file (written by
+    ``save_pretrained`` at the very end of training).
+    """
+    if not os.path.isfile(os.path.join(out_dir, "config.json")):
+        return False
+    try:
+        return any(f.endswith(".safetensors") for f in os.listdir(out_dir))
+    except OSError:
+        return False
+
+
+def ch_job_desc(exp_suffix: str) -> str:
+    return f"CH: compression_head {exp_suffix} #{AUTHOR_NAME} #multimodal #notify_completed @mrsndmn"
+
+
+def eval_job_desc(exp_suffix: str) -> str:
+    return f"CH: progressive_eval {exp_suffix} #{AUTHOR_NAME} #multimodal #notify_completed @mrsndmn"
+
+
+def _payload(script: str, job_desc: str, instance_type: str, region: str) -> dict:
+    return {
+        "script": script,
+        "job_desc": job_desc,
+        "env_variables": {"PYTHONPATH": "./src", "HF_HOME": "/workspace-SR004.nfs2/.cache/huggingface"},
+        "instance_type": instance_type,
+        "region": region,
+        "type": "binary_exp",
+        "shm_size_class": "medium",
+        "base_image": "cr.ai.cloud.ru/aicloud-base-images/py3.12-torch2.7.0:0.0.41",
+        "n_workers": 1,
+        "processes_per_worker": 1,
+    }
+
+
+def build_job(experiment: dict, stage: str) -> tuple[str, str, str, str] | None:
+    """Return (script, job_desc, out_dir_name, instance_type) for ``stage``.
+
+    Returns ``None`` for an eval whose compression-head checkpoint directory does not exist yet.
+    """
+    _, ch_exp_suffix, ch_out_dir_name = render_ch_job(experiment)
+    workdir = cluster_workdir()
+    if stage == "train":
+        ch_cmd_args = render_ch_job(experiment)[0]
+        script = f"bash {workdir}/scripts/jobs/multigpu.sh scripts/activation_distillation.py  {' '.join(ch_cmd_args)}"
+        return script, ch_job_desc(ch_exp_suffix), ch_out_dir_name, f"a100.{NUM_GPUS}gpu"
+    if not checkpoint_ready(ch_out_dir_name):
+        return None
+    cmd_args, exp_suffix, out_dir_name = render_eval_job(ch_out_dir_name, ch_exp_suffix)
+    script = f" cd {workdir} && {PYTHON_PATH} scripts/activation_distillation.py  {' '.join(cmd_args)}"
+    return script, eval_job_desc(exp_suffix), out_dir_name, "a100.1gpu"
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dry", action="store_true", help="Only print generated scripts, do not launch jobs.")
@@ -211,18 +284,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # Compute nodes mount the repo under /workspace-SR004.nfs2; normalize the dev-shell mount
-    # (e.g. /mnt/...-nfs2) to that path so the emitted job paths resolve on the cluster. Works
-    # from a worktree too: the suffix after /d.tarasov/ (e.g. compression_horizon/worktrees/...) is kept.
-    _cwd = os.getcwd()
-    _marker = "/d.tarasov/compression_horizon"
-    workdir = "/workspace-SR004.nfs2" + _cwd[_cwd.index(_marker) :] if _marker in _cwd else _cwd
-    python_path = "/workspace-SR004.nfs2/d.tarasov/envs/compression_horizon/bin/python"
-
-    client, extra_options = training_job_api_from_profile("default")
-    author_name = "d.tarasov"
-    in_progress_jobs = get_in_progress_jobs()
-    in_progress_job_descs = {job.get("job_desc", "") for job in in_progress_jobs}
+    client, extra_options = make_client()
+    in_progress_job_descs = {job.get("job_desc", "") for job in get_in_progress_jobs()}
 
     experiments = _filter_experiments(EXPERIMENTS, args.model)
     if not experiments:
@@ -230,49 +293,20 @@ if __name__ == "__main__":
         sys.exit(0)
 
     for experiment in experiments:
-        ch_cmd_args, ch_exp_suffix, ch_out_dir_name = render_ch_job(experiment)
+        built = build_job(experiment, args.stage)
+        if built is None:
+            print(f"\033[33mCompression head not trained yet, skip eval:\033[0m {render_ch_job(experiment)[2]}")
+            continue
+        script, job_desc, out_dir_name, instance_type = built
 
-        if args.stage == "train":
-            cmd_args, exp_suffix, out_dir_name = ch_cmd_args, ch_exp_suffix, ch_out_dir_name
-            if os.path.exists(out_dir_name):
-                print("Experiment", out_dir_name, "exists, skip.")
-                continue
-            script = f"bash {workdir}/scripts/jobs/multigpu.sh scripts/activation_distillation.py  {' '.join(cmd_args)}"
-            job_desc = f"CH: compression_head {exp_suffix} #{author_name} #multimodal #notify_completed @mrsndmn"
-            instance_type = f"a100.{NUM_GPUS}gpu"
-        else:  # eval
-            # The trained head must exist before we can evaluate it.
-            if not os.path.exists(ch_out_dir_name):
-                print(f"\033[33mCompression head not trained yet, skip eval:\033[0m {ch_out_dir_name}")
-                continue
-            cmd_args, exp_suffix, out_dir_name = render_eval_job(ch_out_dir_name, ch_exp_suffix)
-            if os.path.exists(out_dir_name):
-                print("Eval", out_dir_name, "exists, skip.")
-                continue
-            script = f" cd {workdir} && {python_path} scripts/activation_distillation.py  {' '.join(cmd_args)}"
-            job_desc = f"CH: progressive_eval {exp_suffix} #{author_name} #multimodal #notify_completed @mrsndmn"
-            instance_type = "a100.1gpu"
-
+        if os.path.exists(out_dir_name):
+            print(f"{'Experiment' if args.stage == 'train' else 'Eval'} {out_dir_name} exists, skip.")
+            continue
         if job_desc in in_progress_job_descs:
             print(f"\033[33mSkipping: job already in queue with description:\033[0m {job_desc}")
             continue
 
-        payload = {
-            "script": script,
-            "job_desc": job_desc,
-            "env_variables": {
-                "PYTHONPATH": "./src",
-                "HF_HOME": "/workspace-SR004.nfs2/.cache/huggingface",
-            },
-            "instance_type": instance_type,
-            "region": extra_options["region"],
-            "type": "binary_exp",
-            "shm_size_class": "medium",
-            "base_image": "cr.ai.cloud.ru/aicloud-base-images/py3.12-torch2.7.0:0.0.41",
-            "n_workers": 1,
-            "processes_per_worker": 1,
-        }
-
+        payload = _payload(script, job_desc, instance_type, extra_options["region"])
         print(f"\033[32m Would launch with description:\033[0m {job_desc}")
         print(f"\033[90m     Command: {script}\033[0m")
         print(f"\033[90m     Output dir: {out_dir_name}\033[0m")
