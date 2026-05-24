@@ -30,7 +30,7 @@ from datasets import load_from_disk
 from tabulate import tabulate
 from tqdm.auto import tqdm
 
-from compression_horizon.utils import to_mean_std_cell
+from compression_horizon.utils import hlines_to_booktabs, to_mean_std_cell
 
 # ------------------------------- Utilities --------------------------------- #
 
@@ -662,7 +662,10 @@ def build_latex_table(
                         row.append("")
         table_rows.append(row)
 
-    return tabulate(table_rows, headers=headers, tablefmt=tablefmt)
+    result = tabulate(table_rows, headers=headers, tablefmt=tablefmt)
+    if is_latex_tablefmt(tablefmt):
+        result = hlines_to_booktabs(result)
+    return result
 
 
 def load_dataset_rows(ds_path: str) -> List[dict]:

@@ -19,7 +19,7 @@ from tabulate import tabulate
 from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, Gemma3Config
 
-from compression_horizon.utils import to_mean_std_cell
+from compression_horizon.utils import hlines_to_booktabs, to_mean_std_cell
 
 
 def save_attention_mass_cache(
@@ -517,6 +517,9 @@ def format_attention_mass_table(
     result = result.replace("L3.1-", "Llama-3.1-")
 
     result = re.sub(r"REMOVE.+", "", result)
+
+    if tablefmt.startswith("latex"):
+        result = hlines_to_booktabs(result)
     return result
 
 

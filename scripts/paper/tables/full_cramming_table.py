@@ -23,7 +23,7 @@ load_dataset_rows = _results.load_dataset_rows
 from tabulate import tabulate  # noqa: E402
 from tqdm.auto import tqdm  # noqa: E402
 
-from compression_horizon.utils import to_mean_std_cell  # noqa: E402
+from compression_horizon.utils import hlines_to_booktabs, to_mean_std_cell  # noqa: E402
 
 TYPE_TO_SLUG = {
     "full_cramming": "full_vs_progressive",
@@ -345,6 +345,9 @@ def main() -> None:
     import re
 
     result = re.sub(r"REMOVE.+", "", result)
+
+    if args.tablefmt == "latex":
+        result = hlines_to_booktabs(result)
 
     print(result)
 
