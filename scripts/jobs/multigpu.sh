@@ -2,7 +2,9 @@ set -x
 set -e
 
 ENV_PREFIX=/workspace-SR004.nfs2/d.tarasov/envs/compression_horizon/bin
-WORKDIR=/workspace-SR004.nfs2/d.tarasov/compression_horizon
+# Resolve the repo root from this script's location (scripts/jobs/multigpu.sh -> repo root),
+# so jobs launched from a git worktree run that worktree's code instead of a hard-coded checkout.
+WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 
 # Добавим в PATH префикс окружения

@@ -211,7 +211,12 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    workdir = os.getcwd()
+    # Compute nodes mount the repo under /workspace-SR004.nfs2; normalize the dev-shell mount
+    # (e.g. /mnt/...-nfs2) to that path so the emitted job paths resolve on the cluster. Works
+    # from a worktree too: the suffix after /d.tarasov/ (e.g. compression_horizon/worktrees/...) is kept.
+    _cwd = os.getcwd()
+    _marker = "/d.tarasov/compression_horizon"
+    workdir = "/workspace-SR004.nfs2" + _cwd[_cwd.index(_marker) :] if _marker in _cwd else _cwd
     python_path = "/workspace-SR004.nfs2/d.tarasov/envs/compression_horizon/bin/python"
 
     client, extra_options = training_job_api_from_profile("default")
