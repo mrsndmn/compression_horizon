@@ -321,6 +321,9 @@ class CompressionHeadTrainer(BaseTrainer):
                                     self.writer.add_scalar("loss/after_compression", after_m, self.global_step)
                                     current_lr = optimizer.param_groups[0]["lr"]
                                     self.writer.add_scalar("train/learning_rate", current_lr, self.global_step)
+                                    # Fractional epoch (0..num_epochs), mirroring HF Trainer's `epoch` metric.
+                                    epoch_progress = update_step * num_epochs / total_update_steps
+                                    self.writer.add_scalar("train/epoch", epoch_progress, self.global_step)
 
                                 self.global_step += 1
 

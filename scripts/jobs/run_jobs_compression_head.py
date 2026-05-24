@@ -26,10 +26,10 @@ from mls.manager.job.utils import get_in_progress_jobs, training_job_api_from_pr
 
 # --- Compression-head training constants (legacy argument set, baked in here). -----------------
 DATASET_NAME = "HuggingFaceFW/fineweb-edu"  # the 10BT sample is selected automatically by the loader
-# Sized for exactly 10k optimizer steps in a single epoch (no data repetition):
-# N = 10_000 * (per_device 4 * grad_accum 8 * num_gpus 8) = 10_000 * 256 = 2_560_000 sequences.
+# Sized for exactly 5k optimizer steps in a single epoch (no data repetition):
+# N = 5_000 * (per_device 4 * grad_accum 8 * num_gpus 8) = 5_000 * 256 = 1_280_000 sequences.
 # Well under the ~9.67M docs in the fineweb-edu 10BT sample, so each sample is seen once.
-LIMIT_DATASET_ITEMS = 2_560_000
+LIMIT_DATASET_ITEMS = 1_280_000
 MAX_SEQ_LEN = 1024
 LEARNING_RATE = 0.001
 DISTILL_ALPHA = 1.0
@@ -39,13 +39,13 @@ DTYPE = "bf16"
 NUM_TRAIN_EPOCHS = 1
 WEIGHT_DECAY = 0.01
 MAX_GRAD_NORM = 1.0
-WARMUP_STEPS = 0
+WARMUP_STEPS = 500
 LOGGING_STEPS = 50
 LR_SCHEDULER_TYPE = "cosine_with_min_lr"
 LR_SCHEDULER_KWARGS = "min_lr=0.00001"
 FREEZE_BASE_MODEL = False
 # Bump to give a fresh output dir and avoid colliding with earlier (e.g. failed) runs of the same config.
-RUN_TAG = "v2"
+RUN_TAG = "v3"
 
 # 8-GPU training; keep the global batch at 256k tokens. gradient_accumulation_steps is derived so that
 # per_device_batch * grad_accum * num_gpus * seq_len == TARGET_GLOBAL_TOKENS.

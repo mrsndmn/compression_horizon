@@ -39,7 +39,9 @@ LAUNCHER = os.path.join(PROJ, "scripts", "jobs", "run_jobs_compression_head.py")
 STATE_DIR = os.path.join(PROJ, ".omc", "ablation_watch", "compression_head_eval")
 LOG_DIR = os.path.join(STATE_DIR, "logs")
 WATCH_LOG = os.path.join(STATE_DIR, "watch.log")
-CH_TRAIN_MAX_STEPS = 10_000  # for ETA display only
+# Optimizer steps in one epoch, derived from the launcher so it tracks data-size/batch changes
+# (for ETA display only): total_sequences * seq_len * epochs / global-batch-tokens.
+CH_TRAIN_MAX_STEPS = J.LIMIT_DATASET_ITEMS * J.MAX_SEQ_LEN * J.NUM_TRAIN_EPOCHS // J.TARGET_GLOBAL_TOKENS
 
 FINAL_FAILED = {"failed", "stopped", "deleted", "terminated", "error", "cancelled", "canceled", "killed", "aborted"}
 
