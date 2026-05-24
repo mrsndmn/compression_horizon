@@ -203,11 +203,38 @@ class MyTrainingArguments(TrainingArguments):
     )
     compression_head_distill_alpha: float = field(
         default=1.0,
-        metadata={"help": "Weight for distillation loss for non-selected compression embeddings."},
+        metadata={"help": "Weight for the compressed-sequence (after) loss term in the compression-head objective."},
+    )
+    compression_head_distill_beta: float = field(
+        default=0.0,
+        metadata={
+            "help": "Weight for the base-LM loss term (uncompressed full-sequence loss). "
+            "Default 0.0 keeps the base loss out of the objective so training optimizes the "
+            "compression objective only; set > 0 to also train on the plain next-token loss."
+        },
     )
     compression_head_freeze_base_model: bool = field(
         default=True,
         metadata={"help": "Freeze base LM parameters and train only compression head parameters."},
+    )
+    compression_head_kind: str = field(
+        default="mlp",
+        metadata={
+            "help": "Compression-head architecture: 'mlp' (Linear-GELU-Linear on the last prefix hidden state) "
+            "or 'qformer' (learnable queries cross-attending to the prefix hidden states)."
+        },
+    )
+    compression_head_num_queries: int = field(
+        default=1,
+        metadata={"help": "Q-Former: number of learnable query tokens (= number of compression embeddings produced)."},
+    )
+    compression_head_num_layers: int = field(
+        default=2,
+        metadata={"help": "Q-Former: number of cross-attention blocks."},
+    )
+    compression_head_num_heads: int = field(
+        default=8,
+        metadata={"help": "Q-Former: number of attention heads per block."},
     )
 
     # --- Other trainer modes --------------------------------------------

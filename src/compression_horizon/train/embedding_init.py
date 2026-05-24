@@ -246,6 +246,12 @@ def create_compression_embedding(
         data = _broadcast_loaded_embeddings(loaded_embeddings, batch_size, num_compression_tokens, hidden_size)
         return torch.nn.Parameter(data.to(torch.float32))
 
+    if init_method == "compression_head_forward":
+        raise ValueError(
+            "init_method='compression_head_forward' is only supported by the progressive cramming trainer, "
+            "which runs the compression head per sample to seed each embedding; it cannot be sampled here."
+        )
+
     sampler = _DIRECT_INIT_STRATEGIES.get(init_method)
     if sampler is not None:
         return torch.nn.Parameter(sampler(shape))

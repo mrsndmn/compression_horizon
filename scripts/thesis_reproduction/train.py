@@ -64,10 +64,18 @@ def main() -> None:
     print(f"attn_implementation: {attn_implementation}")
 
     if args.train_compression_head or "experiments_compression_head/ch_head_" in args.model_checkpoint:
+        from transformers import AutoConfig
+
         from compression_horizon.models.llama_compression_head import LlamaForCausalLMCompressionHead
 
+        ch_config = AutoConfig.from_pretrained(args.model_checkpoint)
+        if args.train_compression_head:
+            ch_config.compression_head_kind = args.compression_head_kind
+            ch_config.compression_head_num_queries = args.compression_head_num_queries
+            ch_config.compression_head_num_layers = args.compression_head_num_layers
+            ch_config.compression_head_num_heads = args.compression_head_num_heads
         model = LlamaForCausalLMCompressionHead.from_pretrained(
-            args.model_checkpoint, dtype=torch_dtype, attn_implementation=attn_implementation
+            args.model_checkpoint, config=ch_config, dtype=torch_dtype, attn_implementation=attn_implementation
         )
     else:
         model = AutoModelForCausalLM.from_pretrained(

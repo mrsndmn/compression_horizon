@@ -207,7 +207,13 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         target_hidden_states_full = self.compute_hidden_states(ctx.model, full_token_embeddings, attention_mask)
         hidden_size = full_token_embeddings.shape[-1]  # Always model's hidden size now.
 
-        parametrization = self._build_parametrization(ctx, batch_size, hidden_size)
+        # ``compression_head_forward`` seeds each sample's compression embedding by running the
+        # trained compression head over its prefix; computed here where the model + batch are in scope.
+        ch_forward_init = None
+        if ctx.init_method == "compression_head_forward":
+            ch_forward_init = self._compute_compression_head_init(ctx.model, input_ids, attention_mask)
+
+        parametrization = self._build_parametrization(ctx, batch_size, hidden_size, ch_forward_init=ch_forward_init)
         per_sample_optimizers, per_sample_schedulers = self._build_per_sample_optimizers(parametrization, ctx)
         # Global mode: reuse the run-level optimizer/scheduler — they own the
         # AdamW state and LR-curve position accumulated across all previous
@@ -243,7 +249,42 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             shared_scheduler=shared_scheduler,
         )
 
-    def _build_parametrization(self, ctx: _RunContext, batch_size: int, hidden_size: int):
+    def _compute_compression_head_init(self, model, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        """Run the compression head over each sample's full prefix to seed its compression embedding.
+
+        Returns a ``[batch, num_compression_tokens, hidden]`` float32 tensor. Requires a
+        ``LlamaForCausalLMCompressionHead`` (i.e. a model exposing ``compression_head`` and returning
+        ``compression_embeds``); used by ``--embedding_init_method compression_head_forward`` to evaluate a
+        trained compression head with the progressive trainer.
+        """
+        if not hasattr(model, "compression_head"):
+            raise ValueError(
+                "embedding_init_method='compression_head_forward' requires a compression-head model "
+                "(LlamaForCausalLMCompressionHead); the loaded model has no 'compression_head'. "
+                "Point --model_checkpoint at a compression-head checkpoint."
+            )
+        lengths = attention_mask.sum(dim=1).to(torch.long).clamp_min(1)
+        with torch.no_grad():
+            out = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                prefix_lengths=lengths,
+                use_cache=False,
+                output_hidden_states=False,
+                return_dict=True,
+            )
+        embeds = getattr(out, "compression_embeds", None)
+        if embeds is None:
+            raise RuntimeError("compression_head_forward init: model returned no compression_embeds.")
+        num_queries = embeds.shape[1]
+        if num_queries != self.args.number_of_mem_tokens:
+            raise ValueError(
+                f"compression head produced {num_queries} query embedding(s) but "
+                f"--number_of_mem_tokens={self.args.number_of_mem_tokens}. Set --number_of_mem_tokens {num_queries}."
+            )
+        return embeds.detach().to(torch.float32)
+
+    def _build_parametrization(self, ctx: _RunContext, batch_size: int, hidden_size: int, ch_forward_init=None):
         """Construct the per-sample parametrization (Direct, PretrainedPCA, or low-dim projected).
 
         Low-dim semantics — the trainer always builds the ``nn.Linear`` itself
@@ -261,7 +302,13 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         # in model hidden space.
         init_dim = self.args.low_dim_size if self.args.low_dim_projection else hidden_size
 
+        if ctx.init_method == "compression_head_forward" and self.args.low_dim_projection:
+            raise ValueError("embedding_init_method='compression_head_forward' is not compatible with --low_dim_projection.")
+
         def _init_helper():
+            if ctx.init_method == "compression_head_forward":
+                assert ch_forward_init is not None, "compression_head_forward init tensor was not precomputed"
+                return torch.nn.Parameter(ch_forward_init.to(device=ctx.device, dtype=torch.float32))
             return self._init_compression_tokens(
                 batch_size,
                 ctx.num_compression_tokens,

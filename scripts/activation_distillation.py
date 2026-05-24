@@ -7,7 +7,7 @@ import sys
 
 import transformers
 from datasets import Dataset, load_dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer, DataCollatorForLanguageModeling
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, DataCollatorForLanguageModeling
 
 from compression_horizon.train import (
     CompressionHeadTrainer,
@@ -265,8 +265,20 @@ if __name__ == "__main__":
     if training_args.train_compression_head or "experiments_compression_head/ch_head_" in training_args.model_checkpoint:
         from compression_horizon.models.llama_compression_head import LlamaForCausalLMCompressionHead
 
+        ch_config = AutoConfig.from_pretrained(training_args.model_checkpoint)
+        if training_args.train_compression_head:
+            # Fresh training from a base checkpoint: inject the chosen head architecture so __init__
+            # builds it and save_pretrained persists it. (For eval of a trained CH the saved config already
+            # carries these, so we leave it untouched.)
+            ch_config.compression_head_kind = training_args.compression_head_kind
+            ch_config.compression_head_num_queries = training_args.compression_head_num_queries
+            ch_config.compression_head_num_layers = training_args.compression_head_num_layers
+            ch_config.compression_head_num_heads = training_args.compression_head_num_heads
         model = LlamaForCausalLMCompressionHead.from_pretrained(
-            training_args.model_checkpoint, torch_dtype=torch_dtype, attn_implementation="flash_attention_2"
+            training_args.model_checkpoint,
+            config=ch_config,
+            torch_dtype=torch_dtype,
+            attn_implementation="flash_attention_2",
         )
     else:
         model = AutoModelForCausalLM.from_pretrained(
