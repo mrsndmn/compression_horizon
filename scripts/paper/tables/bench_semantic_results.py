@@ -112,7 +112,10 @@ def load_metrics(results_file: str) -> Optional[RunMetrics]:
     args = data.get("args", {})
     baseline = data.get("baseline", {})
     compressed = data.get("compressed", {})
-    arc_split = data.get("arc_split") or args.get("arc_split")
+    # Split is stored as `arc_split` (legacy runs) or `arc_subset` (current runs),
+    # either at the top level or under args. Resolve all of them so the
+    # --arc-split filter matches real (non-legacy) runs, not just legacy ones.
+    arc_split = data.get("arc_split") or args.get("arc_split") or data.get("arc_subset") or args.get("arc_subset")
 
     model_checkpoint = args.get("model_checkpoint")
     if args.get("no_bos_token", False):
