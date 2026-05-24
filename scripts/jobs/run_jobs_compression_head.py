@@ -299,7 +299,10 @@ if __name__ == "__main__":
             continue
         script, job_desc, out_dir_name, instance_type = built
 
-        if os.path.exists(out_dir_name):
+        # Train: skip only if a real checkpoint was saved (a half-built dir of logs/cmd files from a
+        # crashed/cancelled run must not block a restart). Eval: dir existence means it already ran.
+        already_done = checkpoint_ready(out_dir_name) if args.stage == "train" else os.path.exists(out_dir_name)
+        if already_done:
             print(f"{'Experiment' if args.stage == 'train' else 'Eval'} {out_dir_name} exists, skip.")
             continue
         if job_desc in in_progress_job_descs:

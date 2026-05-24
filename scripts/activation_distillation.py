@@ -6,6 +6,7 @@ import subprocess
 import sys
 
 import transformers
+from accelerate import PartialState
 from datasets import Dataset, load_dataset
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, DataCollatorForLanguageModeling
 
@@ -295,19 +296,22 @@ if __name__ == "__main__":
     cache_dir = "artifacts/cache/tokenized_datasets"
     os.makedirs(cache_dir, exist_ok=True)
 
-    # Load or create training dataset
-    train_dataset = load_or_create_tokenized_dataset(
-        cache_dir=cache_dir,
-        dataset_name=training_args.dataset_name,
-        split="test",
-        tokenizer=tokenizer,
-        max_sequence_length=training_args.max_sequence_length,
-        model_checkpoint=training_args.model_checkpoint,
-        no_bos_token=training_args.no_bos_token,
-        limit_dataset_items=getattr(training_args, "limit_dataset_items", None),
-        offset_dataset_items=getattr(training_args, "offset_dataset_items", None),
-        cache_prefix="dataset",
-    )
+    # Load or create training dataset. Under multi-GPU (accelerate launch), only the main process
+    # tokenizes + writes the cache; the others wait and then load it from disk. Without this guard all
+    # ranks run dataset.map(num_proc=...) concurrently, which OOMs the node on large datasets.
+    with PartialState().main_process_first():
+        train_dataset = load_or_create_tokenized_dataset(
+            cache_dir=cache_dir,
+            dataset_name=training_args.dataset_name,
+            split="test",
+            tokenizer=tokenizer,
+            max_sequence_length=training_args.max_sequence_length,
+            model_checkpoint=training_args.model_checkpoint,
+            no_bos_token=training_args.no_bos_token,
+            limit_dataset_items=getattr(training_args, "limit_dataset_items", None),
+            offset_dataset_items=getattr(training_args, "offset_dataset_items", None),
+            cache_prefix="dataset",
+        )
 
     print("train_dataset", len(train_dataset))
     print("train_dataset", train_dataset)
@@ -318,19 +322,20 @@ if __name__ == "__main__":
         eval_seq_length = training_args.max_sequence_length * 2
         print(f"Preparing evaluation dataset with sequence length {eval_seq_length} (2x training length)...")
 
-        eval_dataset = load_or_create_tokenized_dataset(
-            cache_dir=cache_dir,
-            dataset_name=training_args.dataset_name,
-            split="test",
-            tokenizer=tokenizer,
-            max_sequence_length=eval_seq_length,
-            model_checkpoint=training_args.model_checkpoint,
-            no_bos_token=training_args.no_bos_token,
-            limit_dataset_items=getattr(training_args, "limit_dataset_items", None),
-            offset_dataset_items=getattr(training_args, "offset_dataset_items", None),
-            cache_prefix="eval_dataset",
-            fallback_length=len(train_dataset),
-        )
+        with PartialState().main_process_first():
+            eval_dataset = load_or_create_tokenized_dataset(
+                cache_dir=cache_dir,
+                dataset_name=training_args.dataset_name,
+                split="test",
+                tokenizer=tokenizer,
+                max_sequence_length=eval_seq_length,
+                model_checkpoint=training_args.model_checkpoint,
+                no_bos_token=training_args.no_bos_token,
+                limit_dataset_items=getattr(training_args, "limit_dataset_items", None),
+                offset_dataset_items=getattr(training_args, "offset_dataset_items", None),
+                cache_prefix="eval_dataset",
+                fallback_length=len(train_dataset),
+            )
 
         print(f"eval_dataset length: {len(eval_dataset)}")
         print(f"eval_dataset sequence length: {eval_seq_length}")
