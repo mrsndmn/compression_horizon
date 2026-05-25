@@ -11,6 +11,7 @@ from compression_horizon.analysis.information_gain import compute_information_ga
 from compression_horizon.train.inputs import build_compression_attention_mask, build_united_input
 from compression_horizon.train.parametrization import build_per_sample_parametrization
 from compression_horizon.train.trainers.base import BaseTrainer
+from compression_horizon.utils.launch import freeze_model_parameters
 
 
 @dataclass
@@ -18,6 +19,10 @@ class _RunContext:
     """Run-level constants prepared once before the dataloader loop."""
 
     model: torch.nn.Module
+    # Model used for all decode-side forwards (target-hidden, CE/alignment loss, info-gain).
+    # In dual-checkpoint mode this is the reconstructor; otherwise it is ``model`` itself.
+    # The compressor (``model``) is then used ONLY to seed ``compression_head_forward`` init.
+    decode_model: torch.nn.Module
     device: torch.device
     init_method: str
     mvn_dist: object
@@ -161,6 +166,19 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         """
         model, device, init_method, mvn_dist, pca_components, pca_mean, loaded_embeddings = self._initialize_run()
 
+        # Dual checkpoint support: when a sibling reconstructor model is provided, the
+        # compressor (`model`) is used ONLY to produce the initial compression-embedding
+        # value (compression_head_forward init); the inner optimization loop drives
+        # gradients through `decode_model` (the reconstructor) so the compression token
+        # is co-adapted to whichever model will decode it at downstream inference.
+        model_reconstructor = getattr(self, "model_reconstructor", None)
+        if model_reconstructor is not None:
+            print("[two-model] progressive cramming dual mode: compressor=init, reconstructor=decode")
+            model_reconstructor = model_reconstructor.to(device)
+            freeze_model_parameters(model_reconstructor)
+            model_reconstructor.eval()
+        decode_model = model_reconstructor if model_reconstructor is not None else model
+
         shared_projection: torch.nn.Linear | None = None
         shared_optimizer = None
         shared_scheduler = None
@@ -177,6 +195,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
 
         return _RunContext(
             model=model,
+            decode_model=decode_model,
             device=device,
             init_method=init_method,
             mvn_dist=mvn_dist,
@@ -203,8 +222,10 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         attention_mask = batch.attention_mask.squeeze(1).to(ctx.device)  # [batch, sequence]
         batch_size = input_ids.shape[0]
         with torch.no_grad():
-            full_token_embeddings = ctx.model.get_input_embeddings()(input_ids)  # [batch, sequence, hidden]
-        target_hidden_states_full = self.compute_hidden_states(ctx.model, full_token_embeddings, attention_mask)
+            # Embeddings + target hidden states must come from the model that will decode the
+            # prefix (the reconstructor in dual mode, the compressor otherwise).
+            full_token_embeddings = ctx.decode_model.get_input_embeddings()(input_ids)  # [batch, sequence, hidden]
+        target_hidden_states_full = self.compute_hidden_states(ctx.decode_model, full_token_embeddings, attention_mask)
         hidden_size = full_token_embeddings.shape[-1]  # Always model's hidden size now.
 
         # ``compression_head_forward`` seeds each sample's compression embedding by running the
@@ -482,7 +503,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                 generated_text,
                 ground_truth_text,
             ) = self.forward_and_compute_loss(
-                ctx.model,
+                ctx.decode_model,
                 stage_ctx.input_ids,
                 stage_ctx.inputs_embeds,
                 stage_ctx.attention_mask,
@@ -615,7 +636,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             pca_coefficients_to_save = batch_ctx.parametrization.serialize_extras()
 
             per_sample_info_gain = compute_information_gain(
-                model=ctx.model,
+                model=ctx.decode_model,
                 input_ids=stage_ctx.input_ids,
                 attention_mask=stage_ctx.attention_mask,
                 token_embeddings=stage_ctx.inputs_embeds,

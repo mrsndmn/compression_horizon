@@ -263,10 +263,36 @@ if __name__ == "__main__":
 
     torch_dtype = resolve_torch_dtype(getattr(training_args, "dtype", "float32"))
     print("torch_dtype", torch_dtype)
-    if training_args.train_compression_head or "experiments_compression_head/ch_head_" in training_args.model_checkpoint:
+
+    # Optional second model (the reconstructor). Stays None on the legacy single-model path.
+    model_reconstructor = None
+
+    def _is_dual_checkpoint_dir(path: str) -> bool:
+        """A dual checkpoint dir has both compressor/ and reconstructor/ subdirs."""
+        return (
+            isinstance(path, str)
+            and os.path.isdir(os.path.join(path, "compressor"))
+            and os.path.isdir(os.path.join(path, "reconstructor"))
+        )
+
+    dual_ckpt = _is_dual_checkpoint_dir(training_args.model_checkpoint)
+    compressor_path = None
+    reconstructor_path = None
+    if dual_ckpt:
+        compressor_path = os.path.join(training_args.model_checkpoint, "compressor")
+        reconstructor_path = os.path.join(training_args.model_checkpoint, "reconstructor")
+        print(f"[two-model-load] detected dual checkpoint; compressor={compressor_path} reconstructor={reconstructor_path}")
+
+    load_compression_head = (
+        training_args.train_compression_head
+        or "experiments_compression_head/ch_head_" in training_args.model_checkpoint
+        or dual_ckpt
+    )
+    if load_compression_head:
         from compression_horizon.models.llama_compression_head import LlamaForCausalLMCompressionHead
 
-        ch_config = AutoConfig.from_pretrained(training_args.model_checkpoint)
+        ch_model_path = compressor_path if dual_ckpt else training_args.model_checkpoint
+        ch_config = AutoConfig.from_pretrained(ch_model_path)
         if training_args.train_compression_head:
             # Fresh training from a base checkpoint: inject the chosen head architecture so __init__
             # builds it and save_pretrained persists it. (For eval of a trained CH the saved config already
@@ -277,11 +303,25 @@ if __name__ == "__main__":
             ch_config.compression_head_num_heads = training_args.compression_head_num_heads
             ch_config.compression_head_query_proj_factor = training_args.compression_head_query_proj_factor
         model = LlamaForCausalLMCompressionHead.from_pretrained(
-            training_args.model_checkpoint,
+            ch_model_path,
             config=ch_config,
             torch_dtype=torch_dtype,
             attn_implementation="flash_attention_2",
         )
+        if dual_ckpt:
+            # Progressive eval against a dual checkpoint: reconstructor decodes; compressor only seeds init.
+            model_reconstructor = AutoModelForCausalLM.from_pretrained(
+                reconstructor_path,
+                torch_dtype=torch_dtype,
+                attn_implementation="flash_attention_2",
+            )
+        elif getattr(training_args, "separate_reconstructor_model", False):
+            print("[two-model] building separate reconstructor (plain LM, no compression head) from the same checkpoint")
+            model_reconstructor = AutoModelForCausalLM.from_pretrained(
+                training_args.model_checkpoint,
+                torch_dtype=torch_dtype,
+                attn_implementation="flash_attention_2",
+            )
     else:
         model = AutoModelForCausalLM.from_pretrained(
             training_args.model_checkpoint, torch_dtype=torch_dtype, attn_implementation="flash_attention_2"
@@ -289,7 +329,8 @@ if __name__ == "__main__":
         for p in model.parameters():
             p.requires_grad = False
 
-    tokenizer = AutoTokenizer.from_pretrained(training_args.model_checkpoint)
+    tokenizer_path = compressor_path if dual_ckpt else training_args.model_checkpoint
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
 
@@ -363,6 +404,7 @@ if __name__ == "__main__":
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         data_collator=data_collator,
+        model_reconstructor=model_reconstructor,
     )
     training_artifacts = trainer.train()
     print(f"Saved compressed prefixes to: {training_artifacts}.")

@@ -115,7 +115,7 @@ def _head_tag(experiment: dict) -> str:
     return "mlp"
 
 
-def render_ch_job(experiment: dict) -> tuple[list[str], str, str]:
+def render_ch_job(experiment: dict, separate_reconstructor_model: bool = False) -> tuple[list[str], str, str]:
     """Build (cmd_args, exp_suffix, out_dir_name) for one compression-head training run."""
     model_checkpoint = experiment["model_checkpoint"]
     model_short = model_checkpoint.split("/")[-1]
@@ -128,6 +128,8 @@ def render_ch_job(experiment: dict) -> tuple[list[str], str, str]:
     exp_suffix = f"{exp_suffix}_lr_{LEARNING_RATE}_a_{DISTILL_ALPHA}_b_{DISTILL_BETA}"
     if not FREEZE_BASE_MODEL:
         exp_suffix = f"{exp_suffix}_unfrozen"
+    if separate_reconstructor_model:
+        exp_suffix = f"{exp_suffix}_dualmodel"
     exp_suffix = f"{exp_suffix}_{RUN_TAG}"
     out_dir_name = f"artifacts/experiments_compression_head/{exp_suffix}"
 
@@ -154,6 +156,8 @@ def render_ch_job(experiment: dict) -> tuple[list[str], str, str]:
         f"--lr_scheduler_kwargs '{LR_SCHEDULER_KWARGS}'",
         f"--compression_head_freeze_base_model {FREEZE_BASE_MODEL}",
     ]
+    if separate_reconstructor_model:
+        cmd_args.append("--separate_reconstructor_model True")
     if head_kind == "qformer":
         cmd_args += [
             f"--compression_head_num_queries {experiment['num_queries']}",
@@ -219,19 +223,29 @@ def make_client():
     return training_job_api_from_profile("default")
 
 
-def checkpoint_ready(out_dir: str) -> bool:
-    """A compression-head run is finished only once its output dir holds a saved model.
-
-    The training job creates ``<out_dir>/logs`` at startup, so plain directory existence is not a
-    completion signal; require ``config.json`` plus a ``.safetensors`` weights file (written by
-    ``save_pretrained`` at the very end of training).
-    """
+def _single_ckpt_ready(out_dir: str) -> bool:
+    """One saved HF model is present: ``config.json`` plus a ``.safetensors`` weights file."""
     if not os.path.isfile(os.path.join(out_dir, "config.json")):
         return False
     try:
         return any(f.endswith(".safetensors") for f in os.listdir(out_dir))
     except OSError:
         return False
+
+
+def checkpoint_ready(out_dir: str) -> bool:
+    """A compression-head run is finished only once its output dir holds a saved model.
+
+    The training job creates ``<out_dir>/logs`` at startup, so plain directory existence is not a
+    completion signal; require ``config.json`` plus a ``.safetensors`` weights file (written by
+    ``save_pretrained`` at the very end of training). In dual-model mode the two models are saved
+    under ``<out_dir>/compressor`` and ``<out_dir>/reconstructor``, so both must be present.
+    """
+    compressor = os.path.join(out_dir, "compressor")
+    reconstructor = os.path.join(out_dir, "reconstructor")
+    if os.path.isdir(compressor) and os.path.isdir(reconstructor):
+        return _single_ckpt_ready(compressor) and _single_ckpt_ready(reconstructor)
+    return _single_ckpt_ready(out_dir)
 
 
 def ch_job_desc(exp_suffix: str) -> str:
@@ -257,15 +271,15 @@ def _payload(script: str, job_desc: str, instance_type: str, region: str) -> dic
     }
 
 
-def build_job(experiment: dict, stage: str) -> tuple[str, str, str, str] | None:
+def build_job(experiment: dict, stage: str, separate_reconstructor_model: bool = False) -> tuple[str, str, str, str] | None:
     """Return (script, job_desc, out_dir_name, instance_type) for ``stage``.
 
     Returns ``None`` for an eval whose compression-head checkpoint directory does not exist yet.
     """
-    _, ch_exp_suffix, ch_out_dir_name = render_ch_job(experiment)
+    _, ch_exp_suffix, ch_out_dir_name = render_ch_job(experiment, separate_reconstructor_model)
     workdir = cluster_workdir()
     if stage == "train":
-        ch_cmd_args = render_ch_job(experiment)[0]
+        ch_cmd_args = render_ch_job(experiment, separate_reconstructor_model)[0]
         script = f"bash {workdir}/scripts/jobs/multigpu.sh scripts/activation_distillation.py  {' '.join(ch_cmd_args)}"
         return script, ch_job_desc(ch_exp_suffix), ch_out_dir_name, f"a100.{NUM_GPUS}gpu"
     if not checkpoint_ready(ch_out_dir_name):
@@ -291,6 +305,12 @@ if __name__ == "__main__":
         default=None,
         help="Filter experiments by model name (substring match against checkpoint path / model name).",
     )
+    parser.add_argument(
+        "--separate_reconstructor_model",
+        action="store_true",
+        help="Dual-model ablation: train a separate reconstructor copy (saved under compressor/ + "
+        "reconstructor/) and tag the run with _dualmodel. The eval stage auto-detects the dual layout.",
+    )
     args = parser.parse_args()
 
     client, extra_options = make_client()
@@ -302,9 +322,12 @@ if __name__ == "__main__":
         sys.exit(0)
 
     for experiment in experiments:
-        built = build_job(experiment, args.stage)
+        built = build_job(experiment, args.stage, args.separate_reconstructor_model)
         if built is None:
-            print(f"\033[33mCompression head not trained yet, skip eval:\033[0m {render_ch_job(experiment)[2]}")
+            print(
+                "\033[33mCompression head not trained yet, skip eval:\033[0m "
+                f"{render_ch_job(experiment, args.separate_reconstructor_model)[2]}"
+            )
             continue
         script, job_desc, out_dir_name, instance_type = built
 
