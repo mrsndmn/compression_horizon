@@ -179,6 +179,7 @@ def main() -> int:
         return 0
 
     log(f"=== compression-head eval watcher start (poll={args.poll}s, {len(J.EXPERIMENTS)} experiments) ===")
+    seen_failed: set[str] = set()  # failed job_names already logged (dedupe across polls)
     while True:
         jobs = mls_list()
         states = classify(jobs)
@@ -196,17 +197,25 @@ def main() -> int:
                 log(f"  {label}: {info['status']}" + (f" | {eta}" if eta else ""))
             else:
                 log(f"  {label}: {info['state']}")
-            if info["state"] == "ch_failed" and info["job_name"]:
+            # A failed training job is NOT terminal: the user may recreate it (relaunch with the same
+            # job_desc); the next poll then sees it running again and eventually submits its eval. Save
+            # logs + warn once per failed job_name, so a recreated-then-failed-again run is re-reported.
+            if info["state"] == "ch_failed" and info["job_name"] and info["job_name"] not in seen_failed:
+                seen_failed.add(info["job_name"])
                 p = save_logs(info["job_name"])
-                log(f"    -> training failed; logs saved to {os.path.relpath(p, PROJ)} (no eval will be submitted)")
+                log(
+                    f"    -> training failed; logs saved to {os.path.relpath(p, PROJ)}. "
+                    f"Recreate the job to have its eval auto-submitted; watcher keeps waiting."
+                )
 
-        done = all(v["state"] in ("eval_submitted", "ch_failed") for v in states.values())
         n_eval = sum(v["state"] == "eval_submitted" for v in states.values())
         n_fail = sum(v["state"] == "ch_failed" for v in states.values())
-        log(f"--- {n_eval} eval-submitted, {n_fail} failed, {len(states) - n_eval - n_fail} pending ---")
-        if done:
-            log("All compression-head jobs resolved (eval submitted or failed). Watcher exiting.")
-            return 0 if n_fail == 0 else 1
+        log(f"--- {n_eval} eval-submitted, {n_fail} failed (awaiting recreation), {len(states) - n_eval - n_fail} pending ---")
+        # Exit only once every experiment's eval is submitted. Failed jobs keep the watcher alive so their
+        # evals launch after the user recreates them; kill the watcher manually to give up on a job.
+        if n_eval == len(states):
+            log("All compression-head evals submitted. Watcher exiting.")
+            return 0
         time.sleep(args.poll)
 
 

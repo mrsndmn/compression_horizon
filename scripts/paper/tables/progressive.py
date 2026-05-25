@@ -312,6 +312,32 @@ TABLES: List[TableSpec] = [
         ],
         names_mapping="Pretrained,Random transformer layers,Random LM head,Random input embeddings",
     ),
+    TableSpec(
+        # Compression-head -> progressive-cramming layer ablation. Each row is the progressive
+        # eval (canonical benchmark: pg19_1k / sl_4096 / lr_0.1) of one trained compression head,
+        # using the head to seed every per-sample embedding (--embedding_init_method
+        # compression_head_forward). The Q-Former head is shown at truncated depths
+        # firstlast{1,2,4,8} (= 2/4/8/16 of SmolLM2-1.7B's 24 decoder layers) and at full depth,
+        # plus the simple MLP head at full depth as a head-architecture reference. This mirrors the
+        # depth axis of tab:layer_ablation but with a learned init instead of random per-sample init.
+        # Heads trained and evals launched by scripts/jobs/run_jobs_compression_head.py
+        # (--stage train / --stage eval). The "ds_fineweb-edu_seq_1024" in each path refers to the
+        # head's *training* data, not the eval benchmark (which is pg19_1k for every row).
+        name="tab:ch_qformer_layer_ablation",
+        checkpoints=[
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast1_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast2_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast8_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B_mlp_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+        ],
+        names_mapping=(
+            "2 layers (Q-Former),4 layers (Q-Former),8 layers (Q-Former),"
+            "16 layers (Q-Former),24 layers (Q-Former),24 layers (MLP head)"
+        ),
+    ),
 ]
 
 

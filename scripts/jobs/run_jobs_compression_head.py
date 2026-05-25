@@ -57,9 +57,15 @@ TARGET_GLOBAL_TOKENS = 256 * 1024  # 262144
 
 # --- Progressive-cramming evaluation constants (mirrors run_jobs_progressive.py, 1 GPU per job). ---
 EMBEDDING_INIT_METHOD = "compression_head_forward"
-PROG_MAX_SEQ_LEN = MAX_SEQ_LEN  # evaluate at the sequence length the compression head was trained on
+# Evaluate on the canonical progressive-cramming benchmark (pg19_1k / sl_4096 / lr_0.1), identical to
+# run_jobs_progressive.py, so the compression_head_forward-init rows are directly comparable to
+# tab:layer_ablation and every other progressive table. NOTE: this eval benchmark is intentionally
+# unrelated to the head's *training* dataset/seq-len (fineweb-edu / 1024) -- the head just provides the
+# per-sample init; the reconstruction is measured on the standard pg19 benchmark.
+PROG_DATASET_NAME = "LarryLovestein/pg19_1k"
+PROG_MAX_SEQ_LEN = 4096
 PROG_LIMIT_DATASET_ITEMS = 50  # per-sample optimization is expensive; small eval set like the progressive matrix
-PROG_LEARNING_RATE = 0.01
+PROG_LEARNING_RATE = 0.1
 PROG_LOSS_TYPE = "cross_entropy"
 PROG_NUM_ALIGNMENT_LAYERS = 1
 PROG_MAX_OPTIMIZATION_STEPS_PER_SAMPLE = 10_000
@@ -177,7 +183,7 @@ def render_eval_job(ch_out_dir_name: str, ch_exp_suffix: str) -> tuple[list[str]
         "--progressive_train 1",
         f"--embedding_init_method {EMBEDDING_INIT_METHOD}",
         f"--limit_dataset_items {PROG_LIMIT_DATASET_ITEMS}",
-        f"--dataset_name {DATASET_NAME}",
+        f"--dataset_name {PROG_DATASET_NAME}",
         f"--output_dir {out_dir_name}",
     ]
     return cmd_args, exp_suffix, out_dir_name
