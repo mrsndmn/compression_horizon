@@ -73,14 +73,29 @@ def first_last_indices(num_layers: int, n: int) -> list[int]:
     return sorted(set(list(range(n)) + list(range(num_layers - n, num_layers))))
 
 
-def build_truncated(model_checkpoint: str, n: int, dtype: torch.dtype):
-    """Load a fresh full model and slice it down to first-N + last-N layers."""
+def first_indices(num_layers: int, n: int) -> list[int]:
+    """Indices of the first ``n`` layers only (``[0 .. n-1]``)."""
+    if n > num_layers:
+        raise ValueError(f"keep N={n} requires {n} layers but the model only has {num_layers}.")
+    return list(range(n))
+
+
+# keep_mode -> (indices fn, total kept layers given n, output-dir suffix template).
+KEEP_MODES = {
+    "first_last": (first_last_indices, lambda n: 2 * n, "firstlast{n}"),
+    "first": (first_indices, lambda n: n, "first{n}"),
+}
+
+
+def build_truncated(model_checkpoint: str, n: int, dtype: torch.dtype, keep_mode: str = "first_last"):
+    """Load a fresh full model and slice it down per ``keep_mode`` (first-N+last-N or first-N)."""
     from transformers import AutoModelForCausalLM
 
+    indices_fn = KEEP_MODES[keep_mode][0]
     model = AutoModelForCausalLM.from_pretrained(model_checkpoint, torch_dtype=dtype)
     layers = get_decoder_layers(model)
     num_layers = len(layers)
-    keep = first_last_indices(num_layers, n)
+    keep = indices_fn(num_layers, n)
 
     kept = nn.ModuleList([layers[i] for i in keep])
     reindex_layers(kept)
@@ -116,7 +131,14 @@ def main() -> int:
         type=int,
         nargs="+",
         default=[1, 2, 4, 8],
-        help="Per-side layer counts N; each checkpoint keeps the first N and last N layers (2N total).",
+        help="Layer counts N (see --keep_mode for how N maps to kept layers).",
+    )
+    parser.add_argument(
+        "--keep_mode",
+        choices=list(KEEP_MODES),
+        default="first_last",
+        help="first_last: keep first N + last N layers (2N total) -> '<model>-firstlast<N>'. "
+        "first: keep only the first N layers (N total) -> '<model>-first<N>'.",
     )
     parser.add_argument("--output_root", default="artifacts/checkpoints")
     parser.add_argument(
@@ -131,20 +153,22 @@ def main() -> int:
 
     dtype = getattr(torch, args.dtype)
     model_short = args.model_checkpoint.rstrip("/").split("/")[-1]
+    _, total_fn, suffix_tmpl = KEEP_MODES[args.keep_mode]
 
     print(f"Model: {args.model_checkpoint}  (short: {model_short})")
-    print(f"Keep per-side N: {args.keep}  -> total layers {[2 * n for n in args.keep]}")
+    print(f"keep_mode={args.keep_mode}  N: {args.keep}  -> total layers {[total_fn(n) for n in args.keep]}")
 
     for n in args.keep:
-        dst = os.path.join(args.output_root, f"{model_short}-firstlast{n}")
+        expected = total_fn(n)
+        dst = os.path.join(args.output_root, f"{model_short}-{suffix_tmpl.format(n=n)}")
         if os.path.isdir(dst) and not args.overwrite:
             print(f"[N={n}] exists, skip: {dst}")
             continue
 
-        print(f"[N={n}] building (first {n} + last {n} = {2 * n} layers) ...")
-        model, num_layers, keep = build_truncated(args.model_checkpoint, n, dtype)
-        assert len(get_decoder_layers(model)) == 2 * n == len(keep)
-        assert model.config.num_hidden_layers == 2 * n
+        print(f"[N={n}] building ({args.keep_mode}, {expected} layers) ...")
+        model, num_layers, keep = build_truncated(args.model_checkpoint, n, dtype, args.keep_mode)
+        assert len(get_decoder_layers(model)) == expected == len(keep)
+        assert model.config.num_hidden_layers == expected
         print(f"    kept original layer indices {keep} of {num_layers}")
         print(f"    params: {sum(p.numel() for p in model.parameters()) / 1e6:.1f}M")
 
