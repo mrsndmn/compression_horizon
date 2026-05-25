@@ -58,6 +58,12 @@ class TableSpec:
     short: bool = False
     sample_id: int = 0
     tablefmt: str = "latex"
+    # stats key for the "Compressed Tokens" column. ``None`` -> the default
+    # ``num_embeddings`` (number of converged stages). Tables that ablate the
+    # progressive step (Δ tokens added per converged stage) set this to
+    # ``"max_prefix_len"`` so the column reports the achieved prefix length n in
+    # actual tokens rather than the stage count (which would be deflated ~Δ×).
+    compressed_tokens_key: Optional[str] = None
 
 
 _EXP = "artifacts/experiments_progressive"
@@ -368,6 +374,35 @@ TABLES: List[TableSpec] = [
             "135M (causal-LM),135M (Q-Former)," "360M (causal-LM),360M (Q-Former)," "1.7B (causal-LM),1.7B (Q-Former)"
         ),
     ),
+    TableSpec(
+        # Tokens-per-stage ablation: vary the progressive step Δ -- the number of
+        # target tokens appended to the prefix each time a stage converges (and then
+        # re-compressed) -- over Δ in {1,2,4,8,16,32,64,128} on SmolLM2-1.7B. Δ=1 is
+        # the main baseline run (grow one token at a time); Δ>1 runs set
+        # --progressive_step Δ and --progressive_min_seq_len Δ so the prefix is always
+        # a multiple of Δ. All rows share the canonical progressive eval config
+        # (pg19_1k / sl_4096 / lr_0.1). Submitted by run_jobs_added_tokens_ablation.py
+        # and driven by watch_ablation.py --launcher run_jobs_added_tokens_ablation.
+        # "Compressed Tokens" uses max_prefix_len (achieved prefix length n in actual
+        # tokens), so Δ=1 matches the baseline exactly while Δ>1 stays comparable
+        # instead of being deflated by the stage count.
+        name="tab:added_tokens_ablation",
+        checkpoints=[
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_2/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_4/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_8/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_16/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_32/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_64/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_128/progressive_prefixes",
+        ],
+        names_mapping=(
+            "1 token/stage,2 tokens/stage,4 tokens/stage,8 tokens/stage,"
+            "16 tokens/stage,32 tokens/stage,64 tokens/stage,128 tokens/stage"
+        ),
+        compressed_tokens_key="max_prefix_len",
+    ),
 ]
 
 
@@ -479,6 +514,7 @@ def render_table(
         print(f"Loaded trajectory from {checkpoint_path}")
 
     midrules = midrule_indicies or None
+    compressed_tokens_key = spec.compressed_tokens_key or "num_embeddings"
 
     print_statistics_table(
         checkpoint_names,
@@ -486,6 +522,7 @@ def render_table(
         midrule_indicies=midrules,
         tablefmt=tablefmt_override or spec.tablefmt,
         short=spec.short,
+        compressed_tokens_key=compressed_tokens_key,
     )
 
     if save_dir is not None:
@@ -495,6 +532,7 @@ def render_table(
             midrule_indicies=midrules,
             tablefmt="latex",
             short=spec.short,
+            compressed_tokens_key=compressed_tokens_key,
         )
         os.makedirs(save_dir, exist_ok=True)
         filename = (save_name or table_slug(spec.name)) + ".tex"

@@ -875,6 +875,7 @@ def extract_trajectory(
 
     # Compute statistics for all samples
     all_num_embeddings = []
+    all_max_prefix_len = []
     all_total_steps = []
     all_trajectory_lengths = []
     all_num_pca_for99_var = []
@@ -919,6 +920,14 @@ def extract_trajectory(
 
         # Compute metrics that don't require embeddings
         all_num_embeddings.append(len(stages))
+        # Furthest prefix length attempted = the achieved reconstructed-prefix
+        # length n. With the default progressive_step=1 / min_seq_len=1 schedule
+        # this equals len(stages) (so existing tables are unchanged), but for a
+        # step Δ>1 schedule it reflects actual tokens (≈ Δ·#stages) rather than
+        # the stage count. Exposed as ``max_prefix_len`` for opt-in use by tables
+        # that ablate the step (see TableSpec.compressed_tokens_key).
+        stage_seq_lens = [int(s.get("stage_seq_len")) for s in stages if s.get("stage_seq_len") is not None]
+        all_max_prefix_len.append(max(stage_seq_lens) if stage_seq_lens else len(stages))
         all_total_steps.append(sample_total_steps)
 
         # Compute metrics that require embeddings (use cache if embeddings missing)
@@ -974,6 +983,7 @@ def extract_trajectory(
 
     stats = {
         "num_embeddings": summarize_values(all_num_embeddings),
+        "max_prefix_len": summarize_values(all_max_prefix_len),
         "total_steps": summarize_values(all_total_steps),
         "steps_taken": summarize_values(all_total_steps),
         "trajectory_length": summarize_values(all_trajectory_lengths),
@@ -1311,6 +1321,7 @@ def format_statistics_table(
     midrule_indicies,
     tablefmt: str = "grid",
     short: bool = False,
+    compressed_tokens_key: str = "num_embeddings",
 ) -> str:
     """Build the formatted statistics table as a string.
 
@@ -1318,6 +1329,10 @@ def format_statistics_table(
         checkpoint_names: List of experiment labels
         statistics: List of statistics dicts, each containing 'num_embeddings' and 'total_steps'
         short: If True, build the table without the last two columns
+        compressed_tokens_key: stats key used for the "Compressed Tokens" column
+            (default 'num_embeddings' = stage count). Tables that ablate the
+            progressive step pass 'max_prefix_len' so the column reports the
+            achieved prefix length n in actual tokens.
 
     Returns:
         The fully post-processed table text, or an empty string if there is
@@ -1366,9 +1381,12 @@ def format_statistics_table(
         if short:
             num_embeds_precision = 0
 
+        compressed_tokens_stat = stats.get(compressed_tokens_key)
+        if compressed_tokens_stat is None:
+            compressed_tokens_stat = stats.get("num_embeddings")
         row = [
             table_name,
-            format_mean_std_cell(stats.get("num_embeddings"), precision=num_embeds_precision, tablefmt=tablefmt),
+            format_mean_std_cell(compressed_tokens_stat, precision=num_embeds_precision, tablefmt=tablefmt),
             format_mean_std_cell(stats.get("information_gain_from_dataset"), precision=0, tablefmt=tablefmt),
         ]
         if not short:
@@ -1412,6 +1430,7 @@ def print_statistics_table(
     midrule_indicies,
     tablefmt: str = "grid",
     short: bool = False,
+    compressed_tokens_key: str = "num_embeddings",
 ) -> None:
     """Print the formatted statistics table to stdout, framed by a banner."""
     result = format_statistics_table(
@@ -1420,6 +1439,7 @@ def print_statistics_table(
         midrule_indicies,
         tablefmt=tablefmt,
         short=short,
+        compressed_tokens_key=compressed_tokens_key,
     )
     if not result:
         return

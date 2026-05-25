@@ -298,3 +298,23 @@ Concretely, the mean number of perfectly reconstructed (compressed) tokens rises
 \vskip -0.1in
 \end{table*}
 
+\section{Tokens-Per-Stage Ablation}
+\label{app:added_tokens_ablation}
+
+Progressive cramming grows the target prefix one token at a time: each time the current stage converges (its compression token perfectly reconstructs the prefix), the procedure appends a single token to the prefix and re-optimizes. Here we ablate this growth granularity on SmolLM2-1.7B by varying the \emph{progressive step} $\Delta$---the number of target tokens appended to the prefix each time a stage converges, and which the compression token must then jointly reconstruct---over $\Delta \in \{1, 2, 4, 8, 16, 32, 64, 128\}$. The default $\Delta = 1$ (grow one token at a time) is the reference; for $\Delta > 1$ we also start the schedule at a prefix length of $\Delta$ so the prefix is always a multiple of $\Delta$. Every other factor is held fixed at the main run's configuration (cross-entropy reconstruction, single-layer activation alignment, no low-dimensional projection, the same PG19 sample set, learning rate $0.1$, and optimization budget).
+
+Because the only varying factor is how many new tokens each converged stage must absorb at once, this ablation isolates the role of the fine-grained curriculum: a larger $\Delta$ asks the compression token to make a bigger jump per stage rather than a sequence of single-token extensions. Table~\ref{tab:added_tokens_ablation} reports, for each $\Delta$, the achieved compressed-token count, information gain, trajectory length, and the number of principal components explaining 99\% of trajectory variance (PCA 99\%). To keep rows comparable across $\Delta$, the ``Compressed Tokens'' column is the achieved prefix length $n$ in actual tokens (so $\Delta = 1$ coincides with the main SmolLM2-1.7B run) rather than the number of converged stages, which would be deflated by roughly a factor of $\Delta$.
+% BEGIN AUTOGEN added-tokens-ablation-trend (filled by scripts/jobs/watch_ablation.py --launcher run_jobs_added_tokens_ablation after the runs finish)
+The mean number of perfectly reconstructed (compressed) tokens for each step size is filled in automatically once the runs finish.
+% END AUTOGEN added-tokens-ablation-trend
+
+\begin{table*}[t]
+    \centering
+    \caption{Tokens-per-stage ablation on SmolLM2-1.7B. We vary the progressive step $\Delta$---the number of target tokens appended to the prefix each time a stage converges---over $\{1, 2, 4, 8, 16, 32, 64, 128\}$; $\Delta = 1$ (grow one token at a time) is the reference. All runs share the same progressive eval configuration (PG19, sequence length $4096$, learning rate $0.1$, $50$ samples). ``Compressed Tokens'' is the achieved prefix length $n$ in actual tokens, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
+    \label{tab:added_tokens_ablation}
+    \begin{small}
+    \input{tables/added_tokens_ablation}
+    \end{small}
+\vskip -0.1in
+\end{table*}
+
