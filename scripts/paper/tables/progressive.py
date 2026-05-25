@@ -271,20 +271,23 @@ TABLES: List[TableSpec] = [
         # All runs share the same progressive eval config (pg19_1k, 50, 0.1).
         # Un-finetuned checkpoints: make_first_last_layers_ckpt.py +
         # run_jobs_layer_ablation.py. Finetuning: run_jobs_finetune_truncated.py
-        # (-> "-ft" checkpoints); finetuned eval: run_jobs_layer_ablation_ft.py.
+        # (now the width/CH recipe -> "-ftw" checkpoints; the old "-ft" eval dirs
+        # from the previous recipe are left intact); finetuned eval:
+        # run_jobs_layer_ablation_ft.py. The "-ftw" finetuned rows fill in once the
+        # in-progress depth retrain finishes (see watch_finetune_truncated.py).
         name="tab:layer_ablation",
         checkpoints=[
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast1_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
-            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast1-ft_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast1-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             MIDRULE,
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast2_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
-            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast2-ft_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast2-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             MIDRULE,
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
-            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ft_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             MIDRULE,
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast8_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
-            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast8-ft_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast8-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             MIDRULE,
             f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
         ],
