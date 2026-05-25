@@ -278,3 +278,23 @@ Concretely, the mean number of perfectly reconstructed (compressed) tokens is 33
 \vskip -0.1in
 \end{table*}
 
+\section{Model-Width Ablation}
+\label{app:width_ablation}
+
+The depth ablation (Appendix~\ref{app:layer_ablation}) varies the number of layers at a fixed width; here we hold depth fixed and vary model \emph{width}. Across the SmolLM2 family (135M, 360M, and 1.7B; hidden sizes $576$, $960$, and $2048$) we keep only the first $4$ and last $4$ decoder layers of each model ($8$ layers total), so every checkpoint has identical depth and differs essentially only in width. As in the depth ablation, discarding the middle block leaves the retained layers stitched across a gap they were never trained to bridge, so we \emph{recover} each truncated checkpoint before measuring compression, comparing two recovery routes. In the \emph{causal-LM} route we finetune all parameters with a standard next-token objective on fineweb-edu for $5\mathrm{k}$ optimizer steps at sequence length $1024$ with an effective batch of ${\approx}256\mathrm{k}$ tokens per step (AdamW, cosine-with-min-lr schedule, peak learning rate $10^{-3}$, $500$ warmup steps, bf16, \texttt{torch.compile}; 8$\times$A100), then run baseline progressive cramming with random per-sample initialization. In the \emph{Q-Former} route we instead train a small Q-Former compression head (one query, three layers, eight heads) on the same data and with the same optimization budget, and seed progressive cramming from the head (\texttt{compression\_head\_forward} initialization).
+
+Every progressive-cramming run uses the same PG19 sample set, learning rate ($0.1$), and optimization budget as our main SmolLM2-1.7B run, so the only varying factors are model width and recovery route. Table~\ref{tab:width_ablation} reports, for each width and route, the achieved compressed-token count, information gain, trajectory length, and the number of principal components explaining 99\% of trajectory variance (PCA 99\%).
+% BEGIN AUTOGEN width-ablation-trend (filled from the width-ablation eval results)
+Concretely, the mean number of perfectly reconstructed (compressed) tokens rises sharply with width: $42$ / $64.4$ at 135M, $84.5$ / $55.2$ at 360M, and $428.6$ / $355.9$ at 1.7B for the causal-LM / Q-Former recovery routes respectively. The Q-Former head leads at the smallest width, but the plain causal-LM finetune matches or exceeds it at $360\mathrm{M}$ and $1.7\mathrm{B}$, even though the Q-Former consistently induces longer optimization trajectories and larger information gain.
+% END AUTOGEN width-ablation-trend
+
+\begin{table*}[t]
+    \centering
+    \caption{Model-width ablation on the SmolLM2 family. Every model is truncated to its first $4$ and last $4$ decoder layers ($8$ layers total), holding depth fixed while width varies (hidden sizes $576$, $960$, $2048$). Each width is recovered two ways before measuring compression: plain causal-LM finetuning (evaluated with baseline random per-sample initialization) and a Q-Former compression head (evaluated with \texttt{compression\_head\_forward} initialization). ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
+    \label{tab:width_ablation}
+    \begin{small}
+    \input{tables/width_ablation}
+    \end{small}
+\vskip -0.1in
+\end{table*}
+

@@ -338,6 +338,33 @@ TABLES: List[TableSpec] = [
             "16 layers (Q-Former),24 layers (Q-Former),24 layers (MLP head)"
         ),
     ),
+    TableSpec(
+        # Model-width ablation: depth held fixed at first-4 + last-4 = 8 layers while model
+        # width varies across the SmolLM2 family (135M / 360M / 1.7B; hidden 576 / 960 / 2048).
+        # Each width is recovered two ways and shown as two rows: (a) plain causal-LM finetuning
+        # ("-ftw", evaluated with the baseline random0.02 per-sample init, like tab:layer_ablation)
+        # and (b) a Q-Former compression head (evaluated with --embedding_init_method
+        # compression_head_forward, like tab:ch_qformer_layer_ablation). All rows share the same
+        # progressive eval config (pg19_1k / sl_4096 / lr_0.1). Checkpoints built by
+        # make_first_last_layers_ckpt.py --keep 4; finetuning + heads + evals launched by
+        # run_jobs_finetune_width.py, run_jobs_compression_head_width.py, run_jobs_width_ablation_ft.py
+        # and driven by watch_width_ablation.py. The "ds_fineweb-edu_seq_1024" in the Q-Former paths
+        # is the head's *training* data, not the eval benchmark (pg19_1k for every row).
+        name="tab:width_ablation",
+        checkpoints=[
+            f"{_EXP}/sl_4096_SmolLM2-135M-firstlast4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-135M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/sl_4096_SmolLM2-360M-firstlast4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-360M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+        ],
+        names_mapping=(
+            "135M (causal-LM),135M (Q-Former)," "360M (causal-LM),360M (Q-Former)," "1.7B (causal-LM),1.7B (Q-Former)"
+        ),
+    ),
 ]
 
 
