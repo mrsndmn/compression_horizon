@@ -1,13 +1,21 @@
 """Launch baseline progressive-cramming jobs for the FINETUNED depth-ablated checkpoints.
 
 After ``scripts/jobs/run_jobs_finetune_truncated.py`` finetunes each truncated
-SmolLM2-1.7B checkpoint (``…-firstlast{N}-ft``), this launcher submits the same
+SmolLM2-1.7B checkpoint (``…-firstlast{N}-ftw``), this launcher submits the same
 baseline progressive-cramming run used for the un-finetuned depth ablation,
 reusing :func:`run_jobs_progressive.render_job` so output-dir names and payloads
 stay byte-identical to the rest of the matrix. The finetuned runs land in NEW
-output dirs (``…-firstlast{N}-ft_ds_pg19_1k_limit_50_lr_0.1``), leaving the
+output dirs (``…-firstlast{N}-ftw_ds_pg19_1k_limit_50_lr_0.1``), leaving the
 un-finetuned rows untouched, so Table~\\ref{tab:layer_ablation} can show the
 before/after comparison.
+
+NOTE: the depth finetune now uses the width-ablation / compression-head recipe and
+writes ``-ftw`` checkpoints (see run_jobs_finetune_truncated.py), so this launcher
+reads ``-ftw`` (the old ``-ft`` eval dirs from the previous recipe are left intact
+-- no collision). ``SmolLM2-1.7B-firstlast4-ftw`` is the row shared with the width
+ablation, so its eval dir already exists and is skipped. The ``tab:layer_ablation``
+generator still references the old ``-ft`` eval dirs; pointing it at ``-ftw`` is a
+deliberate, separate follow-up (the published table stays untouched until then).
 
 The full-depth (24-layer) ``sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1`` run
 remains the reference row.
@@ -31,12 +39,13 @@ AUTHOR_NAME = "d.tarasov"
 BASE_IMAGE = "cr.ai.cloud.ru/aicloud-base-images/py3.12-torch2.7.0:0.0.41"
 JOB_DESC_PREFIX = "CH: layer-ablation-ft"
 
-# Finetuned depth-ablated checkpoints (produced by run_jobs_finetune_truncated.py).
+# Finetuned depth-ablated checkpoints (produced by run_jobs_finetune_truncated.py,
+# now the width-ablation / compression-head recipe -> -ftw suffix).
 LAYER_ABLATION_FT_CHECKPOINTS = [
-    "artifacts/checkpoints/SmolLM2-1.7B-firstlast1-ft",
-    "artifacts/checkpoints/SmolLM2-1.7B-firstlast2-ft",
-    "artifacts/checkpoints/SmolLM2-1.7B-firstlast4-ft",
-    "artifacts/checkpoints/SmolLM2-1.7B-firstlast8-ft",
+    "artifacts/checkpoints/SmolLM2-1.7B-firstlast1-ftw",
+    "artifacts/checkpoints/SmolLM2-1.7B-firstlast2-ftw",
+    "artifacts/checkpoints/SmolLM2-1.7B-firstlast4-ftw",
+    "artifacts/checkpoints/SmolLM2-1.7B-firstlast8-ftw",
 ]
 
 # Baseline progressive variant only (matches the un-finetuned depth ablation).

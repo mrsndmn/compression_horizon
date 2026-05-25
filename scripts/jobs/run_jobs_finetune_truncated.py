@@ -5,8 +5,18 @@ For each depth-ablated SmolLM2-1.7B checkpoint (first N + last N layers, built b
 finetuning job that runs ``scripts/finetune_causal_lm.py`` under
 ``scripts/jobs/multigpu.sh`` (``accelerate launch`` across all GPUs of the node).
 The finetuned checkpoint is written next to the source as
-``<checkpoint>-ft`` and is later re-evaluated on progressive cramming by
+``<checkpoint>-ftw`` and is later re-evaluated on progressive cramming by
 ``scripts/jobs/run_jobs_layer_ablation_ft.py``.
+
+Hyperparameters are the **literal compression-head / width-ablation recipe** (see
+``run_jobs_finetune_width.py`` and ``.omc/specs/deep-interview-width-ablation.md``):
+lr 1e-3, wd 0.01, ``cosine_with_min_lr`` (min_lr 1e-5), warmup 500, seq 1024, bf16,
+5k steps. This is a deliberate change from the original depth-ablation recipe
+(lr 3e-4, wd 0.1, plain cosine, 10k steps): the depth ablation now uses the SAME
+finetune recipe as the width ablation so the two are directly comparable. Because
+of that, the output suffix is ``-ftw`` (NOT the original ``-ft``); the old ``-ft``
+checkpoints from the previous recipe are left untouched (no artifact collision),
+and ``SmolLM2-1.7B-firstlast4-ftw`` is shared with / reused from the width ablation.
 
 Batch sizing follows the compression-head launcher convention:
 ``gradient_accumulation_steps = total_batch_size // (num_gpus * per_device_bs)``,
@@ -44,28 +54,37 @@ FINETUNE_CHECKPOINTS = [
 DATASET_NAME = "HuggingFaceFW/fineweb-edu"
 DATASET_CACHE_KEY = "SmolLM2-1.7B"
 
-# Finetuning hyperparameters (see .omc/specs/deep-interview-finetune-truncated-layers.md).
+# Finetuning hyperparameters: the literal compression-head / width-ablation recipe
+# (see run_jobs_finetune_width.py and .omc/specs/deep-interview-width-ablation.md).
+# Differs from the original depth-ablation recipe (lr 3e-4, wd 0.1, plain cosine,
+# 10k steps) so depth and width ablations share one finetune recipe.
 DEFAULTS = {
     "num_gpus": 8,
-    "max_steps": 10000,
+    "max_steps": 5000,
     "max_sequence_length": 1024,
     "per_device_train_batch_size": 8,
     "total_batch_size": 256,  # sequences/step -> 256 * 1024 ~= 256k tokens/step
-    "learning_rate": 3e-4,
+    "learning_rate": 0.001,
     "warmup_steps": 500,
-    "weight_decay": 0.1,
-    "lr_scheduler_type": "cosine",
-    # ~3M docs -> ~3.06M packed blocks -> ~12k steps/epoch, so a 10k-step run is a
-    # single pass over the data (no epoch repetition). The 10BT sample has ~9.67M
-    # docs available, so this stays well within one epoch.
+    "weight_decay": 0.01,
+    "lr_scheduler_type": "cosine_with_min_lr",
+    "lr_scheduler_kwargs": "min_lr=0.00001",
+    # ~3M docs -> ~3.06M packed blocks -> ~12k steps/epoch, so a 5k-step run stays
+    # well within a single pass over the data (no epoch repetition).
     "limit_dataset_items": 3000000,
     "dtype": "bf16",
 }
 
 
 def finetuned_dir(checkpoint: str) -> str:
-    """Output path of the finetuned checkpoint for a given source checkpoint."""
-    return checkpoint.rstrip("/") + "-ft"
+    """Output path of the finetuned checkpoint for a given source checkpoint.
+
+    Uses ``-ftw`` (NOT the original depth-ablation ``-ft``): the depth ablation now
+    finetunes with the width-ablation / compression-head recipe, so the two are
+    comparable. The distinct suffix also leaves the old ``-ft`` checkpoints (built
+    with the previous recipe) untouched -- no artifact collision.
+    """
+    return checkpoint.rstrip("/") + "-ftw"
 
 
 def job_desc_for(model_short: str) -> str:
@@ -100,6 +119,7 @@ def build_payload(checkpoint: str, extra_options: dict, opts: dict, workdir: str
         f"--warmup_steps {opts['warmup_steps']}",
         f"--weight_decay {opts['weight_decay']}",
         f"--lr_scheduler_type {opts['lr_scheduler_type']}",
+        f"--lr_scheduler_kwargs '{opts['lr_scheduler_kwargs']}'",
         f"--dtype {opts['dtype']}",
     ]
     script = f"bash {workdir}/scripts/jobs/multigpu.sh scripts/finetune_causal_lm.py  {' '.join(cmd_args)}"
@@ -156,7 +176,7 @@ def submit_experiment(checkpoint, client, extra_options, opts, in_progress_descs
 def main():
     parser = argparse.ArgumentParser(description="Launch 8-GPU causal-LM finetuning for truncated checkpoints.")
     parser.add_argument("--dry", action="store_true", help="Only print generated scripts, do not launch jobs.")
-    parser.add_argument("--force", action="store_true", help="Resubmit even if the -ft checkpoint dir exists.")
+    parser.add_argument("--force", action="store_true", help="Resubmit even if the -ftw checkpoint dir exists.")
     parser.add_argument("--num_gpus", type=int, default=DEFAULTS["num_gpus"])
     parser.add_argument("--max_steps", type=int, default=DEFAULTS["max_steps"])
     parser.add_argument(

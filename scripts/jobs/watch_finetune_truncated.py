@@ -7,12 +7,15 @@ Phase 1 -- finetuning (this script):
   ``--max-retries``. A job is "done" when its ``…-ft`` checkpoint dir holds a
   saved model (config.json + a .safetensors file).
 
-Phase 2 -- progressive re-eval + paper (delegated):
-  Once every ``…-ft`` checkpoint exists, hand off to
+Phase 2 -- progressive re-eval (delegated):
+  Once every ``…-ftw`` checkpoint exists, hand off to
   ``scripts/jobs/watch_ablation.py --launcher run_jobs_layer_ablation_ft``,
-  which submits the baseline progressive runs on the finetuned checkpoints,
-  waits for them, regenerates ``tab:layer_ablation`` (interleaved un-ft / ft
-  rows), fills the ``layer-ablation-trend`` AUTOGEN sentence, and lints.
+  which submits the baseline progressive runs on the finetuned checkpoints and
+  waits for them. By default it is run with ``--no-table`` so the table /
+  appendix are NOT regenerated here -- the depth finetune now uses the
+  width-ablation recipe (``-ftw``) while ``tab:layer_ablation`` still references
+  the old ``-ft`` eval dirs, so regenerating it is a deliberate, separate
+  follow-up. Pass ``--regen-table`` to re-enable the table+paper step.
 
 Usage:
     python scripts/jobs/watch_finetune_truncated.py --plan
@@ -270,20 +273,20 @@ def submit_eval_for(checkpoint: str) -> None:
     log(f"  WARN: re-eval for {os.path.basename(ft)} not submitted after retries; watch_ablation will retry")
 
 
-def run_phase2(poll: int) -> int:
-    log("All finetuning done -> waiting on (already-submitted) re-eval jobs + table/paper update")
-    cp = subprocess.run(
-        [
-            PYTHON,
-            os.path.join(PROJ, "scripts", "jobs", "watch_ablation.py"),
-            "--launcher",
-            "run_jobs_layer_ablation_ft",
-            "--poll",
-            str(poll),
-        ],
-        env=_env(),
-        cwd=PROJ,
-    )
+def run_phase2(poll: int, regen_table: bool = False) -> int:
+    tail = "+ table/paper update" if regen_table else "(table/paper deferred: --no-table)"
+    log(f"All finetuning done -> waiting on (already-submitted) re-eval jobs {tail}")
+    cmd = [
+        PYTHON,
+        os.path.join(PROJ, "scripts", "jobs", "watch_ablation.py"),
+        "--launcher",
+        "run_jobs_layer_ablation_ft",
+        "--poll",
+        str(poll),
+    ]
+    if not regen_table:
+        cmd.append("--no-table")
+    cp = subprocess.run(cmd, env=_env(), cwd=PROJ)
     log(f"Phase 2 watcher exited with code {cp.returncode}")
     return cp.returncode
 
@@ -294,6 +297,12 @@ def main() -> int:
     parser.add_argument("--poll", type=int, default=180)
     parser.add_argument("--plan", action="store_true", help="Print discovered jobs/checkpoints, do not wait.")
     parser.add_argument("--skip-phase2", action="store_true", help="Only wait for finetuning; don't run re-eval.")
+    parser.add_argument(
+        "--regen-table",
+        action="store_true",
+        help="In Phase 2, also regenerate tab:layer_ablation + paper text. Default: deferred "
+        "(the table still references the old -ft eval dirs).",
+    )
     args = parser.parse_args()
 
     opts = dict(F.DEFAULTS)
@@ -326,7 +335,7 @@ def main() -> int:
     log("All finetuning checkpoints present + re-eval jobs submitted.")
     if args.skip_phase2:
         return 0
-    return run_phase2(args.poll)
+    return run_phase2(args.poll, regen_table=args.regen_table)
 
 
 if __name__ == "__main__":
