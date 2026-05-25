@@ -142,9 +142,12 @@ def eval_has_output(out_dir: str) -> bool:
 
 
 def _ensure_client():
+    # Re-create the client on EVERY call so each MLS submission gets a fresh token.
+    # The API access token expires after ~2h; caching it silently breaks long-running
+    # watchers (submissions fail with error_code 20 "access_token expired"). The `mls`
+    # CLI calls already re-auth per subprocess; only this in-process client needed the fix.
     global _client, _extra
-    if _client is None:
-        _client, _extra = EV.make_client()
+    _client, _extra = EV.make_client()
     return _client, _extra
 
 

@@ -141,20 +141,13 @@ def eval_has_output(out_dir: str) -> bool:
 
 
 def _ensure_client():
+    # Re-create the client on EVERY call so each MLS submission gets a fresh token.
+    # The API access token expires after ~2h; caching it silently breaks long-running
+    # watchers (submissions fail with error_code 20 "access_token expired"). The `mls`
+    # CLI calls already re-auth per subprocess; only this in-process client needed the fix.
     global _client, _extra
-    if _client is None:
-        _client, _extra = EV.make_client()
+    _client, _extra = EV.make_client()
     return _client, _extra
-
-
-def _refresh_client():
-    """Drop the cached MLS client so the next _ensure_client() re-auths (fresh token).
-
-    The API access token expires after ~2h; a long-running watcher must refresh it or
-    every submission fails with error_code 20 ("access_token expired").
-    """
-    global _client, _extra
-    _client, _extra = None, None
 
 
 # --------------------------------------------------------------------------- #
@@ -219,15 +212,14 @@ def submit_eval(target: dict, force: bool = False) -> None:
             shutil.rmtree(abs_eval, ignore_errors=True)
 
     for attempt in range(3):
-        client, extra = _ensure_client()
+        client, extra = _ensure_client()  # fresh token each attempt
         result = EV.submit_experiment(target["eval_exp"], client, extra, force=force)
         name = (result or {}).get("job_name")
         if name:
             log(f"  submitted eval for {target['label']} -> {name}")
             return
         err = (result or {}).get("error_message", "")
-        log(f"  eval submit for {target['label']} returned no job (attempt {attempt + 1}/3; {err}); refreshing client")
-        _refresh_client()
+        log(f"  eval submit for {target['label']} returned no job (attempt {attempt + 1}/3; {err}); retrying")
         time.sleep(5)
     log(f"  WARN: eval for {target['label']} not submitted after retries")
 
