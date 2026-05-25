@@ -80,10 +80,18 @@ def first_indices(num_layers: int, n: int) -> list[int]:
     return list(range(n))
 
 
+def last_indices(num_layers: int, n: int) -> list[int]:
+    """Indices of the last ``n`` layers only (``[L-n .. L-1]``)."""
+    if n > num_layers:
+        raise ValueError(f"keep N={n} requires {n} layers but the model only has {num_layers}.")
+    return list(range(num_layers - n, num_layers))
+
+
 # keep_mode -> (indices fn, total kept layers given n, output-dir suffix template).
 KEEP_MODES = {
     "first_last": (first_last_indices, lambda n: 2 * n, "firstlast{n}"),
     "first": (first_indices, lambda n: n, "first{n}"),
+    "last": (last_indices, lambda n: n, "last{n}"),
 }
 
 
