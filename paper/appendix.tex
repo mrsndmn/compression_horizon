@@ -267,7 +267,7 @@ To identify which pretrained components are load-bearing for progressive crammin
 
 We then run the baseline progressive-cramming procedure on each checkpoint, using the same PG19 sample set, learning rate ($0.1$), and optimization budget as our main run; the fully pretrained model is the reference. Table~\ref{tab:init_ablation} reports, for each variant, the achieved compressed-token count, information gain, trajectory length, and the number of principal components explaining 99\% of trajectory variance (PCA 99\%).
 
-While base pretrained model compressed 335 tokens on average, random LM Head initialization leads to the most significant degradation in terms of compressed tokens - only 33 tokens were compressed on average. While random initialization for embeddings and for transformer layers performs better - 173 and 148 average compressed tokens. This highlights that cramming task is the most sensitive to LM Head initialization.
+The fully pretrained model compresses 335 tokens on average. Re-initializing the LM head causes by far the largest drop, to only 33 tokens, whereas re-initializing the input embeddings or the transformer layers is far less damaging, leaving 173 and 148 tokens respectively. Progressive cramming is therefore most sensitive to the LM head: a pretrained output projection matters more than either pretrained embeddings or pretrained layers.
 
 \begin{table*}[t]
     \centering
