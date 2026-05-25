@@ -115,8 +115,16 @@ def _head_tag(experiment: dict) -> str:
     return "mlp"
 
 
-def render_ch_job(experiment: dict, separate_reconstructor_model: bool = False) -> tuple[list[str], str, str]:
-    """Build (cmd_args, exp_suffix, out_dir_name) for one compression-head training run."""
+def render_ch_job(experiment: dict, separate_reconstructor_model: bool | None = None) -> tuple[list[str], str, str]:
+    """Build (cmd_args, exp_suffix, out_dir_name) for one compression-head training run.
+
+    ``separate_reconstructor_model`` (dual-model ablation) is resolved from the explicit argument
+    when given, otherwise from the experiment dict's ``separate_reconstructor_model`` key. Encoding
+    it on the experiment lets watchers/launchers that call ``render_ch_job(exp)`` without the flag
+    still produce the correct ``_dualmodel`` output dir.
+    """
+    if separate_reconstructor_model is None:
+        separate_reconstructor_model = bool(experiment.get("separate_reconstructor_model", False))
     model_checkpoint = experiment["model_checkpoint"]
     model_short = model_checkpoint.split("/")[-1]
     head_kind = experiment["head_kind"]
@@ -271,10 +279,14 @@ def _payload(script: str, job_desc: str, instance_type: str, region: str) -> dic
     }
 
 
-def build_job(experiment: dict, stage: str, separate_reconstructor_model: bool = False) -> tuple[str, str, str, str] | None:
+def build_job(
+    experiment: dict, stage: str, separate_reconstructor_model: bool | None = None
+) -> tuple[str, str, str, str] | None:
     """Return (script, job_desc, out_dir_name, instance_type) for ``stage``.
 
     Returns ``None`` for an eval whose compression-head checkpoint directory does not exist yet.
+    ``separate_reconstructor_model`` defaults to ``None`` so ``render_ch_job`` resolves it from the
+    experiment dict (see ``render_ch_job``); pass an explicit bool to force it for all experiments.
     """
     _, ch_exp_suffix, ch_out_dir_name = render_ch_job(experiment, separate_reconstructor_model)
     workdir = cluster_workdir()
@@ -321,12 +333,15 @@ if __name__ == "__main__":
         print(f"\033[33mNo models matched the filter: {args.model}\033[0m")
         sys.exit(0)
 
+    # CLI flag forces dual on for ALL experiments; when absent (None) each experiment's own
+    # ``separate_reconstructor_model`` key decides (see render_ch_job).
+    srm_override = True if args.separate_reconstructor_model else None
+
     for experiment in experiments:
-        built = build_job(experiment, args.stage, args.separate_reconstructor_model)
+        built = build_job(experiment, args.stage, srm_override)
         if built is None:
             print(
-                "\033[33mCompression head not trained yet, skip eval:\033[0m "
-                f"{render_ch_job(experiment, args.separate_reconstructor_model)[2]}"
+                "\033[33mCompression head not trained yet, skip eval:\033[0m " f"{render_ch_job(experiment, srm_override)[2]}"
             )
             continue
         script, job_desc, out_dir_name, instance_type = built

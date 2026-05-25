@@ -14,10 +14,17 @@ dir as the depth ablation's 1.7B-firstlast4 entry; the idempotent "exists, skip"
 check means that head (and its eval) are not retrained -- only the 135M/360M heads
 are new.
 
+Each width is run in two arms -- a single-model head and a dual-model head
+(``--separate_reconstructor_model``: separate compressor + reconstructor so their
+gradients never overlap, saved under ``compressor/`` + ``reconstructor/`` and tagged
+``_dualmodel``) -- so the matrix is 3 widths x 2 arms = 6 heads.
+
 Two stages, identical semantics to the depth launcher:
-* ``--stage train`` (default): 8-GPU compression-head training.
+* ``--stage train`` (default): 4-GPU compression-head training (NUM_GPUS overridden to 4
+  while keeping the same ~256k-token global batch -- grad_accum doubles to compensate).
 * ``--stage eval``: 1-GPU progressive cramming of each finished head, seeded via
-  ``--embedding_init_method compression_head_forward`` on the pg19 benchmark.
+  ``--embedding_init_method compression_head_forward`` on the pg19 benchmark. Dual-model
+  heads are auto-detected from their ``compressor/`` + ``reconstructor/`` layout.
 
 Usage:
     python scripts/jobs/run_jobs_compression_head_width.py --dry
@@ -44,6 +51,15 @@ ch_job_desc = J.ch_job_desc
 eval_job_desc = J.eval_job_desc
 make_client = J.make_client
 
+# Run the WIDTH ablation on 4 GPUs (not the shared 8-GPU default) while preserving the global batch.
+# build_job/render_ch_job read NUM_GPUS / PER_DEVICE_TRAIN_BATCH_SIZE / TARGET_GLOBAL_TOKENS as module
+# globals on J, and compute_grad_accum derives gradient_accumulation_steps from them; halving NUM_GPUS
+# (8 -> 4) doubles grad_accum (8 -> 16) so the global batch
+# (per_device * grad_accum * num_gpus * seq_len == TARGET_GLOBAL_TOKENS) is unchanged. The override is
+# process-local: other launchers that import J still see the 8-GPU default. build_job also requests the
+# a100.4gpu instance from this same NUM_GPUS.
+J.NUM_GPUS = 4
+
 WIDTH_CHECKPOINT_ROOT = "artifacts/checkpoints"
 # First-4 + last-4 (= 8 layers) checkpoints across model widths.
 WIDTH_CHECKPOINTS = [
@@ -52,8 +68,16 @@ WIDTH_CHECKPOINTS = [
     f"{WIDTH_CHECKPOINT_ROOT}/SmolLM2-1.7B-firstlast4",
 ]
 
-# Q-Former head on each width checkpoint (same config as the depth ablation).
-EXPERIMENTS: list[dict] = [{"model_checkpoint": ck, "head_kind": "qformer", **J.QFORMER} for ck in WIDTH_CHECKPOINTS]
+# Q-Former head on each width checkpoint (same config as the depth ablation). Each width is run in two
+# arms: the original single-model head, and a dual-model head (--separate_reconstructor_model: separate
+# compressor + reconstructor so their gradients never overlap), tagged ``_dualmodel`` in the output dir.
+_SINGLE_MODEL_EXPERIMENTS: list[dict] = [
+    {"model_checkpoint": ck, "head_kind": "qformer", **J.QFORMER} for ck in WIDTH_CHECKPOINTS
+]
+EXPERIMENTS: list[dict] = [
+    *_SINGLE_MODEL_EXPERIMENTS,
+    *[{**exp, "separate_reconstructor_model": True} for exp in _SINGLE_MODEL_EXPERIMENTS],
+]
 
 
 def main() -> int:
@@ -63,7 +87,7 @@ def main() -> int:
         "--stage",
         choices=["train", "eval"],
         default="train",
-        help="train: launch compression-head training (8 GPU). "
+        help="train: launch compression-head training (4 GPU). "
         "eval: launch 1-GPU progressive-cramming evaluation of finished heads.",
     )
     parser.add_argument(
