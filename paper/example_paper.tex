@@ -25,7 +25,7 @@
 \newcommand{\theHalgorithm}{\arabic{algorithm}}
 
 % Use the following line for the initial blind version submitted for review:
-\usepackage{icml2026}
+\usepackage[accepted]{icml2026}
 
 % For preprint, use
 % \usepackage[preprint]{icml2026}
@@ -63,7 +63,7 @@
 
 % The \icmltitle you define below is probably too long as a header.
 % Therefore, a short form for the running title is supplied here:
-\icmltitlerunning{Submission and Formatting Instructions for ICML 2026}
+\icmltitlerunning{Progressive Cramming}
 
 % \usepackage[margin=0.75in]{geometry}
 \usepackage{tikz}
@@ -97,26 +97,17 @@
   \icmlsetsymbol{equal}{*}
 
   \begin{icmlauthorlist}
-    \icmlauthor{Firstname1 Lastname1}{equal,yyy}
-    \icmlauthor{Firstname2 Lastname2}{equal,yyy,comp}
-    \icmlauthor{Firstname3 Lastname3}{comp}
-    \icmlauthor{Firstname4 Lastname4}{sch}
-    \icmlauthor{Firstname5 Lastname5}{yyy}
-    \icmlauthor{Firstname6 Lastname6}{sch,yyy,comp}
-    \icmlauthor{Firstname7 Lastname7}{comp}
-    %\icmlauthor{}{sch}
-    \icmlauthor{Firstname8 Lastname8}{sch}
-    \icmlauthor{Firstname8 Lastname8}{yyy,comp}
-    %\icmlauthor{}{sch}
-    %\icmlauthor{}{sch}
+    \icmlauthor{Dmitrii Tarasov}{fusionbrain,hse}
+    \icmlauthor{Timofey Lashukov}{hse}
+    \icmlauthor{Elizaveta Goncharova}{fusionbrain,hse}
+    \icmlauthor{Andrey Kuznetsov}{fusionbrain,innopolice}
   \end{icmlauthorlist}
 
-  \icmlaffiliation{yyy}{Department of XXX, University of YYY, Location, Country}
-  \icmlaffiliation{comp}{Company Name, Location, Country}
-  \icmlaffiliation{sch}{School of ZZZ, Institute of WWW, Location, Country}
+  \icmlaffiliation{fusionbrain}{FusionBrain Lab, AXXX, Moscow, Russia}
+  \icmlaffiliation{hse}{HSE University, Moscow, Russia}
+  \icmlaffiliation{innopolice}{Innopolis University, Innopolis, Russia}
 
-  \icmlcorrespondingauthor{Firstname1 Lastname1}{first1.last1@xxx.edu}
-  \icmlcorrespondingauthor{Firstname2 Lastname2}{first2.last2@www.uk}
+  \icmlcorrespondingauthor{Dmitrii Tarasov}{dtarasov@hse.ru}
 
   % You may provide any keywords that you find helpful for describing your
   % paper; these are used to populate the "keywords" metadata in the PDF but
@@ -493,12 +484,7 @@ Empirically, this can improve stability and alter the effective capacity:
     \item It can reduce the intrinsic dimensionality of trajectories (PCA 99\%) while preserving, or sometimes increasing, information gain.
 \end{itemize}
 
-Table~\ref{tab:all_progressive_modifications} compares baseline progressive cramming to a representative low-dimensional projection setting (``dim'') for each family.
-Two takeaways stand out:
-\begin{itemize}
-    \item For Llama-3.1-8B and SmolLM2-1.7B, projection can substantially increase achievable token counts and information gain compared to the unconstrained baseline.
-    \item For Pythia-1.4B projection can reduce token count and information gain relative to the baseline; combining projection with activation alignment partially recovers performance compared to projection alone.
-\end{itemize}
+Table~\ref{tab:all_progressive_modifications} compares baseline progressive cramming to a representative low-dimensional projection setting (``dim'') for each family. We can see stable metrics growth across all models families.
 
 
 \subsection{PCA Reconstruction}
@@ -582,36 +568,84 @@ We evaluate on HellaSwag and ARC under two conditions:
 \end{enumerate}
 
 For the second condition, we optimize a separate compression embedding per benchmark instance, targeting perfect teacher-forced reconstruction of the corresponding prefix within a fixed optimization budget.
-We use the standard full cramming setup (a single embedding optimized for the entire prefix), rather than the progressive stage-wise procedure from Section~\ref{sec:progressive}.
-In practice, this optimization does not guarantee perfect reconstruction for every benchmark instance; we do not filter out imperfectly reconstructed cases, so reported downstream accuracy reflects both the effect of conditioning on the learned embedding and any residual reconstruction errors.
+We report both cramming variants: the standard full cramming setup (a single embedding optimized for the entire prefix) and the progressive stage-wise procedure from Section~\ref{sec:progressive}.
+Because the optimization does not always reach perfect reconstruction, we additionally report the fraction of benchmark instances that fully converged (per-sample token-argmax match rate of $1.0$) and compute downstream accuracy over the converged subset only. This isolates the effect of conditioning on a faithfully reconstructed embedding from residual reconstruction errors.
 Each benchmark instance provides four candidate continuations; we select the continuation with the lowest normalized negative log-likelihood (per suffix token).
 Under this 4-way multiple-choice protocol, random guessing yields 25\% accuracy.
 
 \paragraph{Results.}
-\begin{table}[t]
+\begin{table*}[t]
     \centering
-    \caption{Downstream multiple-choice evaluation on HellaSwag and ARC-Easy (4-way; chance = 25\%). ``Base'' uses the original prefix; ``Cram'' prepends a per-instance optimized compression embedding in the full cramming setup (reconstruction is targeted but not guaranteed to be perfect). \bcancel{B} denotes experiments with the BOS token removed.}
+    \caption{Downstream multiple-choice evaluation on HellaSwag and ARC-Easy (4-way; chance = 25\%). ``Base'' uses the original prefix and is evaluated on all samples. For each cramming variant (Progressive, Full), ``Acc'' reports accuracy over the converged subset only and ``Conv\%'' reports the fraction of samples that fully converged. A sample is fully converged when its per-token argmax match rate equals $1.0$ (token-perfect reconstruction). Empty cells (``--'') indicate that the corresponding run does not exist or has zero converged samples (denominator $0$).}
     \label{tab:semantic_evaluation}
 
     \begin{small}
     \input{tables/semantic_evaluation}
     \end{small}
 
-\end{table}
+\end{table*}
 
 Table~\ref{tab:semantic_evaluation} shows that prepending a crammed compression embedding consistently reduces downstream accuracy across model families, often collapsing to (or below) random guessing.
 Together with the attention analysis, these results suggest that high reconstruction performance can coincide with brittle steering (attention hijacking) rather than a transferable semantic representation.
 This highlights a key limitation of using reconstruction accuracy alone: perfect reconstruction is insufficient, and future work must explicitly evaluate capability preservation in any downstream semantic evaluation and broader capability benchmarks overall.
+Appendix~\ref{app:imperfect_reconstruction} further confirms that this drop reflects the compression embedding itself rather than residual reconstruction errors: because HellaSwag and ARC score fixed context--continuation pairs without regenerating the prefix, restricting the evaluation to perfectly reconstructed instances leaves accuracy essentially unchanged.
+The same collapse extends beyond likelihood-based scoring to a \emph{generative} benchmark: on 5-shot MMLU (Appendix~\ref{app:mmlu}, Table~\ref{tab:rebuttle_mmlu}), compressing the full prefix drives accuracy to near zero with no valid parseable answers, while a random control embedding leaves accuracy nearly intact -- confirming that the degradation is specifically caused by the optimized compression embedding rather than by conditioning on an out-of-distribution token.
+
+
+% =============================================================================
+\section{Causal Analysis: Attention Mass vs. Causal Importance}
+\label{sec:causal}
+% =============================================================================
+
+The attention-mass analysis in Section~\ref{sec:attention} is correlational: it shows \emph{where} the compression embedding accumulates attention, but not whether that attention is \emph{causally} responsible for the downstream degradation in Section~\ref{sec:semantic_evaluation}.
+To establish causality, we intervene directly on the compression embedding using \emph{attention knockout}: at selected layers we mask the pre-softmax attention logits that target the compression embedding (position $0$), completely removing its influence on the residual stream at those layers while leaving all other computation intact.
+We use three protocols on Llama-3.1-8B ($L=32$ layers):
+\begin{enumerate}
+    \item \textbf{Per-layer knockout}: mask the compression embedding at a single layer $l$.
+    \item \textbf{Forward cumulative knockout}: mask layers $0$ through $k$ (early-to-late).
+    \item \textbf{Reverse cumulative knockout}: mask layers $k$ through $L-1$ (late-to-early).
+\end{enumerate}
+Each condition is evaluated on teacher-forced reconstruction accuracy and on downstream capability (HellaSwag), so we can ask whether a given layer's interaction with the compression embedding supports faithful reconstruction, downstream disruption, or both.
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{attention_knockout_per_layer.pdf}
+    \caption{Per-layer attention knockout on Llama-3.1-8B. Masking the compression embedding at a single layer, we report downstream HellaSwag accuracy (blue) and teacher-forced reconstruction accuracy (purple); orange bars show the compression embedding's attention mass per layer (Section~\ref{sec:attention_mass}). Dashed lines mark the uncompressed baseline (Base) and the crammed prefix without intervention (Cram). Early-layer knockout sharply degrades reconstruction yet leaves downstream accuracy at or above the crammed baseline, whereas the late layers that carry the most attention mass have negligible causal effect on either metric.}
+    \label{fig:knockout_per_layer}
+\end{figure*}
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{attention_knockout_cumulative.pdf}
+    \caption{Cumulative attention knockout on Llama-3.1-8B. Left: forward knockout masks layers $0$ through $k$; right: reverse knockout masks layers $k$ through $L-1$. Curves show downstream HellaSwag accuracy and teacher-forced reconstruction accuracy as a function of the number of knocked-out layers ($0$ = crammed input, $L$ = uncompressed baseline). Forward knockout restores downstream accuracy to the baseline after masking only the first few layers, whereas reverse knockout fails to recover until masking finally reaches the early layers -- an asymmetry showing that early-layer interactions causally drive the downstream collapse.}
+    \label{fig:knockout_cumulative}
+\end{figure*}
+
+\paragraph{Attention mass and causal importance are dissociated.}
+Figure~\ref{fig:knockout_per_layer} shows per-layer knockout.
+Knocking out the compression embedding at the earliest layers sharply reduces teacher-forced reconstruction accuracy: these are the layers where the embedding injects the information needed to reconstruct the prefix.
+The same early-layer interventions do not harm downstream accuracy; if anything they nudge it back toward the uncompressed baseline.
+By contrast, the layers that carry the most attention mass lie late in the network (Section~\ref{sec:attention}), yet knocking them out individually changes neither reconstruction nor downstream accuracy appreciably.
+The layers with the highest attention mass are therefore not the layers with the highest causal importance for downstream behavior.
+
+\paragraph{A forward/reverse asymmetry localizes the cause.}
+The cumulative protocols (Figure~\ref{fig:knockout_cumulative}) make the locus of causal importance explicit.
+Forward cumulative knockout, which masks the earliest layers first, restores downstream accuracy to the uncompressed baseline after only the first several layers are masked -- while progressively destroying reconstruction.
+Reverse cumulative knockout, which masks the latest layers first, leaves downstream accuracy near the crammed level across most of the network and recovers only once masking extends into the early layers.
+This asymmetry is the core causal claim: downstream collapse is driven by the compression embedding's interactions in the early layers, not by the late-layer attention concentration.
+The high attention mass observed in late layers is thus a \emph{symptom} of cramming rather than the \emph{cause} of capability loss; attention mass and causal importance are dissociated.
+This refines the picture of attention hijacking: the compression embedding steers the model through early-layer computations that are essential for reconstruction but disruptive to the model's normal use of the prefix.
 
 
 \section{Conclusion}
 
 We introduced progressive cramming, which grows the reconstruction target token-by-token and enables controlled measurement of when embedding-based reconstruction succeeds or fails under a fixed optimization budget.
 Across model families, progressive trajectories are low-dimensional, and attention-mass analyses show that crammed embeddings can become intermediate-layer attention sinks, consistent with attention hijacking.
+Causal attention-knockout interventions further localize the downstream collapse to the compression embedding's interactions in the early layers, and show that the late layers carrying the most attention mass have little causal effect -- attention mass is a symptom rather than the cause of capability loss.
 Critically, downstream evaluation indicates that optimizing embeddings for reconstruction can coincide with large capability drops, even when the original prefix remains in context, so reconstruction accuracy alone is not a sufficient criterion for meaningful compression.
 
-Our study remains limited in scope: we use a small number of PG19 samples, and our mechanistic probes are correlational rather than causal.
-Future work should strengthen causal analysis via targeted interventions, and develop a \emph{fast} compressor that produces semantically meaningful compression embeddings.
+Our study remains limited in scope: we use a small number of PG19 samples, and our causal interventions cover a single model family.
+Future work should extend these interventions across architectures and develop a \emph{fast} compressor that produces semantically meaningful compression embeddings.
 
 
 % ---------------------------------------------------------------------------

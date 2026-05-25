@@ -116,6 +116,42 @@ if __name__ == "__main__":
         default=False,
         help="Disable BOS token insertion during tokenization.",
     )
+    parser.add_argument(
+        "--progressive",
+        action="store_true",
+        default=False,
+        help="Use progressive cramming: grow seq_len in stages until each sample converges.",
+    )
+    parser.add_argument(
+        "--progressive_min_seq_len",
+        type=int,
+        default=1,
+        help="Initial sequence length for progressive cramming.",
+    )
+    parser.add_argument(
+        "--progressive_step",
+        type=int,
+        default=1,
+        help="Sequence length increment per progressive stage.",
+    )
+    parser.add_argument(
+        "--progressive_convergence_threshold",
+        type=float,
+        default=1.0,
+        help="Per-sample convergence threshold (token-argmax match rate) required to advance a stage.",
+    )
+    parser.add_argument(
+        "--progressive_max_stages",
+        type=int,
+        default=0,
+        help="Maximum number of progressive stages (0 = unlimited).",
+    )
+    parser.add_argument(
+        "--max_optimization_steps_per_token",
+        type=int,
+        default=1000,
+        help="Per-stage optimization step cap for progressive cramming.",
+    )
     args = parser.parse_args()
     workdir = os.getcwd()
     python_path = "/workspace-SR004.nfs2/d.tarasov/envs/compression_horizon/bin/python"
@@ -165,7 +201,7 @@ if __name__ == "__main__":
 
         cmd_args = [
             f"--model_checkpoint {model_checkpoint}",
-            f"--arc_split {args.arc_split}",
+            f"--arc_subset {args.arc_split}",
             f"--limit_samples {limit_samples}",
             f"--num_compression_tokens {num_compression_tokens}",
             f"--max_optimization_steps {max_optimization_steps}",
@@ -181,6 +217,13 @@ if __name__ == "__main__":
             cmd_args.append("--inverted_alignment")
         if args.no_bos_token:
             cmd_args.append("--no_bos_token")
+        if args.progressive:
+            cmd_args.append("--progressive")
+            cmd_args.append(f"--progressive_min_seq_len {args.progressive_min_seq_len}")
+            cmd_args.append(f"--progressive_step {args.progressive_step}")
+            cmd_args.append(f"--progressive_convergence_threshold {args.progressive_convergence_threshold}")
+            cmd_args.append(f"--progressive_max_stages {args.progressive_max_stages}")
+            cmd_args.append(f"--max_optimization_steps_per_token {args.max_optimization_steps_per_token}")
 
         # Add random_seed if specified (non-default)
         if args.random_seed is not None and args.random_seed != 42:
@@ -224,6 +267,8 @@ if __name__ == "__main__":
             exp_suffix = f"{exp_suffix}_inv_align"
         if args.no_bos_token:
             exp_suffix = f"{exp_suffix}_nobos"
+        if args.progressive:
+            exp_suffix = f"{exp_suffix}_progressive"
 
         out_dir_name = f"artifacts/arc_evaluation/{exp_suffix}"
         if os.path.exists(out_dir_name):

@@ -14,7 +14,7 @@ from tabulate import tabulate
 from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from compression_horizon.utils import to_mean_std_cell
+from compression_horizon.utils import hlines_to_booktabs, to_mean_std_cell
 
 # This experiments finished before information gain was computed during experiment traning. information gain computed with scripts/visualize_multiple_trajectories.py
 PRECOMPUTED_INFO_GAIN = {
@@ -1399,6 +1399,9 @@ def format_statistics_table(
     result = result.replace("L3.1-", "Llama-3.1-")
 
     result = re.sub(r"REMOVE.+", "", result)
+
+    if tablefmt.startswith("latex"):
+        result = hlines_to_booktabs(result)
 
     return result
 

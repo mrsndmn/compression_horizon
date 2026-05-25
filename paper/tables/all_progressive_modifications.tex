@@ -1,8 +1,8 @@
 \begin{tabular}{lllll}
-\hline
+\toprule
  Model                                                                              & Compressed Tokens           & Information Gain         & Trajectory Length             & PCA 99\%                    \\
-\hline
- Llama-3.1-8B {\small lr=0.1}                                                       & 1437.6 {\small $\pm$ 380.1} & 4391 {\small $\pm$ 1408} & nan                           & nan                        \\
+\midrule
+ Llama-3.1-8B {\small lr=0.1}                                                       & 1437.6 {\small $\pm$ 380.1} & 4391 {\small $\pm$ 1408} & 6174 {\small $\pm$ 1263}      & 82.78 {\small $\pm$ 9.07}  \\
  Llama-3.1-8B {\small dim=256} {\small lr=0.1}                                      & 1697.2 {\small $\pm$ 304.2} & 4814 {\small $\pm$ 1731} & 243424 {\small $\pm$ 57429}   & 58.58 {\small $\pm$ 6.4}   \\
  Llama-3.1-8B {\small lr=0.1} {\small $\alpha=1.0$} {\small $L=4$}                  & 1795.1 {\small $\pm$ 225.7} & 5605 {\small $\pm$ 596}  & 7525 {\small $\pm$ 774}       & 81.26 {\small $\pm$ 3.76}  \\
  Llama-3.1-8B {\small dim=256} {\small lr=0.1} {\small $\alpha=1.0$} {\small $L=8$} & 1732.7 {\small $\pm$ 253.2} & 4009 {\small $\pm$ 2414} & 226998 {\small $\pm$ 45513}   & 62.38 {\small $\pm$ 5.08}  \\
@@ -12,6 +12,7 @@
  pythia-1.4b {\small dim=256} {\small lr=0.5}                                       & 500.2 {\small $\pm$ 74.8}   & 1874 {\small $\pm$ 283}  & 598025 {\small $\pm$ 725213}  & 67.58 {\small $\pm$ 19.82} \\
  pythia-1.4b {\small dim=256} {\small lr=0.5} {\small $\alpha=1.0$} {\small $L=8$}  & 405.3 {\small $\pm$ 82.5}   & 1521 {\small $\pm$ 276}  & 1269523 {\small $\pm$ 618392} & 58.92 {\small $\pm$ 15.36} \\
  \midrule
+ SmolLM2-1.7B {\small lr=0.1}                                                       & 335.1 {\small $\pm$ 61.3}   & 1208 {\small $\pm$ 162}  & 1051 {\small $\pm$ 147}       & 33.22 {\small $\pm$ 2.82}  \\
  SmolLM2-1.7B {\small lr=0.1} {\small $\alpha=1.0$} {\small $L=8$}                  & 242.6 {\small $\pm$ 63.2}   & 880 {\small $\pm$ 186}   & 894 {\small $\pm$ 121}        & 26.46 {\small $\pm$ 2.64}  \\
  SmolLM2-1.7B {\small dim=256} {\small lr=0.1}                                      & 957.4 {\small $\pm$ 142.5}  & 3271 {\small $\pm$ 309}  & 132821 {\small $\pm$ 44546}   & 30.94 {\small $\pm$ 4.93}  \\
  SmolLM2-1.7B {\small dim=256} {\small lr=0.1} {\small $\alpha=1.0$} {\small $L=8$} & 918.6 {\small $\pm$ 199.1}  & 3135 {\small $\pm$ 628}  & 142874 {\small $\pm$ 54379}   & 33.28 {\small $\pm$ 6.69}  \\
@@ -20,5 +21,5 @@
  gemma-3-4b-pt {\small lr=0.1} {\small $\alpha=1.0$} {\small $L=8$}                 & 202 {\small $\pm$ 119.4}    & 763 {\small $\pm$ 425}   & 869 {\small $\pm$ 275}        & 26.86 {\small $\pm$ 7.7}   \\
  gemma-3-4b-pt {\small dim=32} {\small lr=0.1}                                      & 697.4 {\small $\pm$ 165.3}  & 2141 {\small $\pm$ 786}  & 27948 {\small $\pm$ 15706}    & 22.5 {\small $\pm$ 5.14}   \\
  gemma-3-4b-pt {\small dim=32} {\small lr=0.1} {\small $\alpha=1.0$} {\small $L=8$} & 680.7 {\small $\pm$ 221}    & 2091 {\small $\pm$ 730}  & 35384 {\small $\pm$ 29987}    & 21.78 {\small $\pm$ 4.94}  \\
-\hline
+\bottomrule
 \end{tabular}

@@ -3,6 +3,30 @@ from __future__ import annotations
 from typing import Optional
 
 
+def hlines_to_booktabs(latex: str) -> str:
+    r"""Convert tabulate's plain ``\hline`` rules to booktabs rules.
+
+    tabulate's ``latex``/``latex_raw`` formats frame a table with ``\hline``
+    rules (top, header separator, bottom). booktabs rules carry
+    ``\aboverulesep``/``\belowrulesep`` spacing and proper rule weights, which
+    look cleaner: the first ``\hline`` becomes ``\toprule``, the last
+    ``\bottomrule``, and any in between ``\midrule``. Output without ``\hline``
+    (non-LaTeX formats) is returned unchanged.
+
+    Requires ``\usepackage{booktabs}`` in the document preamble.
+    """
+    lines = latex.split("\n")
+    idx = [i for i, ln in enumerate(lines) if ln.strip() == "\\hline"]
+    for n, i in enumerate(idx):
+        if n == 0:
+            lines[i] = "\\toprule"
+        elif n == len(idx) - 1:
+            lines[i] = "\\bottomrule"
+        else:
+            lines[i] = "\\midrule"
+    return "\n".join(lines)
+
+
 def to_mean_std_cell(
     val_mean: Optional[float], val_std: Optional[float], is_int: bool = False, use_latex: bool = True, float_precision=4
 ) -> str:

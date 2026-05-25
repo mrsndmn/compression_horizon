@@ -9,7 +9,7 @@
 
 \section{Hyperparameters}
 
-We used 10 samples from PG19 for most experiments.
+We used 50 or 10 samples from PG19 for most experiments.
 Across all settings, the base language model was frozen; only the compression-token parameters were optimized (either the compression embeddings, or the low-dimensional embedding together with its projection).
 We optimized with AdamW. For each model, we swept the learning rate over \(\{0.01, 0.1, 0.5, 1.0\}\); the resulting metrics are summarized in Table~\ref{tab:all_learning_rates}. For the low-dimensional embedding and projection variant, we used a learning rate of 0.01.
 We ran up to 10{,}000 optimization steps per sample in all experiments; for progressive runs, we additionally capped the optimization of each newly added token at 1{,}000 steps.
@@ -197,4 +197,85 @@ the loss of the first two tokens by a factor of three (2 leading).}
 \label{app:I}
 
 As noted in Section~\ref{sec:prior_limitations}, a 99\% token-level accuracy threshold is insufficient to guarantee correct reconstruction when evaluation is performed without \emph{teacher forcing} (i.e., when generated tokens are fed back into the prefix rather than replacing them with the ground-truth tokens). Table~\ref{tab:compression_reconstruction_summary} shows that under non-progressive training, the remaining $\sim$1\% error is concentrated in the first few positions (indices 0-2); these early mistakes then compound, leading to divergent generations.
+
+
+\section{Effect of Imperfect Reconstruction on HellaSwag and ARC}
+\label{app:imperfect_reconstruction}
+
+The downstream evaluation in Section~\ref{sec:semantic_evaluation} retains benchmark instances whose prefixes are not perfectly reconstructed, which raises the question of whether the observed capability drop is caused by the compression embedding itself disrupting reasoning, or simply by failed reconstruction corrupting the prefix.
+To disentangle the effect of imperfect reconstruction from the effect of the compression embedding itself, we emphasize the difference between autoregressive generation and multiple-choice benchmarks such as HellaSwag and ARC. In greedy generation, even small reconstruction errors can lead to large deviations in the output due to error accumulation, especially when errors occur early in the sequence (Section~\ref{sec:prior_limitations}).
+
+In contrast, HellaSwag and ARC operate in a non-generative (scoring) regime: the model evaluates fixed context--continuation pairs without regenerating the prefix. As a result, these benchmarks are significantly less sensitive to small reconstruction imperfections, since no sequential error propagation occurs.
+
+The near-identical token-normalized accuracies for SmolLM2-1.7B (Table~\ref{tab:rebuttal_token_norm}) indicate that imperfect reconstruction has minimal impact on benchmark performance. This confirms that the observed degradation is driven primarily by the compression embedding itself, rather than by reconstruction errors.
+
+\begin{table}[t]
+\centering
+\caption{Token-normalized accuracy (\%) for HellaSwag, ARC-Easy, and ARC-Challenge on SmolLM2-1.7B. Values are reported for perfectly reconstructed examples and for all examples.}
+\label{tab:rebuttal_token_norm}
+\begin{small}
+\input{tables/manual/rebuttal_token_norm}
+\end{small}
+\end{table}
+
+\section{Generative Benchmark Evaluation (5-shot MMLU)}
+\label{app:mmlu}
+
+The downstream evaluation in Section~\ref{sec:semantic_evaluation} relies on HellaSwag and ARC, which probe a limited slice of downstream behavior. To broaden this evaluation, we additionally evaluate on 5-shot MMLU (512 samples) under three compression modes: \textit{few\_shot} (only the few-shot examples are compressed), \textit{full\_prefix} (both the few-shot examples and the question are compressed), and \textit{random} (a random embedding replaces the compression embedding as a control).
+
+The results (Table~\ref{tab:rebuttle_mmlu}) are consistent with our earlier findings. When only the few-shot tokens are compressed, all models show accuracy degradation (ranging from $-2\%$ for Gemma-3-4B to $-15\%$ for Llama-3.1-8B), confirming that the model retains generative capability when uncompressed tokens follow the compression embedding. In contrast, \textit{full\_prefix} compression---where the compression embedding compresses the full prefix---leads to near-complete failure: for Llama-3.1-8B, SmolLM2-1.7B, and Gemma-3-4B accuracy drops to $0\%$ with no valid (parseable) answers, while the smaller Pythia-1.4B retains only partial output validity ($24.8\%$) at near-chance accuracy ($4.83\%$). In every case the generative process collapses. Notably, the \textit{random} baseline causes only minor degradation (at most $-4.3\%$, and slightly \emph{positive} for Gemma-3-4B), nowhere near the catastrophic collapse under \textit{full\_prefix}; this shows that the mere presence of an out-of-distribution token is not sufficient to explain the failure---it is specifically the \emph{optimized} compression embedding that disrupts downstream computation.
+
+These results on a generative benchmark with longer context reinforce the conclusions drawn from HellaSwag and ARC, and demonstrate that the downstream collapse generalizes beyond multiple-choice likelihood-based evaluation.
+
+\begin{table*}[tb]
+\centering
+\caption{5-shot MMLU accuracy on 512 samples with a compression embedding in context. \textbf{CompMode = few\_shot}: only the few-shot tokens were compressed with cramming. \textbf{CompMode = full\_prefix}: few-shot tokens and question tokens were compressed. \textbf{CompMode = random}: a random embedding was placed instead of the compression embedding. \textbf{Baseline Acc}: accuracy of the base model without a compression embedding. \textbf{Compressed Acc}: accuracy with a compression embedding in context (regular tokens placed after the compression embedding). \textbf{Valid} columns report the percentage of valid generated answers (answers parsed successfully).}
+\label{tab:rebuttle_mmlu}
+\begin{small}
+\input{tables/manual/rebuttle_mmlu}
+\end{small}
+\end{table*}
+
+\section{Transformer-Depth Ablation}
+\label{app:layer_ablation}
+
+To probe how progressive-cramming capacity depends on model depth, we ablate the number of transformer layers in SmolLM2-1.7B. Starting from the pretrained 24-layer model, we keep only the first $N$ and the last $N$ decoder layers - discarding the middle block - for $N \in \{1, 2, 4, 8\}$, yielding models with $2N \in \{2, 4, 8, 16\}$ layers. Each retained layer keeps its original pretrained weights, the input embedding and (tied) output projection are preserved.
+
+Because the input/output vocabulary mapping and every optimization hyperparameter are held fixed, this ablation isolates the contribution of network \emph{depth} to compression capacity. Table~\ref{tab:layer_ablation} reports, for each depth, the achieved compressed-token count, information gain, trajectory length, and the number of principal components explaining 99\% of trajectory variance (PCA 99\%).
+
+\textbf{Truncated checkpoints (no finetuning).} The full 24-layer model compresses 335 tokens on average, with an information gain of 1208. Cutting the model down to 4, 8, or 16 layers lowers the compressed token count to 240 - 270. Information gain, on the other hand, goes up a lot and does not follow a clear trend with depth: it is 1500 at 16 layers but 5198 and 5585 at 4 and 8 layers. Only the 2-layer checkpoint drops sharply, keeping just 76 compressed tokens on average. The main point is that even after we remove most of the layers, cramming still works: every checkpoint with 4 or more layers keeps up to 81\% of the full model's compressed token count.
+
+\textbf{Finetuned checkpoints.} To make the comparison fairer, we finetune each truncated checkpoint on FineWeb-Edu at sequence length of $1024$ tokens for $5k$ training steps with global batch size of about $256k$ tokens and measure again. Finetuning always raises the compressed-token count, but the gain stops growing quickly: the 4-layer model reaches 390 tokens, and adding more layers barely changes this. The 2-layer model is again the weakest, compressing only 218 tokens.
+
+\textbf{Depth and cramming capacity.} Together, these results show that adding more layers does not help the model compress more. Past 4 layers, the compressed token count stays about the same at every depth, even though information gain changes.
+
+
+\begin{table*}[t]
+    \centering
+    \caption{Transformer-depth ablation on SmolLM2-1.7B. The model is truncated to its first $N$ and last $N$ decoder layers ($2N$ layers total); the full 24-layer model is the reference. Each truncated depth is shown as-is and after causal-LM finetuning on fineweb-edu (``(finetuned)''). ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
+    \label{tab:layer_ablation}
+    \begin{small}
+    \input{tables/layer_ablation}
+    \end{small}
+\vskip -0.1in
+\end{table*}
+
+\section{Initialization Ablation}
+\label{app:init_ablation}
+
+To identify which pretrained components are load-bearing for progressive cramming, we ablate \emph{initialization} on SmolLM2-1.7B: starting from the pretrained model, we randomly re-initialize exactly one component and keep the rest pretrained. We consider three variants: (i) \emph{random transformer layers}, where the decoder layers are re-initialized while the input embedding and (tied) output projection are preserved; (ii) \emph{random LM head}, where only the output projection is re-initialized; and (iii) \emph{random input embeddings}, where only the input token-embedding matrix is re-initialized. Because SmolLM2-1.7B ties its input and output embeddings, for variants (ii) and (iii) we first \emph{untie} them - so that exactly one matrix is randomized while the other retains its pretrained values.
+
+We then run the baseline progressive-cramming procedure on each checkpoint, using the same PG19 sample set, learning rate ($0.1$), and optimization budget as our main run; the fully pretrained model is the reference. Table~\ref{tab:init_ablation} reports, for each variant, the achieved compressed-token count, information gain, trajectory length, and the number of principal components explaining 99\% of trajectory variance (PCA 99\%).
+
+The fully pretrained model compresses 335 tokens on average. Re-initializing the LM head causes by far the largest drop, to only 33 tokens, whereas re-initializing the input embeddings or the transformer layers is far less damaging, leaving 173 and 148 tokens respectively. Progressive cramming is therefore most sensitive to the LM head: a pretrained output projection matters more than either pretrained embeddings or pretrained layers.
+
+\begin{table*}[t]
+    \centering
+    \caption{Initialization ablation on SmolLM2-1.7B. Exactly one component is randomly re-initialized---transformer layers, LM head, or input embeddings---while the rest stay pretrained; the fully pretrained model is the reference. For the LM-head and input-embedding variants the tied embeddings are first untied so a single matrix is randomized. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
+    \label{tab:init_ablation}
+    \begin{small}
+    \input{tables/init_ablation}
+    \end{small}
+\vskip -0.1in
+\end{table*}
 

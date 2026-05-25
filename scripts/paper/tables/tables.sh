@@ -29,6 +29,8 @@ PROGRESSIVE_TABLES=(
   tab:full_activation_alignment_and_low_dim_projections
   tab:all_progressive_modifications
   tab:progressive_no_bos_token
+  tab:layer_ablation
+  tab:init_ablation
 )
 
 for name in "${PROGRESSIVE_TABLES[@]}"; do
@@ -45,7 +47,7 @@ done
 
 # --- Semantic benchmark evaluation -------------------------------------------
 # tab:semantic_evaluation
-"$PY" scripts/paper/tables/bench_semantic_results.py --tablefmt latex --save-dir paper/tables
+"$PY" scripts/paper/tables/bench_semantic_results.py --tablefmt latex --save-dir paper/tables --arc-split ARC-Easy
 
 # --- Attention hijacking -----------------------------------------------------
 # tab:attn_hijacking (progressive cramming, all model families)

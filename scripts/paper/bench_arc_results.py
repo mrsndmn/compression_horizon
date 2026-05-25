@@ -371,7 +371,18 @@ def build_latex_table(summaries: List[ARCRunSummary], selected_columns: Optional
         table_rows.append(row)
 
     # Use latex_raw to respect our own escaping and math cells
-    return tabulate(table_rows, headers=headers, tablefmt="latex_raw")
+    result = tabulate(table_rows, headers=headers, tablefmt="latex_raw")
+    # Use booktabs rules (\toprule/\midrule/\bottomrule) instead of tabulate's \hline.
+    lines = result.split("\n")
+    rule_idx = [i for i, ln in enumerate(lines) if ln.strip() == "\\hline"]
+    for n, i in enumerate(rule_idx):
+        if n == 0:
+            lines[i] = "\\toprule"
+        elif n == len(rule_idx) - 1:
+            lines[i] = "\\bottomrule"
+        else:
+            lines[i] = "\\midrule"
+    return "\n".join(lines)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
