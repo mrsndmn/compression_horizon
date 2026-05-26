@@ -62,6 +62,12 @@ _LLAMA = {
     "per_device_train_batch_size": 2,
     "gradient_checkpointing": True,
     "no_torch_compile": True,
+    # Gentler LR + longer warmup than SmolLM2: the shared peak LR 1e-3 spiked during
+    # warmup on the 8B truncations (degrading some checkpoints), so Llama uses 3e-4
+    # with a 1000-step warmup. Schedule (cosine-with-min-lr) and the 256-seq global
+    # batch are unchanged.
+    "learning_rate": 0.0003,
+    "warmup_steps": 1000,
 }
 
 # Last-only depth-ablated checkpoints to finetune (keep last N layers; N total).
