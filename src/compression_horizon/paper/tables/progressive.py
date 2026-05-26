@@ -73,7 +73,9 @@ def flatten_embedding(row: Dict[str, Any]) -> np.ndarray:
     return emb.reshape(-1).detach().cpu().numpy()
 
 
-CACHE_VERSION = 2
+# v3: stats dict gained ``converged_prefix_len`` and ``steps_to_converged``
+# (used by tab:added_tokens_ablation); old caches lack them and must be rebuilt.
+CACHE_VERSION = 3
 CACHE_FILENAME = "low_dimensional_cache.json"
 
 
@@ -876,6 +878,8 @@ def extract_trajectory(
     # Compute statistics for all samples
     all_num_embeddings = []
     all_max_prefix_len = []
+    all_converged_prefix_len = []
+    all_steps_to_converged = []
     all_total_steps = []
     all_trajectory_lengths = []
     all_num_pca_for99_var = []
@@ -929,6 +933,28 @@ def extract_trajectory(
         stage_seq_lens = [int(s.get("stage_seq_len")) for s in stages if s.get("stage_seq_len") is not None]
         all_max_prefix_len.append(max(stage_seq_lens) if stage_seq_lens else len(stages))
         all_total_steps.append(sample_total_steps)
+
+        # Largest *converged* prefix length and the cumulative steps spent to reach
+        # it. Progressive cramming stops at the first stage that fails to converge,
+        # so the final stage is a failure whose seq_len overshoots the achieved
+        # length by the step Δ; restricting to stages that hit the convergence
+        # threshold gives the true number of perfectly reconstructed tokens (and
+        # avoids the +Δ inflation that ``max_prefix_len`` carries for Δ>1).
+        converged_stages = [
+            s
+            for s in stages
+            if s.get("stage_seq_len") is not None
+            and s.get("final_convergence") is not None
+            and s.get("convergence_threshold") is not None
+            and s["final_convergence"] >= s["convergence_threshold"]
+        ]
+        if converged_stages:
+            best_converged = max(converged_stages, key=lambda s: int(s["stage_seq_len"]))
+            all_converged_prefix_len.append(int(best_converged["stage_seq_len"]))
+            all_steps_to_converged.append(int(best_converged.get("steps_taken", 0)))
+        else:
+            all_converged_prefix_len.append(0)
+            all_steps_to_converged.append(0)
 
         # Compute metrics that require embeddings (use cache if embeddings missing)
         if has_embeddings and len(sample_embeddings) > 0:
@@ -984,6 +1010,8 @@ def extract_trajectory(
     stats = {
         "num_embeddings": summarize_values(all_num_embeddings),
         "max_prefix_len": summarize_values(all_max_prefix_len),
+        "converged_prefix_len": summarize_values(all_converged_prefix_len),
+        "steps_to_converged": summarize_values(all_steps_to_converged),
         "total_steps": summarize_values(all_total_steps),
         "steps_taken": summarize_values(all_total_steps),
         "trajectory_length": summarize_values(all_trajectory_lengths),
@@ -1322,6 +1350,7 @@ def format_statistics_table(
     tablefmt: str = "grid",
     short: bool = False,
     compressed_tokens_key: str = "num_embeddings",
+    steps_key: Optional[str] = None,
 ) -> str:
     """Build the formatted statistics table as a string.
 
@@ -1331,8 +1360,12 @@ def format_statistics_table(
         short: If True, build the table without the last two columns
         compressed_tokens_key: stats key used for the "Compressed Tokens" column
             (default 'num_embeddings' = stage count). Tables that ablate the
-            progressive step pass 'max_prefix_len' so the column reports the
-            achieved prefix length n in actual tokens.
+            progressive step pass 'converged_prefix_len' so the column reports the
+            largest perfectly-reconstructed prefix length (excluding the final
+            non-converged stage).
+        steps_key: if set (and not ``short``), append a "Steps to Converge" column
+            sourced from this stats key (e.g. 'steps_to_converged'). Default None
+            leaves the column set unchanged for every other table.
 
     Returns:
         The fully post-processed table text, or an empty string if there is
@@ -1358,6 +1391,8 @@ def format_statistics_table(
             "Trajectory Length",
             "PCA 99%",
         ]
+    if steps_key is not None and not short:
+        headers += ["Steps to Converge"]
 
     # Prepare table data
     table_data = []
@@ -1399,6 +1434,8 @@ def format_statistics_table(
                 # format_mean_std_cell(stats.get("information_gain"), precision=0, tablefmt=tablefmt),
                 # format_embedding_statistics(stats.get("embedding_statistics"), precision=4, tablefmt=tablefmt),
             ]
+        if steps_key is not None and not short:
+            row += [format_mean_std_cell(stats.get(steps_key), precision=0, tablefmt=tablefmt)]
         table_data.append(row)
 
         if midrule_indicies is not None and i in midrule_indicies:
@@ -1431,6 +1468,7 @@ def print_statistics_table(
     tablefmt: str = "grid",
     short: bool = False,
     compressed_tokens_key: str = "num_embeddings",
+    steps_key: Optional[str] = None,
 ) -> None:
     """Print the formatted statistics table to stdout, framed by a banner."""
     result = format_statistics_table(
@@ -1440,6 +1478,7 @@ def print_statistics_table(
         tablefmt=tablefmt,
         short=short,
         compressed_tokens_key=compressed_tokens_key,
+        steps_key=steps_key,
     )
     if not result:
         return

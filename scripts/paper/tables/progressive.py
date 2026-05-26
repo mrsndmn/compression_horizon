@@ -61,9 +61,14 @@ class TableSpec:
     # stats key for the "Compressed Tokens" column. ``None`` -> the default
     # ``num_embeddings`` (number of converged stages). Tables that ablate the
     # progressive step (Δ tokens added per converged stage) set this to
-    # ``"max_prefix_len"`` so the column reports the achieved prefix length n in
-    # actual tokens rather than the stage count (which would be deflated ~Δ×).
+    # ``"converged_prefix_len"`` so the column reports the largest *converged*
+    # prefix length in actual tokens -- excluding the final non-converged stage,
+    # whose seq_len would otherwise inflate the count by up to Δ.
     compressed_tokens_key: Optional[str] = None
+    # stats key for an optional trailing "Steps to Converge" column. ``None`` ->
+    # no extra column (every existing table). Set to ``"steps_to_converged"`` to
+    # show the cumulative optimization steps spent to reach the last converged token.
+    steps_to_converge_key: Optional[str] = None
 
 
 _EXP = "artifacts/experiments_progressive"
@@ -383,9 +388,12 @@ TABLES: List[TableSpec] = [
         # a multiple of Δ. All rows share the canonical progressive eval config
         # (pg19_1k / sl_4096 / lr_0.1). Submitted by run_jobs_added_tokens_ablation.py
         # and driven by watch_ablation.py --launcher run_jobs_added_tokens_ablation.
-        # "Compressed Tokens" uses max_prefix_len (achieved prefix length n in actual
-        # tokens), so Δ=1 matches the baseline exactly while Δ>1 stays comparable
-        # instead of being deflated by the stage count.
+        # "Compressed Tokens" uses converged_prefix_len (largest *converged* prefix
+        # length): progressive cramming stops at the first non-converged stage, so the
+        # final stage's seq_len overshoots the achieved length by Δ -- counting only
+        # converged stages avoids that +Δ inflation. The extra "Steps to Converge"
+        # column (steps_to_converged) reports the cumulative optimization steps spent
+        # to reach that last converged token.
         name="tab:added_tokens_ablation",
         checkpoints=[
             f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
@@ -401,7 +409,8 @@ TABLES: List[TableSpec] = [
             "1 token/stage,2 tokens/stage,4 tokens/stage,8 tokens/stage,"
             "16 tokens/stage,32 tokens/stage,64 tokens/stage,128 tokens/stage"
         ),
-        compressed_tokens_key="max_prefix_len",
+        compressed_tokens_key="converged_prefix_len",
+        steps_to_converge_key="steps_to_converged",
     ),
 ]
 
@@ -515,6 +524,7 @@ def render_table(
 
     midrules = midrule_indicies or None
     compressed_tokens_key = spec.compressed_tokens_key or "num_embeddings"
+    steps_key = spec.steps_to_converge_key
 
     print_statistics_table(
         checkpoint_names,
@@ -523,6 +533,7 @@ def render_table(
         tablefmt=tablefmt_override or spec.tablefmt,
         short=spec.short,
         compressed_tokens_key=compressed_tokens_key,
+        steps_key=steps_key,
     )
 
     if save_dir is not None:
@@ -533,6 +544,7 @@ def render_table(
             tablefmt="latex",
             short=spec.short,
             compressed_tokens_key=compressed_tokens_key,
+            steps_key=steps_key,
         )
         os.makedirs(save_dir, exist_ok=True)
         filename = (save_name or table_slug(spec.name)) + ".tex"
