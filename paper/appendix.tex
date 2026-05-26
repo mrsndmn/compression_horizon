@@ -405,3 +405,83 @@ in Table~\ref{tab:surprisal_steps_correlation} are if anything a lower bound on 
 \vskip -0.1in
 \end{table*}
 
+
+\section{Equally-Good Solutions Are Far Apart: Low-Dimensionality Is a Path Property}
+\label{app:solution_diversity}
+
+Section~\ref{sec:trajectory} reports that a single progressive-cramming trajectory occupies a
+low-dimensional subspace ($30$--$100$ principal components for $99\%$ of its variance). A natural
+question is whether this reflects the geometry of the \emph{set of valid solutions}---the compression
+embeddings that perfectly reconstruct a given prefix---or merely the geometry of one optimization
+\emph{path}. We can separate the two at no additional training cost using the learning-rate sweep of
+Table~\ref{tab:all_learning_rates}. Those runs share the default random seed and initialization
+method, so for a given sample every learning rate starts from a \emph{byte-identical} compression
+embedding $e_0$ and differs only in optimizer step size. Whenever two or more learning rates drive the
+same prefix (sample, length) to $100\%$ reconstruction, we obtain a set of \emph{equally valid}
+solutions $\{e^*_{\eta}\}$ reached from one common starting point.
+
+For every such matched group we measure three things. The solutions are equally good by construction
+(all reach perfect reconstruction); we confirm they are also equivalent in capacity through the
+coefficient of variation of their information gain (``IG CV''). We measure how far apart they are by
+the mean pairwise Euclidean distance between the $e^*_{\eta}$, expressed in units of their mean
+displacement-from-init $\|e^*_{\eta}-e_0\|$ (``Sol.\ dist.''); reporting distance relative to
+displacement makes it scale-free, so a large value cannot be an artifact of the larger steps that high
+learning rates take. Finally we measure whether the solutions differ along shared or independent
+directions through the mean pairwise cosine of the displacement vectors $(e^*_{\eta}-e_0)$
+(``Dir.\ cos.''); the baseline for unrelated directions in $d$ dimensions is $\approx 1/\sqrt{d}$, i.e.\
+$0.016$--$0.022$ for these hidden sizes. We pool these over all matched groups (a geometric grid of
+prefix lengths $\times$ samples) for each of the four families.
+
+Table~\ref{tab:solution_diversity} shows a consistent picture. The solutions are genuinely equally
+good: information gain varies by only $0.9$--$1.8\%$ across learning rates at a matched prefix. Yet they
+are far apart---the mean cross-solution distance is $1.5$--$1.6\times$ the displacement from the shared
+init, meaning two equally-good solutions are \emph{farther from each other than either is from the
+common starting point}. And they are nearly orthogonal: the displacement-direction cosines ($+0.04$ to
+$+0.24$) sit only modestly above the random-direction baseline, so most of each solution's displacement
+lies in directions unique to it. The learning rate, meanwhile, acts almost purely as a travel-distance
+knob: the mean displacement from init grows $15$--$43\times$ from the smallest to the largest learning
+rate (``Disp.\ ratio''), mirroring the order-of-magnitude growth in trajectory length and PCA-$99\%$
+reported in Table~\ref{tab:all_learning_rates}, while information gain stays flat.
+
+Together these reframe the low-dimensionality result. The valid-solution set for a prefix is \emph{wide
+and high-dimensional}: from a single starting point, different step sizes reach equally-good solutions
+scattered in nearly orthogonal directions, and a higher learning rate simply reaches farther-flung
+members of that set. The low PCA-$99\%$ of any one trajectory (Section~\ref{sec:trajectory}) is
+therefore a property of a single, lazily warm-started \emph{path}---one thin slice of the solution
+set---not of an intrinsic low-dimensional solution manifold. This directly explains why
+low-dimensional projection (Section~\ref{sec:lowdim}) preserves cramming quality: if valid solutions
+are spread densely across the embedding space, confining optimization to a random rank-$k$ affine
+subspace still intersects the solution set, so quality is retained while the optimization geometry
+simplifies. It also explains why, for a model such as Llama-3.1-8B, raising the learning rate inflates
+trajectory length and dimensionality without improving information gain---the extra exploration finds
+different solutions, not better ones.
+
+Two caveats temper the claim. First, although the scale-free distance and near-orthogonality are robust
+to the step-size confound, these solutions still share an initialization and warm-start history, so
+they are correlated rather than fully independent draws; the small but positive direction cosines
+(largest for Pythia, smallest for Gemma) reflect a weak shared component on top of the dominant
+idiosyncratic ones. Second, the cleanest test---independent random restarts at a \emph{fixed} learning
+rate---would remove the shared-init confound entirely; we expect it to strengthen the conclusion, since
+independent initializations can only increase diversity, and leave it to future work. The analysis here
+reads only already-saved trajectories and adds no training cost.
+
+\begin{table*}[t]
+    \centering
+    \caption{Equally-good cramming solutions are far apart and near-orthogonal. Using the
+    shared-initialization learning-rate sweep of Table~\ref{tab:all_learning_rates}, we pool over all
+    prefix (sample, length) groups that two or more learning rates drive to perfect reconstruction, and
+    report: ``$N$'' the number of such groups (over $10$ PG19 samples); ``IG CV'' the coefficient of
+    variation of information gain across the learning rates (equal quality $\Rightarrow$ small);
+    ``Sol.\ dist.'' the mean cross-solution Euclidean distance in units of the mean
+    displacement-from-init (median [IQR]; ${>}1$ means solutions are farther from each other than from
+    the shared start); ``Dir.\ cos.'' the mean pairwise cosine of the displacement directions (random
+    baseline $\approx 1/\sqrt{d}=0.016$--$0.022$); and ``Disp.\ ratio'' the mean displacement-from-init
+    at the largest learning rate over that at the smallest. Equally-good solutions are far apart and
+    nearly orthogonal across every family, indicating a wide, high-dimensional valid-solution set.}
+    \label{tab:solution_diversity}
+    \begin{small}
+    \input{tables/solution_diversity}
+    \end{small}
+\vskip -0.1in
+\end{table*}
+

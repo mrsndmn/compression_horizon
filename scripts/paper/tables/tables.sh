@@ -44,6 +44,12 @@ done
 # `--compute` (needs a GPU + the four base models) before this will reflect new runs.
 "$PY" scripts/paper/tables/surprisal_steps_correlation.py --save
 
+# --- Solution diversity across learning rates --------------------------------
+# tab:solution_diversity. Renders from artifacts/paper/solution_diversity/<key>.json.
+# Regenerate those caches once with `--compute` (CPU only; reads the LR-sweep
+# trajectory datasets) before this will reflect new runs.
+"$PY" scripts/paper/tables/solution_diversity.py --save
+
 # --- Full vs. progressive cramming -------------------------------------------
 # tab:full_vs_progressive
 "$PY" scripts/paper/tables/full_cramming_table.py --save-dir paper/tables
