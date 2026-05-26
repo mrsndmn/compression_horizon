@@ -80,9 +80,9 @@ TABLES: List[TableSpec] = [
             f"{_EXP}/sl_4096_SmolLM2-1.7B_lr_0.1/progressive_prefixes",
             f"{_EXP}/sl_4096_SmolLM2-1.7B_lr_0.5/progressive_prefixes",
             f"{_EXP}/sl_4096_SmolLM2-1.7B_lr_1.0/progressive_prefixes",
+            MIDRULE,
             f"{_EXP}/sl_4096_gemma-3-4b-pt_lr_0.1/progressive_prefixes",
             f"{_EXP}/sl_4096_gemma-3-4b-pt_lr_0.5/progressive_prefixes",
-            MIDRULE,
             f"{_EXP}/sl_4096_gemma-3-4b-pt_lr_1.0/progressive_prefixes",
         ],
     ),
@@ -306,7 +306,8 @@ TABLES: List[TableSpec] = [
             f"{_EXP}/sl_4096_Meta-Llama-3.1-8B-first1-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             f"{_EXP}/sl_4096_Meta-Llama-3.1-8B-first2-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             f"{_EXP}/sl_4096_Meta-Llama-3.1-8B-first4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
-            f"{_EXP}/sl_4096_Meta-Llama-3.1-8B-first8-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            # first8 eval still running (re-finetune at lr 3e-4) -> excluded from intermediate table.
+            # f"{_EXP}/sl_4096_Meta-Llama-3.1-8B-first8-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             MIDRULE,
             # (5) Llama-3.1-8B, last N only (finetuned); last8 still training -> excluded for now.
             f"{_EXP}/sl_4096_Meta-Llama-3.1-8B-last1-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
@@ -327,7 +328,7 @@ TABLES: List[TableSpec] = [
             "SmolLM2 last-only 4 layers (finetuned),SmolLM2 last-only 8 layers (finetuned),"
             "SmolLM2 full (24 layers),"
             "Llama-3.1-8B first-only 1 layer (finetuned),Llama-3.1-8B first-only 2 layers (finetuned),"
-            "Llama-3.1-8B first-only 4 layers (finetuned),Llama-3.1-8B first-only 8 layers (finetuned),"
+            "Llama-3.1-8B first-only 4 layers (finetuned),"
             "Llama-3.1-8B last-only 1 layer (finetuned),Llama-3.1-8B last-only 2 layers (finetuned),"
             "Llama-3.1-8B last-only 4 layers (finetuned),"
             "Llama-3.1-8B full (32 layers)"
