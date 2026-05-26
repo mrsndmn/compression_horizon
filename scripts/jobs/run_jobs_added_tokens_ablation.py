@@ -66,20 +66,37 @@ def _experiment(step: int) -> dict:
     }
 
 
-def _geometric_experiment() -> dict:
+def _geometric_experiment(out_dir_suffix: str = "_geomgrow") -> dict:
     """Progressive cramming with geometric growth + bisection back-off (adaptive added tokens).
 
     Instead of a fixed Δ tokens per converged stage, the prefix doubles each time a
     stage converges and the trainer bisects the final gap to pin the exact largest
     converged prefix -- reaching the same horizon as Δ=1 in ~log2 stages while
     preserving the full-convergence guarantee.
+
+    ``out_dir_suffix`` selects the output directory so multiple geometric variants can
+    coexist without colliding:
+    * ``_geomgrow``     -- original run (back-off probes warm-start from the *preceding*
+                           probe, which during bisection is the failed longer prefix);
+    * ``_geomgrow_wr``  -- warm-restore run: each bisection probe restores the last
+                           *converged* embedding + optimizer (Adam) + LR-scheduler state
+                           (``--progressive_geometric_growth`` always does this now).
     """
     exp = _experiment(1)
     exp["geometric_growth"] = True
+    exp["out_dir_suffix"] = out_dir_suffix
     return exp
 
 
-EXPERIMENTS = [_experiment(step) for step in ADDED_TOKENS_STEPS] + [_geometric_experiment()]
+# Two geometric arms share the same flags but write to different dirs so the original
+# (no warm-restore) run and the new warm-restore run can be compared side by side. The
+# ``_geomgrow`` dir already exists (launched + running), so the launcher skips it and
+# only submits ``_geomgrow_wr``.
+EXPERIMENTS = (
+    [_experiment(step) for step in ADDED_TOKENS_STEPS]
+    + [_geometric_experiment("_geomgrow")]
+    + [_geometric_experiment("_geomgrow_wr")]
+)
 
 # Full SmolLM2-1.7B baseline (Δ=1): reference row (waited on, not retried, by the watcher).
 REFERENCE_OUT_DIR = "artifacts/experiments_progressive/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1"
@@ -111,15 +128,15 @@ def render_job(experiment):
 
     The geometric-growth arm (``geometric_growth`` set) keeps Δ=1 as the bisection
     resolution but passes ``--progressive_geometric_growth`` so the trainer doubles
-    the prefix per converged stage and bisects the final gap; it gets a
-    ``_geomgrow`` suffix.
+    the prefix per converged stage and bisects the final gap; it gets the experiment's
+    ``out_dir_suffix`` (default ``_geomgrow``).
     """
     cmd_args, exp_suffix, out_dir_name = _base_render_job(experiment)
     step = int(experiment.get("progressive_step", 1))
 
     if experiment.get("geometric_growth"):
         assert cmd_args[-1].startswith("--output_dir "), cmd_args[-1]
-        new_suffix = f"{exp_suffix}_geomgrow"
+        new_suffix = f"{exp_suffix}{experiment.get('out_dir_suffix', '_geomgrow')}"
         new_out_dir = f"artifacts/experiments_progressive/{new_suffix}"
         cmd_args = cmd_args[:-1] + [
             "--progressive_geometric_growth",
