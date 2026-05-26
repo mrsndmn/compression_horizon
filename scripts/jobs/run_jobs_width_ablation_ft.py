@@ -98,13 +98,29 @@ def make_client():
     return training_job_api_from_profile("default")
 
 
+def _checkpoint_has_model(ckpt: str) -> bool:
+    """True only once finetuning has written a loadable model (``config.json`` + a weights file).
+
+    A freshly-created checkpoint dir can already hold a ``runs/`` (TensorBoard) subdir while the
+    finetune is still running, with no model yet. Submitting an eval against such a dir crashes the
+    eval at load time (``ValueError: Unrecognized model ... should have a model_type key``), so the
+    eval stage must gate on the model existing, not merely on the directory existing.
+    """
+    if not os.path.isfile(os.path.join(ckpt, "config.json")):
+        return False
+    try:
+        return any(f.endswith((".safetensors", ".bin")) for f in os.listdir(ckpt))
+    except OSError:
+        return False
+
+
 def submit_experiment(experiment, client, extra_options, in_progress_descs=None, dry=False, force=False):
     """Submit one experiment; return the ``run_job`` result dict or ``None`` if skipped."""
     payload, exp_suffix, out_dir_name = build_payload(experiment, extra_options)
 
     ckpt = experiment["model_checkpoint"]
-    if not os.path.isdir(ckpt):
-        print(f"\033[31mMissing finetuned checkpoint, run run_jobs_finetune_width.py first:\033[0m {ckpt}")
+    if not _checkpoint_has_model(ckpt):
+        print(f"\033[31mNo saved model in checkpoint (finetune missing/incomplete), skip eval:\033[0m {ckpt}")
         return None
 
     if not force and os.path.exists(out_dir_name):

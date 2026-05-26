@@ -128,11 +128,18 @@ def render_ch_job(experiment: dict, separate_reconstructor_model: bool | None = 
     model_checkpoint = experiment["model_checkpoint"]
     model_short = model_checkpoint.split("/")[-1]
     head_kind = experiment["head_kind"]
-    grad_accum = compute_grad_accum(PER_DEVICE_TRAIN_BATCH_SIZE, NUM_GPUS, MAX_SEQ_LEN, TARGET_GLOBAL_TOKENS)
+    # Per-experiment overrides (fall back to the module defaults) so different runs can train at
+    # different sequence lengths while preserving the global batch: per_device is scaled to keep a
+    # constant per-device token footprint, and target_global_tokens fixes the global sequence count
+    # (grad_accum is derived from per_device x NUM_GPUS x seq_len to hit it).
+    seq_len = int(experiment.get("max_sequence_length", MAX_SEQ_LEN))
+    per_device = int(experiment.get("per_device_train_batch_size", PER_DEVICE_TRAIN_BATCH_SIZE))
+    target_tokens = int(experiment.get("target_global_tokens", TARGET_GLOBAL_TOKENS))
+    grad_accum = compute_grad_accum(per_device, NUM_GPUS, seq_len, target_tokens)
 
     # The ``ch_head_`` prefix is required: scripts/activation_distillation.py loads the compression-head
     # model class when the checkpoint path contains "experiments_compression_head/ch_head_".
-    exp_suffix = f"ch_head_{model_short}_{_head_tag(experiment)}_ds_fineweb-edu_seq_{MAX_SEQ_LEN}"
+    exp_suffix = f"ch_head_{model_short}_{_head_tag(experiment)}_ds_fineweb-edu_seq_{seq_len}"
     exp_suffix = f"{exp_suffix}_lr_{LEARNING_RATE}_a_{DISTILL_ALPHA}_b_{DISTILL_BETA}"
     if not FREEZE_BASE_MODEL:
         exp_suffix = f"{exp_suffix}_unfrozen"
@@ -146,9 +153,9 @@ def render_ch_job(experiment: dict, separate_reconstructor_model: bool | None = 
         f"--model_checkpoint {model_checkpoint}",
         f"--dataset_name {DATASET_NAME}",
         f"--limit_dataset_items {LIMIT_DATASET_ITEMS}",
-        f"--per_device_train_batch_size {PER_DEVICE_TRAIN_BATCH_SIZE}",
+        f"--per_device_train_batch_size {per_device}",
         f"--gradient_accumulation_steps {grad_accum}",
-        f"--max_sequence_length {MAX_SEQ_LEN}",
+        f"--max_sequence_length {seq_len}",
         f"--learning_rate {LEARNING_RATE}",
         f"--compression_head_distill_alpha {DISTILL_ALPHA}",
         f"--compression_head_distill_beta {DISTILL_BETA}",
