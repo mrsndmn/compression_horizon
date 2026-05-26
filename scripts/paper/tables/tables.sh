@@ -38,6 +38,12 @@ for name in "${PROGRESSIVE_TABLES[@]}"; do
   "$PY" scripts/paper/tables/progressive.py --name "$name" --save
 done
 
+# --- Surprisal vs. steps-to-converge -----------------------------------------
+# tab:surprisal_steps_correlation. Renders from the per-checkpoint
+# surprisal_steps_cache.json files (no GPU). Regenerate those caches once with
+# `--compute` (needs a GPU + the four base models) before this will reflect new runs.
+"$PY" scripts/paper/tables/surprisal_steps_correlation.py --save
+
 # --- Full vs. progressive cramming -------------------------------------------
 # tab:full_vs_progressive
 "$PY" scripts/paper/tables/full_cramming_table.py --save-dir paper/tables
