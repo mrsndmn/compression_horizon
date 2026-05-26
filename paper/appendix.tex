@@ -298,3 +298,37 @@ Concretely, the mean number of perfectly reconstructed (compressed) tokens rises
 \vskip -0.1in
 \end{table*}
 
+\section{Single- vs Dual-Model Compression-Head Training}
+\label{app:width_dualmodel_ablation}
+
+The Q-Former recovery route (Appendix~\ref{app:width_ablation}) trains a single model that both \emph{compresses} a prefix into the head's output embeddings and \emph{reconstructs} it from them, so the compression and reconstruction objectives share---and update---one set of weights. A natural question is whether decoupling the two helps: in the \emph{dual-model} variant we instantiate a separate compressor and reconstructor (\texttt{-{}-separate\_reconstructor\_model}), trained jointly but with disjoint parameters, so the reconstruction gradient never flows into the compressor and vice versa. We compare the single- and dual-model heads across the SmolLM2 width family (135M, 360M, and 1.7B; first-4 + last-4 = 8 layers, as in Appendix~\ref{app:width_ablation}). Both arms use the same Q-Former head (one query, three layers, eight heads), peak learning rate $10^{-3}$, distillation weights $\alpha=1.0$ / $\beta=0.0$, and fineweb-edu; the global batch is held at $256$ sequences. Each width trains at its own sequence length ($135\mathrm{M}@64$, $360\mathrm{M}@128$, $1.7\mathrm{B}@512$), the short-prefix regime in which a separate reconstruction signal is most plausibly useful, and we then seed progressive cramming from the head (\texttt{compression\_head\_forward}) under the standard PG19 / $\mathrm{lr}=0.1$ eval.
+
+Table~\ref{tab:width_dualmodel_ablation} reports both arms. Splitting the model into a separate compressor and reconstructor yields \emph{no} improvement in compression at any width: the mean number of perfectly reconstructed tokens is $54.2$ (single) vs.\ $50.3$ (dual) at 135M, $56.9$ vs.\ $56.0$ at 360M, and $335.4$ vs.\ $332.5$ at 1.7B---marginally \emph{lower} for the dual-model head in every case, and well within the per-run spread. The dual-model head also induces markedly shorter optimization trajectories and smaller information gain (e.g.\ $1703$ vs.\ $4321$ information gain at 1.7B) without translating that into more compressed tokens. We therefore retain the single-model head in the main text.
+
+\begin{table*}[t]
+    \centering
+    \caption{Single- vs dual-model compression-head training across the SmolLM2 width family (first-4 + last-4 = 8 layers; each width trained at its own sequence length $64$ / $128$ / $512$). The single-model head compresses and reconstructs with one set of weights; the dual-model head uses a separate compressor and reconstructor so their gradients never overlap. All rows are progressive-cramming evals (PG19, $\mathrm{lr}=0.1$) seeded from the head. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
+    \label{tab:width_dualmodel_ablation}
+    \begin{small}
+    \input{tables/width_dualmodel_ablation}
+    \end{small}
+\vskip -0.1in
+\end{table*}
+
+\section{Finetuning Sequence-Length Ablation}
+\label{app:finetune_seqlen_ablation}
+
+The causal-LM recovery route (Appendix~\ref{app:width_ablation}) finetunes each truncated checkpoint at sequence length $1024$. Here we ask whether that finetuning sequence length affects the compression measured afterward. Starting from the same SmolLM2-1.7B first-4 + last-4 checkpoint, we re-finetune it with everything held fixed except the training sequence length---$512$, $1024$ (the baseline), and $2048$---and, at the off-baseline lengths, also vary the peak learning rate ($\tfrac12\times$ and $1\times$ at $512$; $1\times$ and $2\times$ at $2048$) to check that any seq-length effect is not merely an LR artifact. To keep memory and the effective batch comparable, we hold the per-device token footprint and the $256$-sequence global batch constant across variants (per-device batch $=8192 / \text{seq\_len}$). Every finetuned checkpoint is then evaluated with the identical baseline progressive-cramming procedure (random per-sample initialization, PG19, $\mathrm{lr}=0.1$), exactly as the causal-LM rows of Table~\ref{tab:width_ablation}.
+
+Table~\ref{tab:finetune_seqlen_ablation} shows that the finetuning sequence length has no meaningful effect on compression. The mean number of perfectly reconstructed tokens is $414.1$ and $404.5$ at seq $512$ ($\mathrm{lr}\,5\times10^{-4}$ / $10^{-3}$), $428.6$ at the seq-$1024$ baseline, and $434.4$ and $390.7$ at seq $2048$ ($\mathrm{lr}\,10^{-3}$ / $2\times10^{-3}$)---every variant lands within ${\approx}38$ tokens of the baseline, well inside the per-run standard deviation (${\approx}60$--$77$). If anything the learning rate matters slightly more than the sequence length (the two seq-$2048$ rows, differing only in LR, bracket the baseline), but neither effect is statistically meaningful here. Compression capacity is thus insensitive to the finetuning sequence length over this $4\times$ range.
+
+\begin{table*}[t]
+    \centering
+    \caption{Finetuning sequence-length ablation on SmolLM2-1.7B (first-4 + last-4 = 8 layers). The same truncated checkpoint is re-finetuned on fineweb-edu at sequence lengths $512$ / $1024$ / $2048$ (and varying learning rate), holding the per-device token footprint and $256$-sequence global batch constant, then evaluated with baseline progressive cramming (PG19, $\mathrm{lr}=0.1$). The seq-$1024$ / $\mathrm{lr}\,10^{-3}$ row is the Table~\ref{tab:width_ablation} causal-LM baseline. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
+    \label{tab:finetune_seqlen_ablation}
+    \begin{small}
+    \input{tables/finetune_seqlen_ablation}
+    \end{small}
+\vskip -0.1in
+\end{table*}
+

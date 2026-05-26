@@ -368,6 +368,60 @@ TABLES: List[TableSpec] = [
             "135M (causal-LM),135M (Q-Former)," "360M (causal-LM),360M (Q-Former)," "1.7B (causal-LM),1.7B (Q-Former)"
         ),
     ),
+    TableSpec(
+        # Single- vs dual-model compression-head training, across the SmolLM2 width family
+        # (135M / 360M / 1.7B; first-4 + last-4 = 8 layers). In the single-model arm one model both
+        # compresses and reconstructs; in the dual-model arm a separate compressor and reconstructor
+        # are trained (--separate_reconstructor_model) so the compression and reconstruction
+        # gradients never overlap on shared weights. Both arms use the same Q-Former head
+        # (num_queries=1, layers=3, heads=8), lr 1e-3, distill alpha 1.0 / beta 0.0, fineweb-edu.
+        # Unlike tab:width_ablation (uniform seq_1024), each width trains at its OWN sequence length
+        # (135M @ 64, 360M @ 128, 1.7B @ 512) -- the regime where the eval_paraphrase comparison
+        # suggested decoupling might help -- so the paths carry seq_{64,128,512}. Heads + evals from
+        # run_jobs_compression_head_width.py (--stage train / --stage eval); each row is the
+        # progressive eval (pg19_1k / sl_4096 / lr_0.1) seeded via compression_head_forward.
+        name="tab:width_dualmodel_ablation",
+        checkpoints=[
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-135M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_64_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-135M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_64_lr_0.001_a_1.0_b_0.0_unfrozen_dualmodel_v3/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-360M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_128_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-360M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_128_lr_0.001_a_1.0_b_0.0_unfrozen_dualmodel_v3/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_512_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_512_lr_0.001_a_1.0_b_0.0_unfrozen_dualmodel_v3/progressive_prefixes",
+        ],
+        names_mapping=(
+            "135M (single-model),135M (dual-model),"
+            "360M (single-model),360M (dual-model),"
+            "1.7B (single-model),1.7B (dual-model)"
+        ),
+    ),
+    TableSpec(
+        # Finetune-sequence-length ablation: does the causal-LM finetuning sequence length affect the
+        # compression measured afterward? The width ablation's 1.7B arm finetunes SmolLM2-1.7B-firstlast4
+        # at seq 1024 / lr 1e-3 ("-ftw", the baseline row here); this ablation re-finetunes the SAME
+        # checkpoint with everything held fixed except the training seq_len (and lr), then re-measures
+        # compression the same way. The per-device token footprint and 256-sequence global batch are held
+        # constant across variants (per_device = 8192 // seq_len). Each row is the progressive eval
+        # (pg19_1k / sl_4096 / lr_0.1, baseline random per-sample init, like tab:width_ablation's
+        # causal-LM rows). Finetuning + evals from run_jobs_finetune_seqlen_ablation.py.
+        name="tab:finetune_seqlen_ablation",
+        checkpoints=[
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ftw-seq512-lr5em4_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ftw-seq512-lr1em3_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ftw-seq2048-lr1em3_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ftw-seq2048-lr2em3_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+        ],
+        names_mapping=(
+            "seq 512 / lr 0.0005,seq 512 / lr 0.001,"
+            "seq 1024 / lr 0.001 (baseline),"
+            "seq 2048 / lr 0.001,seq 2048 / lr 0.002"
+        ),
+    ),
 ]
 
 
