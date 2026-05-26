@@ -21,6 +21,8 @@ def next_token_cross_entropy_loss_with_prefix(
     num_compression_tokens: int,
     *,
     reduction: str = "mean",
+    leading_token_loss_weight: float = 1.0,
+    leading_token_loss_count: int = 0,
 ) -> torch.Tensor:
     """Next-token cross-entropy when logits include compression-prefix tokens."""
     if num_compression_tokens < 1:
@@ -29,11 +31,32 @@ def next_token_cross_entropy_loss_with_prefix(
     labels = input_ids.clone()
     labels[attention_mask == 0] = -100
 
-    return F.cross_entropy(
-        logits[:, num_compression_tokens - 1 : -1].flatten(0, 1),  # [batch * sequence, vocabulary]
-        labels.flatten(),  # [batch * sequence]
-        reduction=reduction,
-    )
+    if leading_token_loss_count <= 0 or leading_token_loss_weight == 1.0:
+        loss = F.cross_entropy(
+            logits[:, num_compression_tokens - 1 : -1].flatten(0, 1),  # [batch * sequence, vocabulary]
+            labels.flatten(),  # [batch * sequence]
+            reduction=reduction,
+        )
+    else:
+        per_token_loss = F.cross_entropy(
+            logits[:, num_compression_tokens - 1 : -1].flatten(0, 1),  # [batch * sequence, vocabulary]
+            labels.flatten(),  # [batch * sequence]
+            reduction="none",
+            ignore_index=-100,
+        ).view_as(
+            labels
+        )  # [batch, sequence]
+
+        weights = torch.ones_like(per_token_loss)
+        weights[:, : min(leading_token_loss_count, labels.size(1))] = float(leading_token_loss_weight)
+        weights = weights.masked_fill(labels == -100, 0.0)
+        weighted_sum = (per_token_loss * weights).sum()
+        if reduction == "sum":
+            loss = weighted_sum
+        else:
+            num_valid = attention_mask.sum().to(per_token_loss.dtype).clamp_min(1.0)
+            loss = weighted_sum / num_valid
+    return loss
 
 
 def next_token_cross_entropy_loss(
@@ -112,6 +135,8 @@ def compute_hybrid_cross_entropy_and_alignment_loss(
     inverted_alignment: bool,
     loss_type: str,
     hybrid_alpha: float | None,
+    leading_token_loss_weight: float = 1.0,
+    leading_token_loss_count: int = 0,
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """Compute CE loss and optional activation alignment loss (hybrid)."""
     ce_loss = next_token_cross_entropy_loss_with_prefix(
@@ -120,6 +145,8 @@ def compute_hybrid_cross_entropy_and_alignment_loss(
         attention_mask,
         num_compression_tokens,
         reduction="mean",
+        leading_token_loss_weight=leading_token_loss_weight,
+        leading_token_loss_count=leading_token_loss_count,
     )
 
     loss_type = (loss_type or "").lower()

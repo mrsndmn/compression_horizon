@@ -9,17 +9,19 @@ class ConvergenceTracker:
         max_optimization_steps: int,
         batch_size: int,
         thresholds: tuple[float, ...] = (0.95, 0.99, 1.0),
+        convergence_threshold: float = 1.0,
     ):
         self._buffers = {
             threshold: torch.zeros((max_optimization_steps, batch_size), dtype=torch.long) for threshold in thresholds
         }
+        self.convergence_threshold = convergence_threshold
         self.fully_converged: torch.Tensor | None = None  # [batch]
 
     def update(self, step_i: int, convergence_per_sample: torch.Tensor) -> bool:
-        """Record one step. Returns True if every batch sample reached convergence == 1.0."""
+        """Record one step. Returns True if every sample reached ``convergence_threshold``."""
         for threshold, buffer in self._buffers.items():
             buffer[step_i, :] = (convergence_per_sample < threshold).to(torch.long)
-        self.fully_converged = convergence_per_sample == 1.0
+        self.fully_converged = convergence_per_sample >= self.convergence_threshold
         return self.fully_converged.all().item()
 
     def steps_below(self, threshold: float) -> torch.Tensor:

@@ -239,6 +239,7 @@ class FullCrammingTrainer(BaseTrainer):
         tracker = ConvergenceTracker(
             max_optimization_steps=self.args.max_optimization_steps_per_sample,
             batch_size=inputs.batch_size,
+            convergence_threshold=self.args.full_cramming_convergence_threshold,
         )
 
         last_loss, last_convergence_per_sample = self._run_optimization_loop(
@@ -484,6 +485,7 @@ class FullCrammingTrainer(BaseTrainer):
         return {
             "sample_id": sample_id,
             "text": sample_text,
+            "input_ids": sample_input_ids.detach().cpu().numpy().tolist(),
             "embedding": compression_token_embeddings_cpu[sample_index].to(torch.float32).numpy().tolist(),
             "pca_coefficients": (pca_coefficients_to_save[sample_index] if pca_coefficients_to_save is not None else None),
             "initialization_embedding": initialization_embeddings[sample_index].to(torch.float32).numpy().tolist(),
