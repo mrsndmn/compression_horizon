@@ -197,6 +197,21 @@ class MyTrainingArguments(TrainingArguments):
             )
         },
     )
+    progressive_geometric_backoff: str = field(
+        default="bisect",
+        metadata={
+            "help": (
+                "progressive_geometric_growth only. Back-off strategy once the doubling ramp "
+                "brackets the horizon between the largest converged length (lo) and the smallest "
+                "failed length (hi). 'bisect': restore the last converged state and bisect the "
+                "(lo, hi) gap, O(log gap) probes. 'linear': restore the last converged checkpoint "
+                "and grow the prefix +1 token per stage (each warm-started from the previous "
+                "converged stage) until a stage fails -- the exact horizon, mirroring Delta=1 "
+                "cramming in the horizon neighborhood at the cost of (horizon - lo) probes. "
+                "Choices: bisect, linear."
+            )
+        },
+    )
     save_progressive_artifacts: bool = field(
         default=True,
         metadata={"help": "Whether to persist intermediate compression tokens for each stage."},

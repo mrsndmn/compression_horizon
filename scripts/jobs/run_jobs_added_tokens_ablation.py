@@ -66,36 +66,39 @@ def _experiment(step: int) -> dict:
     }
 
 
-def _geometric_experiment(out_dir_suffix: str = "_geomgrow") -> dict:
-    """Progressive cramming with geometric growth + bisection back-off (adaptive added tokens).
+def _geometric_experiment(out_dir_suffix: str = "_geomgrow", backoff: str = "bisect") -> dict:
+    """Progressive cramming with geometric growth + back-off (adaptive added tokens).
 
     Instead of a fixed Δ tokens per converged stage, the prefix doubles each time a
-    stage converges and the trainer bisects the final gap to pin the exact largest
-    converged prefix -- reaching the same horizon as Δ=1 in ~log2 stages while
-    preserving the full-convergence guarantee.
+    stage converges, then a back-off phase pins the exact largest converged prefix --
+    reaching the same horizon as Δ=1 in far fewer stages while preserving the
+    full-convergence guarantee.
 
     ``out_dir_suffix`` selects the output directory so multiple geometric variants can
-    coexist without colliding:
+    coexist without colliding; ``backoff`` selects the back-off strategy:
     * ``_geomgrow``     -- original run (back-off probes warm-start from the *preceding*
                            probe, which during bisection is the failed longer prefix);
-    * ``_geomgrow_wr``  -- warm-restore run: each bisection probe restores the last
-                           *converged* embedding + optimizer (Adam) + LR-scheduler state
-                           (``--progressive_geometric_growth`` always does this now).
+    * ``_geomgrow_wr``  -- warm-restore + bisect: each bisection probe restores the last
+                           *converged* embedding + optimizer (Adam) + LR-scheduler state;
+    * ``_geomgrow_lin`` -- warm-restore + linear: restore the last converged checkpoint,
+                           then grow the prefix +1 token per stage until a stage fails
+                           (``--progressive_geometric_backoff linear``).
     """
     exp = _experiment(1)
     exp["geometric_growth"] = True
     exp["out_dir_suffix"] = out_dir_suffix
+    exp["geometric_backoff"] = backoff
     return exp
 
 
-# Two geometric arms share the same flags but write to different dirs so the original
-# (no warm-restore) run and the new warm-restore run can be compared side by side. The
-# ``_geomgrow`` dir already exists (launched + running), so the launcher skips it and
-# only submits ``_geomgrow_wr``.
+# Geometric arms share the same flags but write to different dirs + use different back-off
+# strategies so they can be compared side by side. The ``_geomgrow`` and ``_geomgrow_wr``
+# dirs already exist (launched), so the launcher skips them and only submits ``_geomgrow_lin``.
 EXPERIMENTS = (
     [_experiment(step) for step in ADDED_TOKENS_STEPS]
     + [_geometric_experiment("_geomgrow")]
     + [_geometric_experiment("_geomgrow_wr")]
+    + [_geometric_experiment("_geomgrow_lin", backoff="linear")]
 )
 
 # Full SmolLM2-1.7B baseline (Δ=1): reference row (waited on, not retried, by the watcher).
@@ -138,11 +141,13 @@ def render_job(experiment):
         assert cmd_args[-1].startswith("--output_dir "), cmd_args[-1]
         new_suffix = f"{exp_suffix}{experiment.get('out_dir_suffix', '_geomgrow')}"
         new_out_dir = f"artifacts/experiments_progressive/{new_suffix}"
-        cmd_args = cmd_args[:-1] + [
-            "--progressive_geometric_growth",
-            "--progressive_step 1",
-            f"--output_dir {new_out_dir}",
-        ]
+        geom_args = ["--progressive_geometric_growth", "--progressive_step 1"]
+        # Only emit the back-off flag for the non-default strategy so the already-launched
+        # _geomgrow / _geomgrow_wr command lines stay byte-identical (trainer default = bisect).
+        backoff = experiment.get("geometric_backoff", "bisect")
+        if backoff != "bisect":
+            geom_args.append(f"--progressive_geometric_backoff {backoff}")
+        cmd_args = cmd_args[:-1] + geom_args + [f"--output_dir {new_out_dir}"]
         return cmd_args, new_suffix, new_out_dir
 
     if step == 1:

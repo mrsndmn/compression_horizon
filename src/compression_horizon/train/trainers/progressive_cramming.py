@@ -48,6 +48,9 @@ class _RunContext:
     # Geometric growth: when True, double the prefix length on each converged stage
     # and bisect the gap once a stage fails (instead of growing by step_increment).
     geometric_growth: bool = False
+    # Back-off strategy after the ramp brackets the horizon: "bisect" or "linear"
+    # (restore the last converged checkpoint and grow +1 token per stage until failure).
+    geometric_backoff: str = "bisect"
 
 
 @dataclass
@@ -215,6 +218,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             shared_optimizer=shared_optimizer,
             shared_scheduler=shared_scheduler,
             geometric_growth=bool(self.args.progressive_geometric_growth),
+            geometric_backoff=str(self.args.progressive_geometric_backoff),
         )
 
     # ------------------------------------------------------------------
@@ -431,22 +435,30 @@ class ProgressiveCrammingTrainer(BaseTrainer):
     def _run_geometric_stages(
         self, batch_ctx: _BatchContext, ctx: _RunContext, state: ProgressiveSampleStateMachine, sample_id_counter: int
     ) -> list[dict]:
-        """Find the compression horizon by geometric growth + bisection back-off (batch_size 1).
+        """Find the compression horizon by geometric growth + back-off (batch_size 1).
 
         Instead of growing the prefix a fixed ``progressive_step`` per converged
         stage, double the prefix length each time a stage converges (a
         geometrically growing number of added tokens). The first stage that fails
         brackets the horizon between the largest converged length (``lo``) and the
-        smallest failed length (``hi``); we then bisect that bracket until the two
-        are within ``progressive_step`` of each other.
+        smallest failed length (``hi``). ``ctx.geometric_backoff`` then pins the
+        horizon inside that bracket:
+
+        * ``"bisect"``: bisect ``(lo, hi)`` until the two are within
+          ``progressive_step``, restoring the last converged state before each probe
+          (~log2(gap) probes).
+        * ``"linear"``: restore the last converged checkpoint once, then grow the
+          prefix +1 token per stage (each warm-started from the previous converged
+          stage) until a stage fails -- the exact horizon, mirroring Delta=1 cramming
+          in the horizon neighborhood at the cost of ``horizon - lo`` probes.
 
         Back-off probes warm-start from the last *converged* state, not the
         preceding *failed* probe: every time a probe converges we snapshot the
-        embedding + per-sample optimizer (Adam moments) + LR-scheduler position,
-        and before each bisection probe we restore that snapshot. Otherwise a
-        bisection target would inherit an embedding tuned for a too-long prefix and
-        a cosine LR already decayed by the wasted failed-probe steps, which can
-        make a sub-horizon prefix spuriously fail and under-report the horizon.
+        embedding + per-sample optimizer (Adam moments) + LR-scheduler position, and
+        restore that snapshot before backing off. Otherwise a back-off target would
+        inherit an embedding tuned for a too-long prefix and a cosine LR already
+        decayed by the wasted failed-probe steps, which can make a sub-horizon prefix
+        spuriously fail and under-report the horizon.
 
         ``lo`` only ever advances on a converged stage, so the reported prefix is
         always fully reconstructed (floor: ``progressive_min_seq_len`` -- a short
@@ -460,6 +472,8 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         """
         if batch_ctx.batch_size != 1:
             raise ValueError("--progressive_geometric_growth requires per_device_train_batch_size=1.")
+        if ctx.geometric_backoff not in ("bisect", "linear"):
+            raise ValueError(f"--progressive_geometric_backoff must be 'bisect' or 'linear', got {ctx.geometric_backoff!r}.")
 
         rows: list[dict] = []
         max_len = batch_ctx.max_len
@@ -531,9 +545,34 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                 nxt = min(length + step, max_len)
             length = nxt
 
-        # --- Geometric back-off: bisect the bracket (lo, hi) to pin the horizon. ---
+        # --- Geometric back-off: pin the horizon inside the bracket (lo, hi). ---
         if lo is None or hi is None:
             return rows  # never bracketed (e.g. even the shortest prefix failed, or never failed)
+
+        if ctx.geometric_backoff == "linear":
+            # Restore the last converged checkpoint, then grow +1 token per stage (each
+            # warm-started from the previous converged stage) until a stage fails. The
+            # first failure pins the horizon at the last converged length (lo).
+            print(
+                f"[geometric s{sample_id_counter}] bracketed horizon in (lo={lo}, hi={hi}); "
+                f"linear +1 back-off from the converged checkpoint",
+                flush=True,
+            )
+            if best_state is not None:
+                self._restore_optimization_state(batch_ctx, best_state)
+            while lo + 1 < hi:
+                if not probe(lo + 1, phase="linear"):
+                    break  # first failure -> horizon is the last converged length (lo)
+                if exhausted():
+                    print(
+                        f"[geometric s{sample_id_counter}] budget exhausted during linear back-off; horizon>={lo}",
+                        flush=True,
+                    )
+                    return rows
+            print(f"[geometric s{sample_id_counter}] pinned horizon: converged_prefix_len={lo} (hi={hi})", flush=True)
+            return rows
+
+        # Default ("bisect"): restore the last converged state and bisect (lo, hi).
         print(
             f"[geometric s{sample_id_counter}] bracketed horizon in (lo={lo}, hi={hi}); " f"bisecting down to step={step}",
             flush=True,

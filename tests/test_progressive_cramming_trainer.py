@@ -101,14 +101,17 @@ def test_geometric_snapshot_restore_roundtrip():
     assert torch.allclose(snapshot["params"][0], saved_emb), "snapshot mutated by later live steps"
 
 
+@pytest.mark.parametrize("backoff", ["bisect", "linear"])
 @pytest.mark.parametrize("horizon", [2, 3, 5, 7, 13, 31, 50, 100, 200, 255])
-def test_geometric_search_finds_horizon_and_restores_on_backoff(horizon):
-    """Geometric ramp+bisection pins the exact horizon and restores before every back-off probe (CPU)."""
+def test_geometric_search_finds_horizon_and_restores_on_backoff(horizon, backoff):
+    """Both back-off strategies pin the exact horizon and warm-restore from the converged anchor (CPU)."""
     args = _make_args(max_optimization_steps_per_token=1, max_optimization_steps_per_sample=10**9)
     trainer = _blank_trainer(args)
     max_len = 256
 
-    ctx = SimpleNamespace(geometric_growth=True, threshold=1.0, min_len=2, step_increment=1, max_stages_cap=0)
+    ctx = SimpleNamespace(
+        geometric_growth=True, geometric_backoff=backoff, threshold=1.0, min_len=2, step_increment=1, max_stages_cap=0
+    )
     batch_ctx = SimpleNamespace(batch_size=1, max_len=max_len)
     state = ProgressiveSampleStateMachine(1, threshold=1.0)
 
@@ -131,9 +134,15 @@ def test_geometric_search_finds_horizon_and_restores_on_backoff(horizon):
     converged = [length for length in all_lens if length <= horizon]
     assert max(converged) == expected, f"horizon not pinned: got {max(converged)}, want {expected}"
 
-    # Every probe after the first failure is a bisection probe and must be warm-restored first.
     fail_idxs = [i for i, length in enumerate(all_lens) if length > horizon]
-    n_bisect_probes = (len(all_lens) - (fail_idxs[0] + 1)) if fail_idxs else 0
-    assert (
-        len(restore_calls) == n_bisect_probes
-    ), f"restore calls {len(restore_calls)} != bisection probes {n_bisect_probes} (lens={all_lens})"
+    if backoff == "bisect":
+        # Every probe after the first failure is a bisection probe and must be warm-restored first.
+        n_bisect_probes = (len(all_lens) - (fail_idxs[0] + 1)) if fail_idxs else 0
+        assert len(restore_calls) == n_bisect_probes, f"restores {len(restore_calls)} != bisect probes {n_bisect_probes}"
+        # The +1 linear walk should also strictly contain the horizon between consecutive probes.
+    else:
+        # Linear back-off restores the converged checkpoint exactly once (before the +1 walk),
+        # then grows one token per stage; consecutive probed lengths differ by 1.
+        assert len(restore_calls) == (1 if fail_idxs else 0), f"linear should restore once, got {len(restore_calls)}"
+        walk = all_lens[fail_idxs[0] + 1 :] if fail_idxs else []
+        assert all(b - a == 1 for a, b in zip(walk, walk[1:])), f"linear walk not +1 contiguous: {walk}"
