@@ -263,12 +263,14 @@ TABLES: List[TableSpec] = [
         short=True,
     ),
     TableSpec(
-        # Transformer-depth ablation (intermediate: last-only arm + Llama firstlast
-        # still pending, excluded so the table renders without nan). Three panels:
+        # Transformer-depth ablation (intermediate: Llama firstlast + Llama last8
+        # still pending, excluded so the table renders without nan). Panels:
         #  (1) SmolLM2-1.7B first-N + last-N (N in {1,2,4,8} -> 2/4/8/16 of 24 layers),
         #      each shown un-finetuned AND after causal-LM finetuning ("(finetuned)");
         #  (2) SmolLM2-1.7B first-N only (N in {1,2,4,8} layers), finetuned;
-        #  (3) Llama-3.1-8B first-N only (N in {1,2,4,8} of 32 layers), finetuned;
+        #  (3) SmolLM2-1.7B last-N only (N in {1,2,4,8} layers), finetuned;
+        #  (4) Llama-3.1-8B first-N only (N in {1,2,4,8} of 32 layers), finetuned;
+        #  (5) Llama-3.1-8B last-N only (N in {1,2,4} of 32 layers, last8 pending), finetuned;
         # plus each model's full-depth reference row. All finetuned ("-ftw") rows use
         # the shared width/CH recipe (lr 1e-3, wd 0.01, cosine-with-min-lr, 5k steps,
         # ~256k tok/step). All runs share the progressive eval config (pg19_1k, 50, 0.1).
@@ -292,13 +294,24 @@ TABLES: List[TableSpec] = [
             f"{_EXP}/sl_4096_SmolLM2-1.7B-first4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             f"{_EXP}/sl_4096_SmolLM2-1.7B-first8-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             MIDRULE,
+            # (3) SmolLM2-1.7B, last N only (finetuned).
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-last1-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-last2-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-last4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-last8-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            MIDRULE,
             f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             MIDRULE,
-            # (3) Llama-3.1-8B, first N only (finetuned).
+            # (4) Llama-3.1-8B, first N only (finetuned).
             f"{_EXP}/sl_4096_Meta-Llama-3.1-8B-first1-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             f"{_EXP}/sl_4096_Meta-Llama-3.1-8B-first2-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             f"{_EXP}/sl_4096_Meta-Llama-3.1-8B-first4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             f"{_EXP}/sl_4096_Meta-Llama-3.1-8B-first8-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            MIDRULE,
+            # (5) Llama-3.1-8B, last N only (finetuned); last8 still training -> excluded for now.
+            f"{_EXP}/sl_4096_Meta-Llama-3.1-8B-last1-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_Meta-Llama-3.1-8B-last2-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_Meta-Llama-3.1-8B-last4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             MIDRULE,
             f"{_EXP}/sl_4096_Meta-Llama-3.1-8B_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
         ],
@@ -310,9 +323,13 @@ TABLES: List[TableSpec] = [
             "SmolLM2 first+last 16 layers,SmolLM2 first+last 16 layers (finetuned),"
             "SmolLM2 first-only 1 layer (finetuned),SmolLM2 first-only 2 layers (finetuned),"
             "SmolLM2 first-only 4 layers (finetuned),SmolLM2 first-only 8 layers (finetuned),"
+            "SmolLM2 last-only 1 layer (finetuned),SmolLM2 last-only 2 layers (finetuned),"
+            "SmolLM2 last-only 4 layers (finetuned),SmolLM2 last-only 8 layers (finetuned),"
             "SmolLM2 full (24 layers),"
             "Llama-3.1-8B first-only 1 layer (finetuned),Llama-3.1-8B first-only 2 layers (finetuned),"
             "Llama-3.1-8B first-only 4 layers (finetuned),Llama-3.1-8B first-only 8 layers (finetuned),"
+            "Llama-3.1-8B last-only 1 layer (finetuned),Llama-3.1-8B last-only 2 layers (finetuned),"
+            "Llama-3.1-8B last-only 4 layers (finetuned),"
             "Llama-3.1-8B full (32 layers)"
         ),
     ),
