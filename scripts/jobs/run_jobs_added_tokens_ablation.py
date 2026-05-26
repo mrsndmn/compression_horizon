@@ -66,7 +66,20 @@ def _experiment(step: int) -> dict:
     }
 
 
-EXPERIMENTS = [_experiment(step) for step in ADDED_TOKENS_STEPS]
+def _geometric_experiment() -> dict:
+    """Progressive cramming with geometric growth + bisection back-off (adaptive added tokens).
+
+    Instead of a fixed Δ tokens per converged stage, the prefix doubles each time a
+    stage converges and the trainer bisects the final gap to pin the exact largest
+    converged prefix -- reaching the same horizon as Δ=1 in ~log2 stages while
+    preserving the full-convergence guarantee.
+    """
+    exp = _experiment(1)
+    exp["geometric_growth"] = True
+    return exp
+
+
+EXPERIMENTS = [_experiment(step) for step in ADDED_TOKENS_STEPS] + [_geometric_experiment()]
 
 # Full SmolLM2-1.7B baseline (Δ=1): reference row (waited on, not retried, by the watcher).
 REFERENCE_OUT_DIR = "artifacts/experiments_progressive/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1"
@@ -85,6 +98,7 @@ ROW_LABELS = [
     "32 tokens/stage",
     "64 tokens/stage",
     "128 tokens/stage",
+    "geometric growth",
 ]
 
 
@@ -94,9 +108,26 @@ def render_job(experiment):
     For Δ != 1 we also pass ``--progressive_min_seq_len Δ`` (so the prefix grows in
     clean multiples of Δ) and append a ``_step_Δ`` suffix to the exp name / output
     dir so the run does not collide with the Δ=1 baseline.
+
+    The geometric-growth arm (``geometric_growth`` set) keeps Δ=1 as the bisection
+    resolution but passes ``--progressive_geometric_growth`` so the trainer doubles
+    the prefix per converged stage and bisects the final gap; it gets a
+    ``_geomgrow`` suffix.
     """
     cmd_args, exp_suffix, out_dir_name = _base_render_job(experiment)
     step = int(experiment.get("progressive_step", 1))
+
+    if experiment.get("geometric_growth"):
+        assert cmd_args[-1].startswith("--output_dir "), cmd_args[-1]
+        new_suffix = f"{exp_suffix}_geomgrow"
+        new_out_dir = f"artifacts/experiments_progressive/{new_suffix}"
+        cmd_args = cmd_args[:-1] + [
+            "--progressive_geometric_growth",
+            "--progressive_step 1",
+            f"--output_dir {new_out_dir}",
+        ]
+        return cmd_args, new_suffix, new_out_dir
+
     if step == 1:
         return cmd_args, exp_suffix, out_dir_name
 

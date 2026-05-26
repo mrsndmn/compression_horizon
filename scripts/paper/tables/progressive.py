@@ -404,10 +404,14 @@ TABLES: List[TableSpec] = [
             f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_32/progressive_prefixes",
             f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_64/progressive_prefixes",
             f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_128/progressive_prefixes",
+            # Geometric growth: double the prefix per converged stage + bisect the
+            # final gap (adaptive added tokens), reaching the horizon in ~log2 stages.
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_geomgrow/progressive_prefixes",
         ],
         names_mapping=(
             "1 token/stage,2 tokens/stage,4 tokens/stage,8 tokens/stage,"
-            "16 tokens/stage,32 tokens/stage,64 tokens/stage,128 tokens/stage"
+            "16 tokens/stage,32 tokens/stage,64 tokens/stage,128 tokens/stage,"
+            "geometric growth"
         ),
         compressed_tokens_key="converged_prefix_len",
         steps_to_converge_key="steps_to_converged",

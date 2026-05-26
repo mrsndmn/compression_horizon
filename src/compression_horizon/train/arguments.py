@@ -183,6 +183,20 @@ class MyTrainingArguments(TrainingArguments):
         default=False,
         metadata={"help": "Reset LR scheduler and continue training when convergence fails (once per stage)."},
     )
+    progressive_geometric_growth: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Progressive_train only. Instead of growing the prefix a fixed progressive_step "
+                "per converged stage, double the prefix length each time a stage converges (a "
+                "geometrically growing number of added tokens), then bisect the gap once a stage "
+                "fails to pin the exact largest converged prefix. Every stage is warm-started from "
+                "the previous converged embedding, so the reported prefix is always fully "
+                "reconstructed; the horizon is found in ~log2 stages instead of one per token. "
+                "Requires per_device_train_batch_size=1."
+            )
+        },
+    )
     save_progressive_artifacts: bool = field(
         default=True,
         metadata={"help": "Whether to persist intermediate compression tokens for each stage."},
