@@ -1,11 +1,28 @@
 \begin{tabular}{lllll}
-\hline
- Model            & Compressed Tokens         & Information Gain         & Trajectory Length       & PCA 99\%                   \\
-\hline
- 2 layers         & 76.9 {\small $\pm$ 39.3}  & 2082 {\small $\pm$ 1285} & 1060 {\small $\pm$ 345} & 23.12 {\small $\pm$ 5.14} \\
- 4 layers         & 270.9 {\small $\pm$ 50.4} & 5198 {\small $\pm$ 857}  & 1665 {\small $\pm$ 253} & 32.48 {\small $\pm$ 1.99} \\
- 8 layers         & 240.8 {\small $\pm$ 54.7} & 5585 {\small $\pm$ 1998} & 1036 {\small $\pm$ 234} & 27.78 {\small $\pm$ 3.37} \\
- 16 layers        & 272.5 {\small $\pm$ 38.3} & 1544 {\small $\pm$ 223}  & 1083 {\small $\pm$ 120} & 34.48 {\small $\pm$ 3.09} \\
- 24 layers (full) & 335.1 {\small $\pm$ 61.3} & 1208 {\small $\pm$ 162}  & 1051 {\small $\pm$ 147} & 33.22 {\small $\pm$ 2.82} \\
-\hline
+\toprule
+ Model                                        & Compressed Tokens           & Information Gain         & Trajectory Length        & PCA 99\%                   \\
+\midrule
+ SmolLM2 first+last 2 layers                  & 76.9 {\small $\pm$ 39.3}    & 2082 {\small $\pm$ 1285} & 1060 {\small $\pm$ 345}  & 23.12 {\small $\pm$ 5.14} \\
+ SmolLM2 first+last 2 layers (finetuned)      & 233.8 {\small $\pm$ 26}     & 1261 {\small $\pm$ 98}   & 1964 {\small $\pm$ 190}  & 35.62 {\small $\pm$ 1.47} \\
+ SmolLM2 first+last 4 layers                  & 270.9 {\small $\pm$ 50.4}   & 5198 {\small $\pm$ 857}  & 1665 {\small $\pm$ 253}  & 32.48 {\small $\pm$ 1.99} \\
+ SmolLM2 first+last 4 layers (finetuned)      & 453.3 {\small $\pm$ 60.5}   & 2344 {\small $\pm$ 125}  & 2255 {\small $\pm$ 182}  & 37.18 {\small $\pm$ 1.81} \\
+ SmolLM2 first+last 8 layers                  & 240.8 {\small $\pm$ 54.7}   & 5585 {\small $\pm$ 1998} & 1036 {\small $\pm$ 234}  & 27.78 {\small $\pm$ 3.37} \\
+ SmolLM2 first+last 8 layers (finetuned)      & 428.6 {\small $\pm$ 67.2}   & 2029 {\small $\pm$ 194}  & 1414 {\small $\pm$ 209}  & 30.92 {\small $\pm$ 2.89} \\
+ SmolLM2 first+last 16 layers                 & 272.5 {\small $\pm$ 38.3}   & 1544 {\small $\pm$ 223}  & 1083 {\small $\pm$ 120}  & 34.48 {\small $\pm$ 3.09} \\
+ SmolLM2 first+last 16 layers (finetuned)     & 335.3 {\small $\pm$ 60.2}   & 1407 {\small $\pm$ 198}  & 1030 {\small $\pm$ 164}  & 29.42 {\small $\pm$ 3.23} \\
+ \midrule
+ SmolLM2 first-only 1 layer (finetuned)       & 50 {\small $\pm$ 5.9}       & 301 {\small $\pm$ 26}    & 627 {\small $\pm$ 107}   & 17.12 {\small $\pm$ 1.56} \\
+ SmolLM2 first-only 2 layers (finetuned)      & 240.5 {\small $\pm$ 30}     & 1291 {\small $\pm$ 134}  & 1966 {\small $\pm$ 195}  & 31.3 {\small $\pm$ 1.78}  \\
+ SmolLM2 first-only 4 layers (finetuned)      & 404.5 {\small $\pm$ 58.2}   & 2058 {\small $\pm$ 160}  & 2120 {\small $\pm$ 223}  & 31.82 {\small $\pm$ 2.05} \\
+ SmolLM2 first-only 8 layers (finetuned)      & 455 {\small $\pm$ 68.5}     & 2172 {\small $\pm$ 191}  & 1552 {\small $\pm$ 318}  & 31.46 {\small $\pm$ 3.38} \\
+ \midrule
+ SmolLM2 full (24 layers)                     & 335.1 {\small $\pm$ 61.3}   & 1208 {\small $\pm$ 162}  & 1051 {\small $\pm$ 147}  & 33.22 {\small $\pm$ 2.82} \\
+ \midrule
+ Llama-3.1-8B first-only 1 layer (finetuned)  & 81.7 {\small $\pm$ 13.5}    & 487 {\small $\pm$ 60}    & 1089 {\small $\pm$ 150}  & 30.22 {\small $\pm$ 2.84} \\
+ Llama-3.1-8B first-only 2 layers (finetuned) & 184.6 {\small $\pm$ 24.4}   & 961 {\small $\pm$ 66}    & 2609 {\small $\pm$ 215}  & 36.28 {\small $\pm$ 1.74} \\
+ Llama-3.1-8B first-only 4 layers (finetuned) & 473 {\small $\pm$ 50.2}     & 2340 {\small $\pm$ 147}  & 3750 {\small $\pm$ 516}  & 44.9 {\small $\pm$ 1.45}  \\
+ Llama-3.1-8B first-only 8 layers (finetuned) & 84.2 {\small $\pm$ 18.1}    & 464 {\small $\pm$ 79}    & 1077 {\small $\pm$ 207}  & 25.52 {\small $\pm$ 3.05} \\
+ \midrule
+ Llama-3.1-8B full (32 layers)                & 1437.6 {\small $\pm$ 380.1} & 4391 {\small $\pm$ 1408} & 6174 {\small $\pm$ 1263} & 82.78 {\small $\pm$ 9.07} \\
+\bottomrule
 \end{tabular}

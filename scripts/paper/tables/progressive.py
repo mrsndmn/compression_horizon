@@ -263,40 +263,57 @@ TABLES: List[TableSpec] = [
         short=True,
     ),
     TableSpec(
-        # Transformer-depth ablation: SmolLM2-1.7B truncated to its first N and
-        # last N decoder layers (N in {1,2,4,8} -> 2/4/8/16 of 24 layers), plus
-        # the full-depth (24-layer) baseline as the reference row. Each truncated
-        # depth is shown twice -- as-is and after causal-LM finetuning on
-        # fineweb-edu ("(finetuned)") -- so the before/after recovery is visible.
-        # All runs share the same progressive eval config (pg19_1k, 50, 0.1).
-        # Un-finetuned checkpoints: make_first_last_layers_ckpt.py +
-        # run_jobs_layer_ablation.py. Finetuning: run_jobs_finetune_truncated.py
-        # (now the width/CH recipe -> "-ftw" checkpoints; the old "-ft" eval dirs
-        # from the previous recipe are left intact); finetuned eval:
-        # run_jobs_layer_ablation_ft.py. The "-ftw" finetuned rows fill in once the
-        # in-progress depth retrain finishes (see watch_finetune_truncated.py).
+        # Transformer-depth ablation (intermediate: last-only arm + Llama firstlast
+        # still pending, excluded so the table renders without nan). Three panels:
+        #  (1) SmolLM2-1.7B first-N + last-N (N in {1,2,4,8} -> 2/4/8/16 of 24 layers),
+        #      each shown un-finetuned AND after causal-LM finetuning ("(finetuned)");
+        #  (2) SmolLM2-1.7B first-N only (N in {1,2,4,8} layers), finetuned;
+        #  (3) Llama-3.1-8B first-N only (N in {1,2,4,8} of 32 layers), finetuned;
+        # plus each model's full-depth reference row. All finetuned ("-ftw") rows use
+        # the shared width/CH recipe (lr 1e-3, wd 0.01, cosine-with-min-lr, 5k steps,
+        # ~256k tok/step). All runs share the progressive eval config (pg19_1k, 50, 0.1).
+        # Builders: make_first_last_layers_ckpt.py (--keep_mode first_last|first);
+        # finetune+eval: run_jobs_finetune_{truncated,first}.py + run_jobs_layer_ablation_*ft*.py.
         name="tab:layer_ablation",
         checkpoints=[
+            # (1) SmolLM2-1.7B, first N + last N (un-finetuned / finetuned).
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast1_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast1-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
-            MIDRULE,
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast2_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast2-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
-            MIDRULE,
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
-            MIDRULE,
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast8_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast8-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             MIDRULE,
+            # (2) SmolLM2-1.7B, first N only (finetuned).
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-first1-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-first2-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-first4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-first8-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            MIDRULE,
             f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            MIDRULE,
+            # (3) Llama-3.1-8B, first N only (finetuned).
+            f"{_EXP}/sl_4096_Meta-Llama-3.1-8B-first1-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_Meta-Llama-3.1-8B-first2-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_Meta-Llama-3.1-8B-first4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_Meta-Llama-3.1-8B-first8-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/sl_4096_Meta-Llama-3.1-8B_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
         ],
+        # NB: names_mapping is comma-separated, so labels must not contain commas.
         names_mapping=(
-            "2 layers,2 layers (finetuned),"
-            "4 layers,4 layers (finetuned),"
-            "8 layers,8 layers (finetuned),"
-            "16 layers,16 layers (finetuned),"
-            "24 layers (full)"
+            "SmolLM2 first+last 2 layers,SmolLM2 first+last 2 layers (finetuned),"
+            "SmolLM2 first+last 4 layers,SmolLM2 first+last 4 layers (finetuned),"
+            "SmolLM2 first+last 8 layers,SmolLM2 first+last 8 layers (finetuned),"
+            "SmolLM2 first+last 16 layers,SmolLM2 first+last 16 layers (finetuned),"
+            "SmolLM2 first-only 1 layer (finetuned),SmolLM2 first-only 2 layers (finetuned),"
+            "SmolLM2 first-only 4 layers (finetuned),SmolLM2 first-only 8 layers (finetuned),"
+            "SmolLM2 full (24 layers),"
+            "Llama-3.1-8B first-only 1 layer (finetuned),Llama-3.1-8B first-only 2 layers (finetuned),"
+            "Llama-3.1-8B first-only 4 layers (finetuned),Llama-3.1-8B first-only 8 layers (finetuned),"
+            "Llama-3.1-8B full (32 layers)"
         ),
     ),
     TableSpec(
