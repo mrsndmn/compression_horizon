@@ -305,7 +305,7 @@ Progressive cramming grows the target prefix one token at a time: each time the 
 
 Because the only varying factor is how many new tokens each converged stage must absorb at once, this ablation isolates the role of the fine-grained curriculum: a larger $\Delta$ asks the compression token to make a bigger jump per stage rather than a sequence of single-token extensions. Table~\ref{tab:added_tokens_ablation} reports, for each $\Delta$, the achieved compressed-token count, information gain, trajectory length, and the number of principal components explaining 99\% of trajectory variance (PCA 99\%). To keep rows comparable across $\Delta$, the ``Compressed Tokens'' column is the achieved prefix length $n$ in actual tokens (so $\Delta = 1$ coincides with the main SmolLM2-1.7B run) rather than the number of converged stages, which would be deflated by roughly a factor of $\Delta$.
 % BEGIN AUTOGEN added-tokens-ablation-trend (filled by scripts/jobs/watch_ablation.py --launcher run_jobs_added_tokens_ablation after the runs finish)
-The mean number of perfectly reconstructed (compressed) tokens for each step size is filled in automatically once the runs finish.
+Concretely, the mean number of perfectly reconstructed (compressed) tokens is 335.1 (1 token/stage), 342.9 (2 tokens/stage), 341.6 (4 tokens/stage), 359.2 (8 tokens/stage), 378.6 (16 tokens/stage), 399.4 (32 tokens/stage), 427.5 (64 tokens/stage), 463.4 (128 tokens/stage).
 % END AUTOGEN added-tokens-ablation-trend
 
 \begin{table*}[t]
