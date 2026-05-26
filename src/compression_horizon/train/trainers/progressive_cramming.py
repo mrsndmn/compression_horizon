@@ -11,6 +11,7 @@ from compression_horizon.analysis.information_gain import compute_information_ga
 from compression_horizon.train.inputs import build_compression_attention_mask, build_united_input
 from compression_horizon.train.parametrization import build_per_sample_parametrization
 from compression_horizon.train.trainers.base import BaseTrainer
+from compression_horizon.utils.launch import freeze_model_parameters
 
 
 @dataclass
@@ -18,6 +19,10 @@ class _RunContext:
     """Run-level constants prepared once before the dataloader loop."""
 
     model: torch.nn.Module
+    # Model used for all decode-side forwards (target-hidden, CE/alignment loss, info-gain).
+    # In dual-checkpoint mode this is the reconstructor; otherwise it is ``model`` itself.
+    # The compressor (``model``) is then used ONLY to seed ``compression_head_forward`` init.
+    decode_model: torch.nn.Module
     device: torch.device
     init_method: str
     mvn_dist: object
@@ -161,6 +166,19 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         """
         model, device, init_method, mvn_dist, pca_components, pca_mean, loaded_embeddings = self._initialize_run()
 
+        # Dual checkpoint support: when a sibling reconstructor model is provided, the
+        # compressor (`model`) is used ONLY to produce the initial compression-embedding
+        # value (compression_head_forward init); the inner optimization loop drives
+        # gradients through `decode_model` (the reconstructor) so the compression token
+        # is co-adapted to whichever model will decode it at downstream inference.
+        model_reconstructor = getattr(self, "model_reconstructor", None)
+        if model_reconstructor is not None:
+            print("[two-model] progressive cramming dual mode: compressor=init, reconstructor=decode")
+            model_reconstructor = model_reconstructor.to(device)
+            freeze_model_parameters(model_reconstructor)
+            model_reconstructor.eval()
+        decode_model = model_reconstructor if model_reconstructor is not None else model
+
         shared_projection: torch.nn.Linear | None = None
         shared_optimizer = None
         shared_scheduler = None
@@ -177,6 +195,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
 
         return _RunContext(
             model=model,
+            decode_model=decode_model,
             device=device,
             init_method=init_method,
             mvn_dist=mvn_dist,
@@ -203,11 +222,19 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         attention_mask = batch.attention_mask.squeeze(1).to(ctx.device)  # [batch, sequence]
         batch_size = input_ids.shape[0]
         with torch.no_grad():
-            full_token_embeddings = ctx.model.get_input_embeddings()(input_ids)  # [batch, sequence, hidden]
-        target_hidden_states_full = self.compute_hidden_states(ctx.model, full_token_embeddings, attention_mask)
+            # Embeddings + target hidden states must come from the model that will decode the
+            # prefix (the reconstructor in dual mode, the compressor otherwise).
+            full_token_embeddings = ctx.decode_model.get_input_embeddings()(input_ids)  # [batch, sequence, hidden]
+        target_hidden_states_full = self.compute_hidden_states(ctx.decode_model, full_token_embeddings, attention_mask)
         hidden_size = full_token_embeddings.shape[-1]  # Always model's hidden size now.
 
-        parametrization = self._build_parametrization(ctx, batch_size, hidden_size)
+        # ``compression_head_forward`` seeds each sample's compression embedding by running the
+        # trained compression head over its prefix; computed here where the model + batch are in scope.
+        ch_forward_init = None
+        if ctx.init_method == "compression_head_forward":
+            ch_forward_init = self._compute_compression_head_init(ctx.model, input_ids, attention_mask)
+
+        parametrization = self._build_parametrization(ctx, batch_size, hidden_size, ch_forward_init=ch_forward_init)
         per_sample_optimizers, per_sample_schedulers = self._build_per_sample_optimizers(parametrization, ctx)
         # Global mode: reuse the run-level optimizer/scheduler — they own the
         # AdamW state and LR-curve position accumulated across all previous
@@ -243,7 +270,42 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             shared_scheduler=shared_scheduler,
         )
 
-    def _build_parametrization(self, ctx: _RunContext, batch_size: int, hidden_size: int):
+    def _compute_compression_head_init(self, model, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        """Run the compression head over each sample's full prefix to seed its compression embedding.
+
+        Returns a ``[batch, num_compression_tokens, hidden]`` float32 tensor. Requires a
+        ``LlamaForCausalLMCompressionHead`` (i.e. a model exposing ``compression_head`` and returning
+        ``compression_embeds``); used by ``--embedding_init_method compression_head_forward`` to evaluate a
+        trained compression head with the progressive trainer.
+        """
+        if not hasattr(model, "compression_head"):
+            raise ValueError(
+                "embedding_init_method='compression_head_forward' requires a compression-head model "
+                "(LlamaForCausalLMCompressionHead); the loaded model has no 'compression_head'. "
+                "Point --model_checkpoint at a compression-head checkpoint."
+            )
+        lengths = attention_mask.sum(dim=1).to(torch.long).clamp_min(1)
+        with torch.no_grad():
+            out = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                prefix_lengths=lengths,
+                use_cache=False,
+                output_hidden_states=False,
+                return_dict=True,
+            )
+        embeds = getattr(out, "compression_embeds", None)
+        if embeds is None:
+            raise RuntimeError("compression_head_forward init: model returned no compression_embeds.")
+        num_queries = embeds.shape[1]
+        if num_queries != self.args.number_of_mem_tokens:
+            raise ValueError(
+                f"compression head produced {num_queries} query embedding(s) but "
+                f"--number_of_mem_tokens={self.args.number_of_mem_tokens}. Set --number_of_mem_tokens {num_queries}."
+            )
+        return embeds.detach().to(torch.float32)
+
+    def _build_parametrization(self, ctx: _RunContext, batch_size: int, hidden_size: int, ch_forward_init=None):
         """Construct the per-sample parametrization (Direct, PretrainedPCA, or low-dim projected).
 
         Low-dim semantics — the trainer always builds the ``nn.Linear`` itself
@@ -261,7 +323,13 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         # in model hidden space.
         init_dim = self.args.low_dim_size if self.args.low_dim_projection else hidden_size
 
+        if ctx.init_method == "compression_head_forward" and self.args.low_dim_projection:
+            raise ValueError("embedding_init_method='compression_head_forward' is not compatible with --low_dim_projection.")
+
         def _init_helper():
+            if ctx.init_method == "compression_head_forward":
+                assert ch_forward_init is not None, "compression_head_forward init tensor was not precomputed"
+                return torch.nn.Parameter(ch_forward_init.to(device=ctx.device, dtype=torch.float32))
             return self._init_compression_tokens(
                 batch_size,
                 ctx.num_compression_tokens,
@@ -435,7 +503,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                 generated_text,
                 ground_truth_text,
             ) = self.forward_and_compute_loss(
-                ctx.model,
+                ctx.decode_model,
                 stage_ctx.input_ids,
                 stage_ctx.inputs_embeds,
                 stage_ctx.attention_mask,
@@ -568,7 +636,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             pca_coefficients_to_save = batch_ctx.parametrization.serialize_extras()
 
             per_sample_info_gain = compute_information_gain(
-                model=ctx.model,
+                model=ctx.decode_model,
                 input_ids=stage_ctx.input_ids,
                 attention_mask=stage_ctx.attention_mask,
                 token_embeddings=stage_ctx.inputs_embeds,

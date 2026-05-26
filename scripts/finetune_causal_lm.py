@@ -126,6 +126,34 @@ def build_packed_dataset(
     return packed.with_format("torch")
 
 
+def parse_scheduler_kwargs(spec: str | None) -> dict:
+    """Parse ``'k=v[,k=v]'`` into a dict, casting numeric values (int then float).
+
+    Matches the ``--lr_scheduler_kwargs 'min_lr=0.00001'`` form that
+    ``run_jobs_compression_head.py`` feeds HfArgumentParser, so the causal-LM and
+    compression-head arms can share one scheduler spec (e.g. cosine_with_min_lr).
+    """
+    if not spec:
+        return {}
+    out: dict = {}
+    for pair in spec.split(","):
+        pair = pair.strip()
+        if not pair:
+            continue
+        key, _, raw = pair.partition("=")
+        key, raw = key.strip(), raw.strip()
+        value: object = raw
+        try:
+            value = int(raw)
+        except ValueError:
+            try:
+                value = float(raw)
+            except ValueError:
+                value = raw
+        out[key] = value
+    return out
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--model_checkpoint", required=True, help="Path/name of the checkpoint to finetune.")
@@ -155,6 +183,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--warmup_steps", type=int, default=500)
     p.add_argument("--weight_decay", type=float, default=0.1)
     p.add_argument("--lr_scheduler_type", default="cosine")
+    p.add_argument(
+        "--lr_scheduler_kwargs",
+        default=None,
+        help="Extra kwargs for the LR scheduler as 'k=v[,k=v]' (numbers auto-cast). "
+        "E.g. 'min_lr=0.00001' for --lr_scheduler_type cosine_with_min_lr. Mirrors the "
+        "HfArgumentParser format used by scripts/jobs/run_jobs_compression_head.py.",
+    )
     p.add_argument("--max_grad_norm", type=float, default=1.0)
     p.add_argument("--logging_steps", type=int, default=20)
     p.add_argument("--save_steps", type=int, default=0, help="If >0, save a checkpoint every N steps.")
@@ -174,6 +209,7 @@ def main() -> int:
     use_bf16 = cuda and args.dtype in ("bf16", "bfloat16", "auto")
     use_compile = cuda and not args.no_torch_compile
     cache_key = args.dataset_cache_key or os.path.basename(args.model_checkpoint.rstrip("/"))
+    scheduler_kwargs = parse_scheduler_kwargs(args.lr_scheduler_kwargs)
 
     print(f"Finetune {args.model_checkpoint} -> {args.output_dir}")
     print(f"  cuda={cuda} bf16={use_bf16} torch_compile={use_compile} dtype={args.dtype}")
@@ -195,6 +231,7 @@ def main() -> int:
         warmup_steps=args.warmup_steps,
         weight_decay=args.weight_decay,
         lr_scheduler_type=args.lr_scheduler_type,
+        lr_scheduler_kwargs=scheduler_kwargs,
         max_grad_norm=args.max_grad_norm,
         logging_steps=args.logging_steps,
         save_strategy=("steps" if args.save_steps > 0 else "no"),

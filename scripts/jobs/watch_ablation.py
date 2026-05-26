@@ -301,6 +301,12 @@ def main() -> int:
     parser.add_argument("--poll", type=int, default=60)
     parser.add_argument("--plan", action="store_true", help="Discover jobs and print the plan, do not wait.")
     parser.add_argument("--skip-paper", action="store_true")
+    parser.add_argument(
+        "--no-table",
+        action="store_true",
+        help="Wait for all eval jobs (+ reference) to finish, then stop -- do NOT regenerate the "
+        "table or touch paper text. Use when the table/appendix is a deliberate later follow-up.",
+    )
     args = parser.parse_args()
 
     L = importlib.import_module(args.launcher)
@@ -336,6 +342,13 @@ def main() -> int:
         summary["status"] = "incomplete"
         json.dump(summary, open(SUMMARY_JSON, "w"), indent=2)
         return 1
+
+    if args.no_table:
+        log("All runs have data -> --no-table set, skipping table/paper (deferred follow-up)")
+        summary["status"] = "eval_complete"
+        json.dump(summary, open(SUMMARY_JSON, "w"), indent=2)
+        log(f"=== watcher done (status=eval_complete). Summary: {os.path.relpath(SUMMARY_JSON, PROJ)} ===")
+        return 0
 
     log("All runs have data -> regenerating table + paper text")
     table_ok = regenerate_table()

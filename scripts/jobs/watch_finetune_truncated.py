@@ -1,18 +1,23 @@
 """Two-phase background watcher for the finetuned transformer-depth ablation.
 
 Phase 1 -- finetuning (this script):
-  Wait on each 8-GPU ``CH: ft-truncated`` job (one per firstlast checkpoint).
-  On failure, save ``mls job logs`` and resubmit via
+  Submit ALL 8-GPU ``CH: ft-truncated`` jobs (one per firstlast checkpoint) up
+  front so they train in PARALLEL on the cluster, then wait on each. On failure,
+  save ``mls job logs`` and resubmit via
   ``run_jobs_finetune_truncated.submit_experiment(force=True)`` up to
-  ``--max-retries``. A job is "done" when its ``…-ft`` checkpoint dir holds a
-  saved model (config.json + a .safetensors file).
+  ``--max-retries``. A job is "done" when its ``…-ftw`` checkpoint dir holds a
+  saved model (config.json + a .safetensors file). Already-finetuned checkpoints
+  and any already-active job (e.g. an earlier watcher run) are left untouched.
 
-Phase 2 -- progressive re-eval + paper (delegated):
-  Once every ``…-ft`` checkpoint exists, hand off to
+Phase 2 -- progressive re-eval (delegated):
+  Once every ``…-ftw`` checkpoint exists, hand off to
   ``scripts/jobs/watch_ablation.py --launcher run_jobs_layer_ablation_ft``,
-  which submits the baseline progressive runs on the finetuned checkpoints,
-  waits for them, regenerates ``tab:layer_ablation`` (interleaved un-ft / ft
-  rows), fills the ``layer-ablation-trend`` AUTOGEN sentence, and lints.
+  which submits the baseline progressive runs on the finetuned checkpoints and
+  waits for them. By default it is run with ``--no-table`` so the table /
+  appendix are NOT regenerated here -- the depth finetune now uses the
+  width-ablation recipe (``-ftw``) while ``tab:layer_ablation`` still references
+  the old ``-ft`` eval dirs, so regenerating it is a deliberate, separate
+  follow-up. Pass ``--regen-table`` to re-enable the table+paper step.
 
 Usage:
     python scripts/jobs/watch_finetune_truncated.py --plan
@@ -199,6 +204,29 @@ def _print_log_tail(path: str, n: int = 40) -> None:
     print("    --- end log tail ---", flush=True)
 
 
+def submit_all_finetunes(opts: dict) -> None:
+    """Submit every not-yet-done finetune job up front so they train in PARALLEL.
+
+    ``ensure_finetune`` then just discovers each already-running job and waits on
+    it (with retries), instead of submitting + blocking on one checkpoint at a
+    time. Checkpoints that are already finetuned, or that already have an active
+    job (e.g. a previous watcher run), are left alone -- no duplicate submission.
+    """
+    client, extra = _ensure_client()
+    for checkpoint in F.FINETUNE_CHECKPOINTS:
+        model_short = os.path.basename(checkpoint.rstrip("/"))
+        out_dir = F.finetuned_dir(checkpoint)
+        if ft_done(out_dir):
+            log(f"{model_short}: finetuned checkpoint already present, not submitting")
+            continue
+        if discover_job(F.job_desc_for(model_short)) is not None:
+            log(f"{model_short}: job already active, not resubmitting")
+            continue
+        result = F.submit_experiment(checkpoint, client, extra, opts, force=True)
+        name = (result or {}).get("job_name")
+        log(f"{model_short}: submitted {name}" if name else f"{model_short}: FAILED to submit")
+
+
 def ensure_finetune(checkpoint: str, opts: dict, max_retries: int, poll: int) -> bool:
     model_short = os.path.basename(checkpoint.rstrip("/"))
     out_dir = F.finetuned_dir(checkpoint)
@@ -270,20 +298,20 @@ def submit_eval_for(checkpoint: str) -> None:
     log(f"  WARN: re-eval for {os.path.basename(ft)} not submitted after retries; watch_ablation will retry")
 
 
-def run_phase2(poll: int) -> int:
-    log("All finetuning done -> waiting on (already-submitted) re-eval jobs + table/paper update")
-    cp = subprocess.run(
-        [
-            PYTHON,
-            os.path.join(PROJ, "scripts", "jobs", "watch_ablation.py"),
-            "--launcher",
-            "run_jobs_layer_ablation_ft",
-            "--poll",
-            str(poll),
-        ],
-        env=_env(),
-        cwd=PROJ,
-    )
+def run_phase2(poll: int, regen_table: bool = False) -> int:
+    tail = "+ table/paper update" if regen_table else "(table/paper deferred: --no-table)"
+    log(f"All finetuning done -> waiting on (already-submitted) re-eval jobs {tail}")
+    cmd = [
+        PYTHON,
+        os.path.join(PROJ, "scripts", "jobs", "watch_ablation.py"),
+        "--launcher",
+        "run_jobs_layer_ablation_ft",
+        "--poll",
+        str(poll),
+    ]
+    if not regen_table:
+        cmd.append("--no-table")
+    cp = subprocess.run(cmd, env=_env(), cwd=PROJ)
     log(f"Phase 2 watcher exited with code {cp.returncode}")
     return cp.returncode
 
@@ -294,6 +322,12 @@ def main() -> int:
     parser.add_argument("--poll", type=int, default=180)
     parser.add_argument("--plan", action="store_true", help="Print discovered jobs/checkpoints, do not wait.")
     parser.add_argument("--skip-phase2", action="store_true", help="Only wait for finetuning; don't run re-eval.")
+    parser.add_argument(
+        "--regen-table",
+        action="store_true",
+        help="In Phase 2, also regenerate tab:layer_ablation + paper text. Default: deferred "
+        "(the table still references the old -ft eval dirs).",
+    )
     args = parser.parse_args()
 
     opts = dict(F.DEFAULTS)
@@ -308,13 +342,16 @@ def main() -> int:
         return 0
 
     log(f"=== finetune-truncated watcher start (max_retries={args.max_retries}, poll={args.poll}s) ===")
+    # Submit all finetune jobs up front so they train in PARALLEL on the cluster;
+    # the loop below then just waits on each (discovering the running job).
+    submit_all_finetunes(opts)
     results = {}
     for ck in F.FINETUNE_CHECKPOINTS:
         ms = os.path.basename(ck.rstrip("/"))
         ok = ensure_finetune(ck, opts, args.max_retries, args.poll)
         results[ms] = ok
         # Submit this checkpoint's progressive re-eval as soon as its finetune
-        # finishes, so eval overlaps the remaining (slower) finetune jobs.
+        # finishes, so eval overlaps the remaining (still-running) finetune jobs.
         if ok and not args.skip_phase2:
             submit_eval_for(ck)
 
@@ -326,7 +363,7 @@ def main() -> int:
     log("All finetuning checkpoints present + re-eval jobs submitted.")
     if args.skip_phase2:
         return 0
-    return run_phase2(args.poll)
+    return run_phase2(args.poll, regen_table=args.regen_table)
 
 
 if __name__ == "__main__":

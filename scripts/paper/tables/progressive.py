@@ -271,20 +271,23 @@ TABLES: List[TableSpec] = [
         # All runs share the same progressive eval config (pg19_1k, 50, 0.1).
         # Un-finetuned checkpoints: make_first_last_layers_ckpt.py +
         # run_jobs_layer_ablation.py. Finetuning: run_jobs_finetune_truncated.py
-        # (-> "-ft" checkpoints); finetuned eval: run_jobs_layer_ablation_ft.py.
+        # (now the width/CH recipe -> "-ftw" checkpoints; the old "-ft" eval dirs
+        # from the previous recipe are left intact); finetuned eval:
+        # run_jobs_layer_ablation_ft.py. The "-ftw" finetuned rows fill in once the
+        # in-progress depth retrain finishes (see watch_finetune_truncated.py).
         name="tab:layer_ablation",
         checkpoints=[
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast1_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
-            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast1-ft_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast1-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             MIDRULE,
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast2_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
-            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast2-ft_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast2-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             MIDRULE,
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
-            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ft_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             MIDRULE,
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast8_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
-            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast8-ft_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast8-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             MIDRULE,
             f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
         ],
@@ -311,6 +314,113 @@ TABLES: List[TableSpec] = [
             f"{_EXP}/sl_4096_SmolLM2-1.7B-randinit-embeddings_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
         ],
         names_mapping="Pretrained,Random transformer layers,Random LM head,Random input embeddings",
+    ),
+    TableSpec(
+        # Compression-head -> progressive-cramming layer ablation. Each row is the progressive
+        # eval (canonical benchmark: pg19_1k / sl_4096 / lr_0.1) of one trained compression head,
+        # using the head to seed every per-sample embedding (--embedding_init_method
+        # compression_head_forward). The Q-Former head is shown at truncated depths
+        # firstlast{1,2,4,8} (= 2/4/8/16 of SmolLM2-1.7B's 24 decoder layers) and at full depth,
+        # plus the simple MLP head at full depth as a head-architecture reference. This mirrors the
+        # depth axis of tab:layer_ablation but with a learned init instead of random per-sample init.
+        # Heads trained and evals launched by scripts/jobs/run_jobs_compression_head.py
+        # (--stage train / --stage eval). The "ds_fineweb-edu_seq_1024" in each path refers to the
+        # head's *training* data, not the eval benchmark (which is pg19_1k for every row).
+        name="tab:ch_qformer_layer_ablation",
+        checkpoints=[
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast1_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast2_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast8_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B_mlp_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+        ],
+        names_mapping=(
+            "2 layers (Q-Former),4 layers (Q-Former),8 layers (Q-Former),"
+            "16 layers (Q-Former),24 layers (Q-Former),24 layers (MLP head)"
+        ),
+    ),
+    TableSpec(
+        # Model-width ablation: depth held fixed at first-4 + last-4 = 8 layers while model
+        # width varies across the SmolLM2 family (135M / 360M / 1.7B; hidden 576 / 960 / 2048).
+        # Each width is recovered two ways and shown as two rows: (a) plain causal-LM finetuning
+        # ("-ftw", evaluated with the baseline random0.02 per-sample init, like tab:layer_ablation)
+        # and (b) a Q-Former compression head (evaluated with --embedding_init_method
+        # compression_head_forward, like tab:ch_qformer_layer_ablation). All rows share the same
+        # progressive eval config (pg19_1k / sl_4096 / lr_0.1). Checkpoints built by
+        # make_first_last_layers_ckpt.py --keep 4; finetuning + heads + evals launched by
+        # run_jobs_finetune_width.py, run_jobs_compression_head_width.py, run_jobs_width_ablation_ft.py
+        # and driven by watch_width_ablation.py. The "ds_fineweb-edu_seq_1024" in the Q-Former paths
+        # is the head's *training* data, not the eval benchmark (pg19_1k for every row).
+        name="tab:width_ablation",
+        checkpoints=[
+            f"{_EXP}/sl_4096_SmolLM2-135M-firstlast4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-135M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/sl_4096_SmolLM2-360M-firstlast4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-360M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+        ],
+        names_mapping=(
+            "135M (causal-LM),135M (Q-Former)," "360M (causal-LM),360M (Q-Former)," "1.7B (causal-LM),1.7B (Q-Former)"
+        ),
+    ),
+    TableSpec(
+        # Single- vs dual-model compression-head training, across the SmolLM2 width family
+        # (135M / 360M / 1.7B; first-4 + last-4 = 8 layers). In the single-model arm one model both
+        # compresses and reconstructs; in the dual-model arm a separate compressor and reconstructor
+        # are trained (--separate_reconstructor_model) so the compression and reconstruction
+        # gradients never overlap on shared weights. Both arms use the same Q-Former head
+        # (num_queries=1, layers=3, heads=8), lr 1e-3, distill alpha 1.0 / beta 0.0, fineweb-edu.
+        # Unlike tab:width_ablation (uniform seq_1024), each width trains at its OWN sequence length
+        # (135M @ 64, 360M @ 128, 1.7B @ 512) -- the regime where the eval_paraphrase comparison
+        # suggested decoupling might help -- so the paths carry seq_{64,128,512}. Heads + evals from
+        # run_jobs_compression_head_width.py (--stage train / --stage eval); each row is the
+        # progressive eval (pg19_1k / sl_4096 / lr_0.1) seeded via compression_head_forward.
+        name="tab:width_dualmodel_ablation",
+        checkpoints=[
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-135M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_64_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-135M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_64_lr_0.001_a_1.0_b_0.0_unfrozen_dualmodel_v3/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-360M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_128_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-360M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_128_lr_0.001_a_1.0_b_0.0_unfrozen_dualmodel_v3/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_512_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_512_lr_0.001_a_1.0_b_0.0_unfrozen_dualmodel_v3/progressive_prefixes",
+        ],
+        names_mapping=(
+            "135M (single-model),135M (dual-model),"
+            "360M (single-model),360M (dual-model),"
+            "1.7B (single-model),1.7B (dual-model)"
+        ),
+    ),
+    TableSpec(
+        # Finetune-sequence-length ablation: does the causal-LM finetuning sequence length affect the
+        # compression measured afterward? The width ablation's 1.7B arm finetunes SmolLM2-1.7B-firstlast4
+        # at seq 1024 / lr 1e-3 ("-ftw", the baseline row here); this ablation re-finetunes the SAME
+        # checkpoint with everything held fixed except the training seq_len (and lr), then re-measures
+        # compression the same way. The per-device token footprint and 256-sequence global batch are held
+        # constant across variants (per_device = 8192 // seq_len). Each row is the progressive eval
+        # (pg19_1k / sl_4096 / lr_0.1, baseline random per-sample init, like tab:width_ablation's
+        # causal-LM rows). Finetuning + evals from run_jobs_finetune_seqlen_ablation.py.
+        name="tab:finetune_seqlen_ablation",
+        checkpoints=[
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ftw-seq512-lr5em4_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ftw-seq512-lr1em3_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ftw-seq2048-lr1em3_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ftw-seq2048-lr2em3_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+        ],
+        names_mapping=(
+            "seq 512 / lr 0.0005,seq 512 / lr 0.001,"
+            "seq 1024 / lr 0.001 (baseline),"
+            "seq 2048 / lr 0.001,seq 2048 / lr 0.002"
+        ),
     ),
 ]
 
