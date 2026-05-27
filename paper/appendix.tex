@@ -386,3 +386,42 @@ The prefix becomes more predictable as it lengthens: the base model's average su
 \vskip -0.1in
 \end{table*}
 
+\section{Attention Knockout Across Model Families}
+\label{app:knockout_models}
+
+To test whether the causal picture in Section~\ref{sec:causal} is specific to Llama-3.1-8B, we repeat the identical attention-knockout protocols on two further model families: Pythia-1.4B (GPT-NeoX, $L=24$ layers) and SmolLM2-1.7B ($L=24$ layers). All settings match the main text (HellaSwag, $512$ samples, a single compression token, $1000$ optimization steps, per-model compression learning rate). The results are consistent with Llama-3.1-8B (Figures~\ref{fig:knockout_pythia} and~\ref{fig:knockout_smollm2}): early-layer knockout sharply degrades teacher-forced reconstruction while leaving downstream accuracy at or above the crammed baseline; the late layers that carry the most attention mass have negligible causal effect on either metric; and the forward/reverse cumulative protocols exhibit the same asymmetry that localizes the downstream collapse to the early layers.
+
+\begin{figure*}[tb]
+    \centering
+    \begin{subfigure}{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{attention_knockout_per_layer_pythia-1p4b.pdf}
+        \caption{Per-layer knockout.}
+    \end{subfigure}
+    \\[0.6em]
+    \begin{subfigure}{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{attention_knockout_cumulative_pythia-1p4b.pdf}
+        \caption{Cumulative knockout (left: forward, masking layers $0$ through $k$; right: reverse, masking layers $k$ through $L-1$).}
+    \end{subfigure}
+    \caption{Attention knockout on Pythia-1.4B ($L=24$), using the protocols of Figures~\ref{fig:knockout_per_layer} and~\ref{fig:knockout_cumulative}. The early-layer reconstruction collapse, the dissociation between attention mass and causal importance, and the forward/reverse asymmetry all reproduce the Llama-3.1-8B findings.}
+    \label{fig:knockout_pythia}
+\end{figure*}
+
+\begin{figure*}[tb]
+    \centering
+    \begin{subfigure}{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{attention_knockout_per_layer_smollm2-1p7b.pdf}
+        \caption{Per-layer knockout.}
+    \end{subfigure}
+    \\[0.6em]
+    \begin{subfigure}{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{attention_knockout_cumulative_smollm2-1p7b.pdf}
+        \caption{Cumulative knockout (left: forward, masking layers $0$ through $k$; right: reverse, masking layers $k$ through $L-1$).}
+    \end{subfigure}
+    \caption{Attention knockout on SmolLM2-1.7B ($L=24$), using the protocols of Figures~\ref{fig:knockout_per_layer} and~\ref{fig:knockout_cumulative}. The findings are consistent with Llama-3.1-8B: early-layer interactions causally drive the downstream collapse, while the high-attention-mass late layers do not.}
+    \label{fig:knockout_smollm2}
+\end{figure*}
+
