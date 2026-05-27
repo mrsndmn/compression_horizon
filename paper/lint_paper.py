@@ -125,10 +125,64 @@ def check_raw_tables() -> list[str]:
     return errors
 
 
+# Main-body tables must be built from the canonical 50-sample PG19 run. Each
+# table generator stamps "% paper-lint: n_samples=<N>" into its .tex (read from
+# the sample count it aggregates); the check below enforces N=50 for every table
+# \input by the main text. Entries here are body tables that are intentionally
+# exempt, each with a justification.
+MAIN_BODY_TEX = "example_paper.tex"
+EXPECTED_N_SAMPLES = "50"
+SAMPLE_COUNT_ALLOWLIST = {
+    # Benchmark table: its "samples" are HellaSwag/ARC-Easy instances, not PG19
+    # cramming samples, so the 50-sample rule does not apply.
+    "semantic_evaluation": "benchmark instances (HellaSwag/ARC), not PG19 samples",
+    # TODO: remove once the 50-sample full-cramming re-run lands. The "Full"
+    # baseline currently exists only at limit_10, so this table is 10-sample.
+    "full_vs_progressive": "pending 50-sample full-cramming re-run",
+}
+INPUT_TABLE_RE = re.compile(r"\\input\s*\{tables/([^}]+)\}")
+SAMPLE_STAMP_RE = re.compile(r"^%\s*paper-lint:\s*n_samples=(\S+)\s*$", re.MULTILINE)
+
+
+def check_body_table_sample_count() -> list[str]:
+    """Every table \\input by the main body must be the canonical 50-sample run.
+
+    Table generators stamp ``% paper-lint: n_samples=<N>`` into each generated
+    .tex. This parses that stamp for every table pulled into ``example_paper.tex``
+    and fails unless it reads ``n_samples=50``. Tables in
+    ``SAMPLE_COUNT_ALLOWLIST`` are exempt with a documented reason."""
+    errors: list[str] = []
+    body = PAPER_DIR / MAIN_BODY_TEX
+    if not body.is_file():
+        return errors
+    text = COMMENT_RE.sub("", body.read_text(encoding="utf-8", errors="ignore"))
+    for raw_name in INPUT_TABLE_RE.findall(text):
+        slug = raw_name.strip().split("/")[-1]
+        if slug in SAMPLE_COUNT_ALLOWLIST:
+            continue
+        tex_path = PAPER_DIR / "tables" / f"{slug}.tex"
+        if not tex_path.is_file():
+            errors.append(f"{MAIN_BODY_TEX}: \\input{{tables/{slug}}} but tables/{slug}.tex is missing")
+            continue
+        match = SAMPLE_STAMP_RE.search(tex_path.read_text(encoding="utf-8", errors="ignore"))
+        if match is None:
+            errors.append(
+                f"tables/{slug}.tex has no '% paper-lint: n_samples=' provenance stamp -- "
+                "regenerate it with its generator (or allowlist it with a reason)"
+            )
+        elif match.group(1) != EXPECTED_N_SAMPLES:
+            errors.append(
+                f"tables/{slug}.tex: n_samples={match.group(1)}, but main-body tables must use the "
+                f"{EXPECTED_N_SAMPLES}-sample run (fix the generator's source dirs, or allowlist with a reason)"
+            )
+    return errors
+
+
 CHECKS: list[tuple[str, Callable[[], list[str]]]] = [
     ("unused-attachments", check_unused_attachments),
     ("table-nans", check_table_nans),
     ("raw-tables", check_raw_tables),
+    ("body-table-samples", check_body_table_sample_count),
 ]
 
 
