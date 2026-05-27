@@ -58,6 +58,9 @@ class TableSpec:
     short: bool = False
     sample_id: int = 0
     tablefmt: str = "latex"
+    # Opt-in extra column: average base-LM prefix surprisal (bits/token). Only meaningful for the
+    # fixed-prefix progressive ablation; leave False for every other table.
+    prefix_surprisal: bool = False
 
 
 _EXP = "artifacts/experiments_progressive"
@@ -422,6 +425,29 @@ TABLES: List[TableSpec] = [
             "seq 2048 / lr 0.001,seq 2048 / lr 0.002"
         ),
     ),
+    TableSpec(
+        # Fixed-prefix progressive cramming ablation: SmolLM2-1.7B is shown a fixed, uncompressed
+        # prefix of P real tokens that it attends to but never crams; it then progressively crams the
+        # continuation that follows. As P grows we read off how the cramming task changes -- compressed
+        # tokens (the converged continuation horizon, excluding the prefix), information gain of the
+        # compression token (measured on top of the prefix context), trajectory length, and PCA-99%.
+        # The extra "Avg Prefix Surprisal" column reports the base-LM surprisal (bits/token) over the
+        # prefix itself. The "No prefix" row is the existing P=0 baseline run (shared with the other
+        # SmolLM2-1.7B ablation tables). Runs launched by scripts/jobs/run_jobs_prefix_ablation.py and
+        # driven by scripts/jobs/watch_ablation.py --launcher run_jobs_prefix_ablation. All rows share
+        # the canonical progressive eval config (pg19_1k / limit 50 / sl_4096 / lr 0.1).
+        name="tab:prefix_ablation",
+        checkpoints=[
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_prefix_128/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_prefix_256/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_prefix_512/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_prefix_1024/progressive_prefixes",
+        ],
+        names_mapping="No prefix,P=128,P=256,P=512,P=1024",
+        prefix_surprisal=True,
+    ),
 ]
 
 
@@ -540,6 +566,7 @@ def render_table(
         midrule_indicies=midrules,
         tablefmt=tablefmt_override or spec.tablefmt,
         short=spec.short,
+        show_prefix_surprisal=spec.prefix_surprisal,
     )
 
     if save_dir is not None:
@@ -549,6 +576,7 @@ def render_table(
             midrule_indicies=midrules,
             tablefmt="latex",
             short=spec.short,
+            show_prefix_surprisal=spec.prefix_surprisal,
         )
         os.makedirs(save_dir, exist_ok=True)
         filename = (save_name or table_slug(spec.name)) + ".tex"

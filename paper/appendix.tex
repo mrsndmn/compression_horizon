@@ -333,3 +333,23 @@ Table~\ref{tab:finetune_seqlen_ablation} shows that the finetuning sequence leng
 \vskip -0.1in
 \end{table*}
 
+\section{Fixed-Prefix Progressive Cramming Ablation}
+\label{app:prefix_ablation}
+
+Our main progressive-cramming setup asks a single compression token to reconstruct a sequence from scratch, with no other context. Here we ask how the task changes when the model is additionally given a fixed, \emph{uncompressed} prefix that it can attend to but never has to compress. Concretely, we tokenize each document as $[\,p_1 \dots p_P \mid c_1 \dots c_L\,]$ and feed the model $[\,\texttt{[mem]}\ p_1 \dots p_P\ c_1 \dots c_L\,]$: the $P$ prefix tokens $p_{1:P}$ are real token embeddings the model reads as ordinary context, the learnable \texttt{[mem]} token sits ahead of them, and the loss, convergence check, and information gain are computed only over the continuation $c_{1:L}$ that follows the prefix. The prefix is never folded into \texttt{[mem]}. Progressive cramming then grows the continuation $c_{1:L}$ token-by-token exactly as in the prefix-free setting, so ``Compressed Tokens'' counts only the crammed continuation, excluding the visible prefix. We sweep the prefix length $P \in \{128, 256, 512, 1024\}$ on SmolLM2-1.7B, with the no-prefix run ($P=0$) as the reference.
+
+All runs use the same PG19 sample set, learning rate ($0.1$), and optimization budget as our main SmolLM2-1.7B run, so the only varying factor is the prefix length $P$. Table~\ref{tab:prefix_ablation} reports, for each $P$, the achieved compressed (continuation) token count, the information gain of the compression token measured on top of the prefix context, trajectory length, the number of principal components explaining 99\% of trajectory variance (PCA 99\%), and the average base-LM surprisal over the prefix tokens themselves (bits per token).
+% BEGIN AUTOGEN prefix-ablation-trend (filled from the prefix-ablation eval results)
+The per-prefix-length compressed-token counts are filled in automatically once the prefix-ablation runs complete.
+% END AUTOGEN prefix-ablation-trend
+
+\begin{table*}[t]
+    \centering
+    \caption{Fixed-prefix progressive cramming ablation on SmolLM2-1.7B. The model attends to a fixed, uncompressed prefix of $P$ real tokens and crams only the continuation that follows; the $P=0$ row is the no-prefix reference. All rows use the identical progressive-cramming eval (PG19, $\mathrm{lr}=0.1$). ``Compressed Tokens'' is the achieved continuation length $n$ (excluding the prefix), ``Trajectory Length'' is $L_{\text{traj}}$, ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance, and ``Avg Prefix Surprisal'' is the base-LM next-token cross-entropy over the prefix tokens, in bits per token.}
+    \label{tab:prefix_ablation}
+    \begin{small}
+    \input{tables/prefix_ablation}
+    \end{small}
+\vskip -0.1in
+\end{table*}
+

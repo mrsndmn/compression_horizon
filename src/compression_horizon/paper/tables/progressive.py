@@ -879,6 +879,7 @@ def extract_trajectory(
     all_trajectory_lengths = []
     all_num_pca_for99_var = []
     all_num_random_projections_for99_var = []
+    all_prefix_surprisal = []  # per-sample base-LM prefix surprisal (bits/token); empty for no-prefix runs
 
     all_embeds = []
 
@@ -920,6 +921,15 @@ def extract_trajectory(
         # Compute metrics that don't require embeddings
         all_num_embeddings.append(len(stages))
         all_total_steps.append(sample_total_steps)
+
+        # Prefix surprisal (bits/token) is constant across a sample's stages; take the first
+        # non-null value. Absent for no-prefix runs -> the column renders blank for them.
+        sample_prefix_surprisal = next(
+            (s.get("prefix_surprisal_bits_per_token") for s in stages if s.get("prefix_surprisal_bits_per_token") is not None),
+            None,
+        )
+        if sample_prefix_surprisal is not None:
+            all_prefix_surprisal.append(float(sample_prefix_surprisal))
 
         # Compute metrics that require embeddings (use cache if embeddings missing)
         if has_embeddings and len(sample_embeddings) > 0:
@@ -984,6 +994,7 @@ def extract_trajectory(
         "num_random_projections_for99_var": summarize_values(all_num_random_projections_for99_var),
         "information_gain": summarize_values(information_gains),
         "information_gain_from_dataset": summarize_values(information_gains_from_dataset),
+        "prefix_surprisal": summarize_values(all_prefix_surprisal),
         "embedding_statistics": embedding_statistics,
     }
     apply_precomputed_info_gain(dataset_path, stats)
@@ -1311,6 +1322,7 @@ def format_statistics_table(
     midrule_indicies,
     tablefmt: str = "grid",
     short: bool = False,
+    show_prefix_surprisal: bool = False,
 ) -> str:
     """Build the formatted statistics table as a string.
 
@@ -1318,6 +1330,9 @@ def format_statistics_table(
         checkpoint_names: List of experiment labels
         statistics: List of statistics dicts, each containing 'num_embeddings' and 'total_steps'
         short: If True, build the table without the last two columns
+        show_prefix_surprisal: If True, append an "Avg Prefix Surprisal (bits/tok)" column. Rows
+            without a ``prefix_surprisal`` stat (e.g. a no-prefix baseline) render ``--`` rather than
+            ``nan`` so the paper lint stays green. Opt-in so other tables are unaffected.
 
     Returns:
         The fully post-processed table text, or an empty string if there is
@@ -1343,6 +1358,8 @@ def format_statistics_table(
             "Trajectory Length",
             "PCA 99%",
         ]
+    if show_prefix_surprisal:
+        headers += ["Prefix Surp. (bits/tok)" if short else "Avg Prefix Surprisal (bits/tok)"]
 
     # Prepare table data
     table_data = []
@@ -1381,6 +1398,10 @@ def format_statistics_table(
                 # format_mean_std_cell(stats.get("information_gain"), precision=0, tablefmt=tablefmt),
                 # format_embedding_statistics(stats.get("embedding_statistics"), precision=4, tablefmt=tablefmt),
             ]
+        if show_prefix_surprisal:
+            prefix_stat = stats.get("prefix_surprisal")
+            # Render "--" (not "nan") for rows that have no prefix, so paper lint stays green.
+            row.append("--" if prefix_stat is None else format_mean_std_cell(prefix_stat, precision=2, tablefmt=tablefmt))
         table_data.append(row)
 
         if midrule_indicies is not None and i in midrule_indicies:
@@ -1412,6 +1433,7 @@ def print_statistics_table(
     midrule_indicies,
     tablefmt: str = "grid",
     short: bool = False,
+    show_prefix_surprisal: bool = False,
 ) -> None:
     """Print the formatted statistics table to stdout, framed by a banner."""
     result = format_statistics_table(
@@ -1420,6 +1442,7 @@ def print_statistics_table(
         midrule_indicies,
         tablefmt=tablefmt,
         short=short,
+        show_prefix_surprisal=show_prefix_surprisal,
     )
     if not result:
         return

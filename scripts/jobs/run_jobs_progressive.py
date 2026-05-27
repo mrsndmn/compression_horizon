@@ -247,6 +247,13 @@ def render_job(experiment):
     if experiment["num_alignment_layers"] != 1:
         exp_suffix = f"{exp_suffix}_align_{experiment['num_alignment_layers']}"
 
+    # Fixed uncompressed prefix (progressive cramming). ``.get`` keeps every existing experiment
+    # byte-identical (no key => no flag, no suffix); set it to enable the prefix-length ablation.
+    prefix_len = experiment.get("progressive_prefix_len")
+    if prefix_len:
+        cmd_args.append(f"--progressive_prefix_len {prefix_len}")
+        exp_suffix = f"{exp_suffix}_prefix_{prefix_len}"
+
     out_dir_name = f"artifacts/experiments_progressive/{exp_suffix}"
     cmd_args.append(f"--output_dir {out_dir_name}")
     return cmd_args, exp_suffix, out_dir_name
