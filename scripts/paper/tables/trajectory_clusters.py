@@ -32,20 +32,23 @@ from compression_horizon.utils import hlines_to_booktabs
 
 _ANALYSIS = "artifacts/analysis/trajectory_clusters_135m"
 
-# Model-scale trend (all at lr=0.1). Sample counts differ (only 1.7B and 8B have 50-sample runs);
-# the N column makes that explicit.
+# Model-scale trend (all at lr=0.1). Every row uses a 50-sample (limit_50) PG19 run so the table is
+# apples-to-apples; the 135M/360M 50-sample runs are produced by
+# scripts/jobs/run_jobs_trajectory_clusters_50samples.py (no 10-sample fallback -- a missing cache is
+# a hard error, by design).
 SCALE_ROWS: List[Tuple[str, str]] = [
-    ("SmolLM2-135M", "sl_4096_SmolLM2-135M_lr_0.1"),
-    ("SmolLM2-360M", "sl_4096_SmolLM2-360M_lr_0.1"),
+    ("SmolLM2-135M", "sl_4096_SmolLM2-135M_ds_pg19_1k_limit_50_lr_0.1"),
+    ("SmolLM2-360M", "sl_4096_SmolLM2-360M_ds_pg19_1k_limit_50_lr_0.1"),
     ("SmolLM2-1.7B", "sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1"),
     ("Llama-3.1-8B", "sl_4096_Meta-Llama-3.1-8B_ds_pg19_1k_limit_50_lr_0.1"),
 ]
 
-# Learning-rate sweep (SmolLM2-1.7B, the 10-sample legacy runs, apples-to-apples across LR).
+# Learning-rate sweep (SmolLM2-1.7B), all 50-sample runs, apples-to-apples across LR. lr=0.1 reuses
+# the scale-trend 50-sample run; lr=0.5 / lr=1.0 are produced by the same launcher above.
 LR_ROWS: List[Tuple[str, str]] = [
-    ("SmolLM2-1.7B {\\small lr=0.1}", "sl_4096_SmolLM2-1.7B_lr_0.1"),
-    ("SmolLM2-1.7B {\\small lr=0.5}", "sl_4096_SmolLM2-1.7B_lr_0.5"),
-    ("SmolLM2-1.7B {\\small lr=1.0}", "sl_4096_SmolLM2-1.7B_lr_1.0"),
+    ("SmolLM2-1.7B {\\small lr=0.1}", "sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1"),
+    ("SmolLM2-1.7B {\\small lr=0.5}", "sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.5"),
+    ("SmolLM2-1.7B {\\small lr=1.0}", "sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_1.0"),
 ]
 
 
