@@ -197,8 +197,8 @@ Our main contributions are as follows:
 \begin{itemize}
     \item We introduce progressive cramming, which grows the target prefix token-by-token and targets 100\% reconstruction, enabling a sharp success/failure boundary beyond fixed-budget, 99\% protocols.
     \item We show that progressive optimization trajectories $\{\mathbf{e}^{(k)}\}$ are low-dimensional: across model families, 30--100 PCA components explain 99\% of per-sample trajectory variance in 2048--4096 dimensional embedding spaces.
-    \item We quantify the compression embedding's attention concentration via attention mass to position 0 and find that it can capture substantial mass in specific intermediate layers (often 20--60\%), with strong model-family dependence; causal interventions show this concentration is a symptom rather than the cause of the downstream degradation.
     \item We demonstrate that optimizing for reconstruction does not imply preserved downstream utility: on likelihood-based multiple-choice evaluation (HellaSwag, ARC-Easy), prepending a crammed compression embedding causes a moderate but consistent accuracy drop across model families even when the original prefix remains in context, and under generative evaluation it collapses capability almost entirely.
+    \item Using \emph{attention knockout} on Llama-3.1-8B, we causally localize this degradation to the compression embedding's interactions in the \emph{early} layers: masking them restores downstream capability, whereas the late layers that carry the most attention mass have little causal effect. The embedding's attention concentration (often 20--60\% of attention mass in intermediate layers, with strong model-family dependence) is therefore a \emph{symptom} of cramming rather than the cause of capability loss.
 \end{itemize}
 
 
@@ -452,7 +452,7 @@ Table~\ref{tab:progressive_modifications} compares baseline progressive cramming
 
 We evaluate reconstruction accuracy when progressive embeddings are reconstructed from PCA components.
 Figure~\ref{fig:pca_reconstruction_accuracy} reports accuracy as a function of the number of components.
-Although Table~\ref{tab:progressive_modifications} suggests that for Llama-3.1-8B roughly 74 PCA components explain 99\% of trajectory variance, achieving near-perfect teacher-forced reconstruction requires substantially more components.
+Although Table~\ref{tab:progressive_modifications} suggests that for Llama-3.1-8B roughly 83 PCA components explain 99\% of trajectory variance, achieving near-perfect teacher-forced reconstruction requires substantially more components.
 We also observe the same failure mode as in the full cramming setup (Section~\ref{sec:prior_limitations}):
 errors cluster at the start of the sequence (often at the first decoded token), which then propagates and breaks subsequent autoregressive decoding.
 This behavior appears whenever reconstruction accuracy is below 100\%; with perfect reconstruction, this failure mode disappears.
