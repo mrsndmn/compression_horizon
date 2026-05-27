@@ -118,7 +118,9 @@ ROW_LABELS = [
     "32 tokens/stage",
     "64 tokens/stage",
     "128 tokens/stage",
-    "geometric growth",
+    "geometric (bisect)",
+    "geometric (bisect+restore)",
+    "geometric (linear+restore)",
 ]
 
 

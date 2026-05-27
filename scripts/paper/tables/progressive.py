@@ -404,14 +404,24 @@ TABLES: List[TableSpec] = [
             f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_32/progressive_prefixes",
             f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_64/progressive_prefixes",
             f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_128/progressive_prefixes",
-            # Geometric growth: double the prefix per converged stage + bisect the
-            # final gap (adaptive added tokens), reaching the horizon in ~log2 stages.
+            MIDRULE,
+            # Geometric growth: double the prefix per converged stage, then a back-off
+            # phase pins the exact horizon (adaptive added tokens), reaching it in
+            # ~log2 stages. Three back-off strategies are compared side by side:
+            #  * _geomgrow      -- bisect the (lo, hi) gap, probes inherit the preceding
+            #                      (failed, longer) probe's embedding/optimizer state;
+            #  * _geomgrow_wr   -- bisect, but each probe warm-restores the last
+            #                      *converged* embedding + optimizer (Adam) + LR state;
+            #  * _geomgrow_lin  -- warm-restore once, then grow +1 token/stage until a
+            #                      stage fails (linear back-off, mirrors Δ=1 near horizon).
             f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_geomgrow/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_geomgrow_wr/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_geomgrow_lin/progressive_prefixes",
         ],
         names_mapping=(
             "1 token/stage,2 tokens/stage,4 tokens/stage,8 tokens/stage,"
             "16 tokens/stage,32 tokens/stage,64 tokens/stage,128 tokens/stage,"
-            "geometric growth"
+            "geometric (bisect),geometric (bisect+restore),geometric (linear+restore)"
         ),
         compressed_tokens_key="converged_prefix_len",
         steps_to_converge_key="steps_to_converged",
