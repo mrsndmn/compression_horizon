@@ -70,13 +70,61 @@ Table~\ref{tab:progressive_for_model_scales} shows that larger models tend to us
 Gemma~3 reaches lower information gain at shorter reconstructed lengths than Llama and Pythia. One candidate explanation is logit softcapping \cite{gemma2}, which bounds logit magnitudes and limits how peaked the model's next-token distributions can become: because cramming drives the model toward high-confidence, token-specific predictions over long horizons, capped logits would reduce the separability between the correct token and its close alternatives and damp gradients in the high-confidence regime. This is consistent with Gemma's lower information gain and earlier saturation, but we do not isolate softcapping from other architectural and training-time differences, and leave confirming the mechanism to future work.
 
 
+\section{Attention Concentration}
+\label{app:attention_concentration}
+
+To probe the mechanism behind perfect reconstruction, we measure whether the compression embedding becomes an \emph{attention sink} that captures a disproportionate fraction of attention, analogous to (and potentially competing with) the BOS token.
+We quantify how much attention mass other positions allocate to the first position (position $0$), which corresponds to the compression embedding in crammed inputs or the BOS token in the uncompressed baseline.
+Let $\mathbf{A}_l \in [0,1]^{S \times S}$ denote the attention matrix at layer $l$ after averaging over heads.
+For a given prefix length $s \le S$, we define the attention mass on position $0$ as
+%
+\begin{equation}
+    m_l(s) = \frac{1}{s-1} \sum_{q=1}^{s-1} \mathbf{A}_l(q, 0)
+\end{equation}
+%
+which excludes self-attention ($q=0$) and averages over query positions.
+We report $100 \cdot m_l(s)$ as a percentage, and average over a set of target prefix lengths $\mathcal{S}$:
+%
+\begin{equation}
+    \bar{m}_l = \frac{1}{|\mathcal{S}|} \sum_{s \in \mathcal{S}} m_l(s)
+\end{equation}
+
+Table~\ref{tab:attn_hijacking} shows that this attention concentration is highly model-dependent when aggregated over layers.
+SmolLM2 and Pythia exhibit strong correlation between the layer-wise attention-mass profiles for the BOS token and the compression embedding; in these families the compression embedding attracts substantial attention mass in the same layers where BOS is an attention sink, and in Pythia it can match or exceed BOS attention on average.
+In contrast, Llama and Gemma show much lower compression-embedding attention mass than BOS on average and weak (or negative) correlation, suggesting that the concentration is confined to specific layers rather than uniformly matching the BOS pattern.
+
+Motivated by this similarity, we test whether including both a BOS token and a compression embedding in the prompt creates interference between two attention sinks.
+We therefore run ablations that remove the BOS token and recompute progressive cramming metrics (Table~\ref{tab:progressive_no_bos_token}).
+Removing BOS increases reconstructed length and information gain (and reduces compression-embedding attention mass) for Llama-3.1-8B, but has little effect on the other model families.
+
+This attention concentration is correlational: the causal analysis in Section~\ref{sec:causal} shows it is a \emph{symptom} of cramming rather than the cause of downstream degradation.
+
+\begin{table*}[]
+    \centering
+    \caption{Attention-concentration summary. ``Compression Embedding'' is attention mass to position 0 for the compression embedding in the crammed input; ``BOS Token'' is attention mass to position 0 for the uncompressed baseline; ``Diff'' is (Compression$-$BOS). ``Correlation'' is the Pearson correlation between per-layer attention-mass profiles. \bcancel{B} stands for removed BOS token for cramming compression column.}
+    \label{tab:attn_hijacking}
+    \begin{small}
+    \input{tables/attn_hijacking}
+    \end{small}
+\end{table*}
+
+\begin{table}[]
+    \centering
+    \caption{Progressive cramming with and without the BOS token. \bcancel{B} denotes runs where the BOS token is removed.}
+    \label{tab:progressive_no_bos_token}
+    \begin{small}
+    \input{tables/progressive_no_bos_token}
+    \end{small}
+\end{table}
+
+
 \section{Prefix tuning}
 
 Prefix tuning introduces a separate trainable prefix embedding at each transformer layer, avoiding the per-layer forward-pass bottleneck of soft-prompt setups such as full or progressive cramming. The trade-off is parameter cost: it requires $L$ times more trainable embeddings, where $L$ is the number of hidden layers in the LLM.
 
 To separate ``cramming'' from general soft-prompt steering, we evaluate prefix tuning baselines.
 Table~\ref{tab:prefix_tuning_attention_hijacking} reports the same attention-mass metric for prefix tokens.
-Compared to cramming, prefix tuning typically attracts less attention mass than BOS and shows weaker or more variable correlation patterns, indicating that attention hijacking is not an inevitable consequence of prepending learned embeddings but depends on the optimization objective.
+Compared to cramming, prefix tuning typically attracts less attention mass than BOS and shows weaker or more variable correlation patterns, indicating that this attention concentration is not an inevitable consequence of prepending learned embeddings but depends on the optimization objective.
 
 We also evaluated compression limits under prefix tuning. Table~\ref{tab:prefix_tuning_accuracy} shows that, for Llama~3 models at 3B and 8B, we cannot reach the cramming limits; however, in the prefix-tuning setup these models can still compress up to 8k tokens with perfect reconstruction accuracy, while 16k tokens results in out-of-memory (OOM) failures. For the 1B Llama~3 model, the limit is about 4096 tokens, which is roughly \(10\times\) higher than with progressive cramming. This gain comes at a higher parameter cost: prefix tuning requires \(L\)-times more trainable embeddings (one per layer), i.e., \(16\times\) more parameters for a 16-layer model.
 For Pythia, the prefix-tuning setup increases the compression limit by about \(20\times\) for Pythia-410M and by about \(8\times\) for Pythia-1.4B relative to progressive cramming.
@@ -169,7 +217,7 @@ where $\alpha$ controls alignment strength.
 Table~\ref{tab:all_progressive_modifications} studies activation alignment and its interaction with low-dimensional projection.
 Alignment acts as a regularizer: it can significantly reduce trajectory length and PCA 99\% (indicating smoother, more constrained optimization), but it may trade off against raw cramming capacity depending on the model family.
 In particular, for Llama-3.1-8B, alignment increases information gain and token count relative to the baseline, whereas for SmolLM2-1.7B and Pythia-1.4B alignment alone reduces capacity but can be combined with projection to recover part of the loss.
-Across settings, we observe that alignment qualitatively changes attention behavior, often pushing attention hijacking effects toward deeper layers.
+Across settings, we observe that alignment qualitatively changes attention behavior, often pushing attention-concentration effects toward deeper layers.
 
 \begin{table*}[t]
     \centering
