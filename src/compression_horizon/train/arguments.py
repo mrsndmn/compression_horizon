@@ -179,6 +179,16 @@ class MyTrainingArguments(TrainingArguments):
         default=0,
         metadata={"help": "Optional cap on number of progressive stages (0 = no cap)."},
     )
+    progressive_prefix_len: int = field(
+        default=0,
+        metadata={
+            "help": "Number of leading real (uncompressed) prefix tokens the model attends to before "
+            "the crammed continuation in progressive training. The prefix is fed as real token "
+            "embeddings (visible context) but is never compressed into the [mem] token; loss, "
+            "convergence, and information gain are computed only over the post-prefix continuation. "
+            "0 = no prefix (default, identical to the original trainer)."
+        },
+    )
     progressive_reset_lr_scheduler_on_non_convergence: bool = field(
         default=False,
         metadata={"help": "Reset LR scheduler and continue training when convergence fails (once per stage)."},

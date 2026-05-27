@@ -94,11 +94,24 @@ def job_desc_for(model_short: str) -> str:
     return f"{JOB_DESC_PREFIX} {model_short} #{AUTHOR_NAME} #multimodal #notify_completed @mrsndmn"
 
 
-def build_payload(checkpoint: str, extra_options: dict, opts: dict, workdir: str | None = None):
-    """Return ``(payload, model_short, out_dir)`` for one finetuning job."""
+def build_payload(
+    checkpoint: str,
+    extra_options: dict,
+    opts: dict,
+    workdir: str | None = None,
+    out_dir: str | None = None,
+    job_label: str | None = None,
+):
+    """Return ``(payload, model_short, out_dir)`` for one finetuning job.
+
+    ``out_dir`` overrides the default ``<checkpoint>-ftw`` output path (used by ablations that
+    finetune the same checkpoint under several configs into distinct dirs); ``job_label`` overrides
+    the model-short string in the job description so those runs get distinct, matchable descriptions.
+    Both default to the original behaviour.
+    """
     workdir = workdir or os.getcwd()
-    model_short = os.path.basename(checkpoint.rstrip("/"))
-    out_dir = finetuned_dir(checkpoint)
+    out_dir = out_dir or finetuned_dir(checkpoint)
+    model_short = job_label or os.path.basename(checkpoint.rstrip("/"))
 
     num_gpus = opts["num_gpus"]
     per_device = opts["per_device_train_batch_size"]
@@ -148,9 +161,11 @@ def make_client():
     return training_job_api_from_profile("default")
 
 
-def submit_experiment(checkpoint, client, extra_options, opts, in_progress_descs=None, dry=False, force=False):
+def submit_experiment(
+    checkpoint, client, extra_options, opts, in_progress_descs=None, dry=False, force=False, out_dir=None, job_label=None
+):
     """Submit one finetuning job; return the ``run_job`` result dict or ``None`` if skipped."""
-    payload, model_short, out_dir = build_payload(checkpoint, extra_options, opts)
+    payload, model_short, out_dir = build_payload(checkpoint, extra_options, opts, out_dir=out_dir, job_label=job_label)
 
     if not os.path.isdir(checkpoint):
         print(f"\033[31mMissing checkpoint, run make_first_last_layers_ckpt.py first:\033[0m {checkpoint}")

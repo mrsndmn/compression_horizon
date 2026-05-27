@@ -8,7 +8,10 @@ import torch
 from tqdm.auto import tqdm
 
 from compression_horizon.analysis import ProgressiveSampleStateMachine
-from compression_horizon.analysis.information_gain import compute_information_gain
+from compression_horizon.analysis.information_gain import (
+    compute_information_gain,
+    compute_prefix_surprisal_bits_per_token,
+)
 from compression_horizon.train.inputs import build_compression_attention_mask, build_united_input
 from compression_horizon.train.parametrization import build_per_sample_parametrization
 from compression_horizon.train.trainers.base import BaseTrainer
@@ -35,6 +38,10 @@ class _RunContext:
     step_increment: int
     min_len: int
     max_stages_cap: int
+    # Number of leading real (uncompressed) prefix tokens the model attends to before the crammed
+    # continuation. 0 = no prefix (original behaviour). The prefix is never compressed into [mem];
+    # loss/convergence/info-gain are measured only over the post-prefix continuation.
+    prefix_len: int = 0
     # In ``--low_dim_projection_global`` mode the projection's ``nn.Linear``,
     # its AdamW state, and its LR scheduler all live for the entire run (as
     # in the pre-refactor implementation in commit a0d39f6). The same
@@ -75,6 +82,14 @@ class _BatchContext:
     # parameters (Direct / pretrained-PCA mode).
     shared_optimizer: object
     shared_scheduler: object
+    # Fixed uncompressed prefix (``progressive_prefix_len`` tokens). The crammable tensors above
+    # (input_ids/attention_mask/full_token_embeddings/target_hidden_states_full/max_len) are the
+    # *continuation* only -- already re-based past the prefix. ``prefix_len == 0`` => no prefix and
+    # the prefix tensors are ``None`` (identical to the original trainer).
+    prefix_len: int = 0
+    prefix_token_embeddings: torch.Tensor | None = None  # [batch, prefix, hidden]
+    prefix_attention_mask: torch.Tensor | None = None  # [batch, prefix]
+    prefix_surprisal_bits_per_token: list[float] | None = None  # per-sample base-LM prefix surprisal
 
 
 @dataclass
@@ -173,6 +188,16 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         """
         model, device, init_method, mvn_dist, pca_components, pca_mean, loaded_embeddings = self._initialize_run()
 
+        prefix_len = int(getattr(self.args, "progressive_prefix_len", 0) or 0)
+        if prefix_len < 0:
+            raise ValueError(f"progressive_prefix_len must be >= 0, got {prefix_len}!")
+        if prefix_len > 0 and init_method == "compression_head_forward":
+            raise ValueError(
+                "progressive_prefix_len > 0 is not compatible with embedding_init_method="
+                "'compression_head_forward' (the head seeds the [mem] token from the sequence, which "
+                "conflicts with a separate uncompressed prefix)."
+            )
+
         # Dual checkpoint support: when a sibling reconstructor model is provided, the
         # compressor (`model`) is used ONLY to produce the initial compression-embedding
         # value (compression_head_forward init); the inner optimization loop drives
@@ -214,6 +239,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             step_increment=self.args.progressive_step,
             min_len=self.args.progressive_min_seq_len,
             max_stages_cap=self.args.progressive_max_stages,
+            prefix_len=int(getattr(self.args, "progressive_prefix_len", 0) or 0),
             shared_projection=shared_projection,
             shared_optimizer=shared_optimizer,
             shared_scheduler=shared_scheduler,
@@ -242,6 +268,32 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         ch_forward_init = None
         if ctx.init_method == "compression_head_forward":
             ch_forward_init = self._compute_compression_head_init(ctx.model, input_ids, attention_mask)
+
+        # Fixed uncompressed prefix: peel the first ``prefix_len`` tokens off as a real, visible
+        # context block the model attends to but never crams, then re-base every "crammable" tensor
+        # to the continuation (positions ``prefix_len:``). Progressive growth and loss then operate
+        # only on the continuation; ``prefix_len == 0`` leaves everything untouched.
+        prefix_token_embeddings = None
+        prefix_attention_mask = None
+        prefix_surprisal_bits_per_token = None
+        if ctx.prefix_len > 0:
+            prefix_len = ctx.prefix_len
+            prefix_input_ids = input_ids[:, :prefix_len]
+            prefix_attention_mask = attention_mask[:, :prefix_len]
+            prefix_token_embeddings = full_token_embeddings[:, :prefix_len, :]
+            prefix_surprisal_bits_per_token = compute_prefix_surprisal_bits_per_token(
+                model=ctx.decode_model,
+                prefix_input_ids=prefix_input_ids,
+                prefix_attention_mask=prefix_attention_mask,
+            )
+            input_ids = input_ids[:, prefix_len:]
+            attention_mask = attention_mask[:, prefix_len:]
+            full_token_embeddings = full_token_embeddings[:, prefix_len:, :]
+            target_hidden_states_full = tuple(h[:, prefix_len:] for h in target_hidden_states_full)
+
+            if self.writer is not None and prefix_surprisal_bits_per_token:
+                mean_surprisal = sum(prefix_surprisal_bits_per_token) / len(prefix_surprisal_bits_per_token)
+                self.writer.add_scalar("prefix/surprisal_bits_per_token", mean_surprisal, self.global_step)
 
         parametrization = self._build_parametrization(ctx, batch_size, hidden_size, ch_forward_init=ch_forward_init)
         per_sample_optimizers, per_sample_schedulers = self._build_per_sample_optimizers(parametrization, ctx)
@@ -277,6 +329,10 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             initialization_embeddings=parametrization.initialization_snapshot(),
             shared_optimizer=shared_optimizer,
             shared_scheduler=shared_scheduler,
+            prefix_len=ctx.prefix_len,
+            prefix_token_embeddings=prefix_token_embeddings,
+            prefix_attention_mask=prefix_attention_mask,
+            prefix_surprisal_bits_per_token=prefix_surprisal_bits_per_token,
         )
 
     def _compute_compression_head_init(self, model, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
@@ -721,6 +777,8 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                 batch_ctx.compression_attention_mask,
                 stage_ctx.inputs_embeds,
                 stage_ctx.attention_mask,
+                prefix_token_embeddings=batch_ctx.prefix_token_embeddings,
+                prefix_attention_mask=batch_ctx.prefix_attention_mask,
             )
             (
                 loss,
@@ -737,6 +795,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                 united_attention_mask,
                 ctx.num_compression_tokens,
                 target_hidden_states=stage_ctx.target_hidden_states,
+                prefix_len=batch_ctx.prefix_len,
             )
             loss.backward()
 
@@ -868,6 +927,8 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                 token_embeddings=stage_ctx.inputs_embeds,
                 compression_token_embeddings=compression_token_embeddings,
                 compression_attention_mask=batch_ctx.compression_attention_mask,
+                prefix_token_embeddings=batch_ctx.prefix_token_embeddings,
+                prefix_attention_mask=batch_ctx.prefix_attention_mask,
             )
 
             embeddings_dir = self._prepare_embeddings_dir()
@@ -970,6 +1031,12 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             "convergence_threshold": float(ctx.threshold),
             "steps_taken": int(state.steps_taken[sample_index]),
             "information_gain_bits": float(per_sample_info_gain[sample_index]),
+            "progressive_prefix_len": int(batch_ctx.prefix_len),
+            "prefix_surprisal_bits_per_token": (
+                float(batch_ctx.prefix_surprisal_bits_per_token[sample_index])
+                if batch_ctx.prefix_surprisal_bits_per_token is not None
+                else None
+            ),
         }
 
     def _dump_stage_embedding(

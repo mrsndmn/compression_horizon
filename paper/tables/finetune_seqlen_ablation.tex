@@ -1,0 +1,13 @@
+\begin{tabular}{lllll}
+\toprule
+ Model                          & Compressed Tokens         & Information Gain        & Trajectory Length       & PCA 99\%                   \\
+\midrule
+ seq 512 / lr 0.0005            & 414.1 {\small $\pm$ 60.1} & 2048 {\small $\pm$ 152} & 1375 {\small $\pm$ 208} & 31.66 {\small $\pm$ 3.1}  \\
+ seq 512 / lr 0.001             & 404.5 {\small $\pm$ 69.7} & 1936 {\small $\pm$ 200} & 1332 {\small $\pm$ 222} & 30.22 {\small $\pm$ 3.02} \\
+ \midrule
+ seq 1024 / lr 0.001 (baseline) & 428.6 {\small $\pm$ 67.2} & 2029 {\small $\pm$ 194} & 1414 {\small $\pm$ 209} & 30.92 {\small $\pm$ 2.89} \\
+ \midrule
+ seq 2048 / lr 0.001            & 434.4 {\small $\pm$ 61.6} & 2049 {\small $\pm$ 235} & 1498 {\small $\pm$ 231} & 32.38 {\small $\pm$ 2.51} \\
+ seq 2048 / lr 0.002            & 390.7 {\small $\pm$ 77.3} & 1823 {\small $\pm$ 211} & 1257 {\small $\pm$ 225} & 29.4 {\small $\pm$ 2.49}  \\
+\bottomrule
+\end{tabular}

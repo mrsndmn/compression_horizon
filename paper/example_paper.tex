@@ -637,6 +637,10 @@ This asymmetry is the core causal claim: downstream collapse is driven by the co
 The high attention mass observed in late layers is thus a \emph{symptom} of cramming rather than the \emph{cause} of capability loss; attention mass and causal importance are dissociated.
 This refines the picture of attention hijacking: the compression embedding steers the model through early-layer computations that are essential for reconstruction but disruptive to the model's normal use of the prefix.
 
+\paragraph{The causal picture holds across model families.}
+We replicate all three knockout protocols on Pythia-1.4B and SmolLM2-1.7B and obtain consistent results: early-layer interactions causally drive the downstream collapse, the high-attention-mass late layers are not the causally important ones, and the forward/reverse cumulative asymmetry reappears in both models.
+The full per-layer and cumulative figures for both models are reported in Appendix~\ref{app:knockout_models}.
+
 
 \section{Conclusion}
 
@@ -645,8 +649,8 @@ Across model families, progressive trajectories are low-dimensional, and attenti
 Causal attention-knockout interventions further localize the downstream collapse to the compression embedding's interactions in the early layers, and show that the late layers carrying the most attention mass have little causal effect -- attention mass is a symptom rather than the cause of capability loss.
 Critically, downstream evaluation indicates that optimizing embeddings for reconstruction can coincide with large capability drops, even when the original prefix remains in context, so reconstruction accuracy alone is not a sufficient criterion for meaningful compression.
 
-Our study remains limited in scope: we use a small number of PG19 samples, and our causal interventions cover a single model family.
-Future work should extend these interventions across architectures and develop a \emph{fast} compressor that produces semantically meaningful compression embeddings.
+Our study remains limited in scope: we use a small number of PG19 samples. Our causal interventions cover three model families---Llama-3.1-8B in the main text, with consistent results for Pythia-1.4B and SmolLM2-1.7B in Appendix~\ref{app:knockout_models}---but a single evaluation dataset.
+Future work should extend these interventions to larger and more diverse models and develop a \emph{fast} compressor that produces semantically meaningful compression embeddings.
 
 
 % ---------------------------------------------------------------------------
