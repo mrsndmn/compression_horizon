@@ -32,6 +32,7 @@ PROGRESSIVE_TABLES=(
   tab:layer_ablation
   tab:init_ablation
   tab:prefix_ablation
+  tab:added_tokens_ablation
 )
 
 for name in "${PROGRESSIVE_TABLES[@]}"; do

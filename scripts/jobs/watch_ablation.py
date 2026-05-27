@@ -63,7 +63,11 @@ def _mls(args: list[str], capture: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run([MLS_BIN, "job", *args], capture_output=capture, text=True, env=_env(), cwd=PROJ)
 
 
-def mls_list(limit: int = 100) -> list[dict]:
+def mls_list(limit: int = 1000) -> list[dict]:
+    # The window must be large enough to still contain a long-running owned job after many
+    # *other* users' jobs have been created since it launched. With a small window (e.g. 100) a
+    # multi-hour progressive run scrolls off the recent list while still running, so discover_job
+    # returns None and ensure_job_success wrongly resubmits it -> a duplicate sharing the out_dir.
     cp = _mls(["list", "-O", "json", "-l", str(limit)])
     if cp.returncode != 0:
         log(f"  WARN: mls job list failed: {cp.stderr.strip()[-200:]}")
@@ -167,6 +171,11 @@ def ensure_job_success(info: dict, max_retries: int, poll: int) -> bool:
     attempt = 0
     while True:
         if name is None:
+            # Guard against resubmitting a job that actually finished while we were not looking
+            # (e.g. it left the job-list window). A genuine output makes a resubmit a duplicate.
+            if has_output(out_dir):
+                log(f"{suffix}: no active job found but output exists, OK")
+                return True
             log(f"{suffix}: no active job found, submitting")
             name = resubmit(info)
             if name is None:
