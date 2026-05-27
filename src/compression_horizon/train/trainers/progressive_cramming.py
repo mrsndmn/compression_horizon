@@ -1,5 +1,6 @@
 """Progressive cramming trainer: progressively grow the target prefix until reconstruction fails."""
 
+import copy
 import os
 from dataclasses import dataclass
 
@@ -44,6 +45,12 @@ class _RunContext:
     shared_projection: torch.nn.Linear | None = None
     shared_optimizer: object = None
     shared_scheduler: object = None
+    # Geometric growth: when True, double the prefix length on each converged stage
+    # and bisect the gap once a stage fails (instead of growing by step_increment).
+    geometric_growth: bool = False
+    # Back-off strategy after the ramp brackets the horizon: "bisect" or "linear"
+    # (restore the last converged checkpoint and grow +1 token per stage until failure).
+    geometric_backoff: str = "bisect"
 
 
 @dataclass
@@ -210,6 +217,8 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             shared_projection=shared_projection,
             shared_optimizer=shared_optimizer,
             shared_scheduler=shared_scheduler,
+            geometric_growth=bool(self.args.progressive_geometric_growth),
+            geometric_backoff=str(self.args.progressive_geometric_backoff),
         )
 
     # ------------------------------------------------------------------
@@ -394,13 +403,18 @@ class ProgressiveCrammingTrainer(BaseTrainer):
     def _run_progressive_stages(self, batch_ctx: _BatchContext, ctx: _RunContext, sample_id_counter: int) -> list[dict]:
         """Outer stage-while loop: grow seq_len, run a stage, save rows, repeat until cap / all-skipped / max-len."""
         state = ProgressiveSampleStateMachine(batch_ctx.batch_size, ctx.threshold)
+        if ctx.geometric_growth:
+            return self._run_geometric_stages(batch_ctx, ctx, state, sample_id_counter)
+
         seq_len = min(ctx.min_len, batch_ctx.max_len)
         stage_index = 0
         rows: list[dict] = []
 
         while True:
             stage_ctx = self._setup_stage(batch_ctx, seq_len, stage_index)
-            last_loss, last_convergence = self._run_stage_loop(batch_ctx, stage_ctx, ctx, state)
+            last_loss, last_convergence = self._run_stage_loop(
+                batch_ctx, stage_ctx, ctx, state, self.args.max_optimization_steps_per_token
+            )
             state.mark_skipped_if_not_converged(seq_len)
             rows.extend(
                 self._collect_stage_rows(batch_ctx, stage_ctx, ctx, state, last_loss, last_convergence, sample_id_counter)
@@ -418,6 +432,212 @@ class ProgressiveCrammingTrainer(BaseTrainer):
 
         return rows
 
+    def _run_geometric_stages(
+        self, batch_ctx: _BatchContext, ctx: _RunContext, state: ProgressiveSampleStateMachine, sample_id_counter: int
+    ) -> list[dict]:
+        """Find the compression horizon by geometric growth + back-off (batch_size 1).
+
+        Instead of growing the prefix a fixed ``progressive_step`` per converged
+        stage, double the prefix length each time a stage converges (a
+        geometrically growing number of added tokens). The first stage that fails
+        brackets the horizon between the largest converged length (``lo``) and the
+        smallest failed length (``hi``). ``ctx.geometric_backoff`` then pins the
+        horizon inside that bracket:
+
+        * ``"bisect"``: bisect ``(lo, hi)`` until the two are within
+          ``progressive_step``, restoring the last converged state before each probe
+          (~log2(gap) probes).
+        * ``"linear"``: restore the last converged checkpoint once, then grow the
+          prefix +1 token per stage (each warm-started from the previous converged
+          stage) until a stage fails -- the exact horizon, mirroring Delta=1 cramming
+          in the horizon neighborhood at the cost of ``horizon - lo`` probes.
+
+        Back-off probes warm-start from the last *converged* state, not the
+        preceding *failed* probe: every time a probe converges we snapshot the
+        embedding + per-sample optimizer (Adam moments) + LR-scheduler position, and
+        restore that snapshot before backing off. Otherwise a back-off target would
+        inherit an embedding tuned for a too-long prefix and a cosine LR already
+        decayed by the wasted failed-probe steps, which can make a sub-horizon prefix
+        spuriously fail and under-report the horizon.
+
+        ``lo`` only ever advances on a converged stage, so the reported prefix is
+        always fully reconstructed (floor: ``progressive_min_seq_len`` -- a short
+        prefix that converges trivially), preserving progressive cramming's
+        convergence guarantee. The horizon is reached in ~log2(horizon) +
+        log2(gap) stages rather than one per token; every stage uses the per-token
+        budget and the cumulative per-sample budget bounds the whole search (so
+        "Steps to Converge" stays comparable to the fixed-step arms). Every probe
+        is recorded as a stage row; downstream ``converged_prefix_len`` already
+        ignores non-converged stages.
+        """
+        if batch_ctx.batch_size != 1:
+            raise ValueError("--progressive_geometric_growth requires per_device_train_batch_size=1.")
+        if ctx.geometric_backoff not in ("bisect", "linear"):
+            raise ValueError(f"--progressive_geometric_backoff must be 'bisect' or 'linear', got {ctx.geometric_backoff!r}.")
+
+        rows: list[dict] = []
+        max_len = batch_ctx.max_len
+        min_len = max(1, min(ctx.min_len, max_len))
+        step = max(1, ctx.step_increment)
+        stage_index = 0
+        lo: int | None = None  # largest length proven to converge
+        hi: int | None = None  # smallest length proven to fail
+        best_state: dict | None = None  # optimization state at the largest converged length (lo)
+
+        def probe(seq_len: int, phase: str) -> bool:
+            """Run one stage at ``seq_len``; record its row; update lo/hi; return convergence.
+
+            On convergence the length is the new ``lo`` (probes only ever grow lo),
+            so we snapshot the optimization state to warm-start later back-off probes.
+            """
+            nonlocal stage_index, lo, hi, best_state
+            seq_len = int(max(min_len, min(seq_len, max_len)))
+            stage_ctx = self._setup_stage(batch_ctx, seq_len, stage_index)
+            last_loss, last_convergence = self._run_stage_loop(
+                batch_ctx, stage_ctx, ctx, state, self.args.max_optimization_steps_per_token
+            )
+            rows.extend(
+                self._collect_stage_rows(batch_ctx, stage_ctx, ctx, state, last_loss, last_convergence, sample_id_counter)
+            )
+            match_ratio = float(last_convergence[0].item()) if last_convergence is not None else float("nan")
+            converged = bool(last_convergence is not None and match_ratio >= ctx.threshold)
+            if converged:
+                lo = seq_len if lo is None else max(lo, seq_len)
+                best_state = self._snapshot_optimization_state(batch_ctx)
+            else:
+                hi = seq_len if hi is None else min(hi, seq_len)
+            steps_done = int(state.steps_taken[0]) if hasattr(state, "steps_taken") else -1
+            print(
+                f"[geometric s{sample_id_counter}] stage {stage_index:>2} {phase:<6} "
+                f"seq_len={seq_len:<5} match={match_ratio:.4f} "
+                f"{'CONVERGED' if converged else 'failed   '} "
+                f"bracket=(lo={lo}, hi={hi}) steps={steps_done}/{self.args.max_optimization_steps_per_sample}",
+                flush=True,
+            )
+            if self.writer is not None:
+                self.writer.add_scalar(f"geometric/seq_len/sample_{sample_id_counter}", seq_len, stage_index)
+                self.writer.add_scalar(f"geometric/match_ratio/sample_{sample_id_counter}", match_ratio, stage_index)
+            stage_index += 1
+            return converged
+
+        def exhausted() -> bool:
+            """Stop the search once the per-sample step budget is spent or the stage cap is hit."""
+            return state.skipped[0] or bool(ctx.max_stages_cap and stage_index >= ctx.max_stages_cap)
+
+        # --- Geometric ramp up: double the prefix length until a stage fails. ---
+        print(
+            f"[geometric s{sample_id_counter}] ramp up from seq_len={min_len} " f"(doubling, max_len={max_len}, step={step})",
+            flush=True,
+        )
+        length = min_len
+        while True:
+            converged = probe(length, phase="ramp")
+            if exhausted():
+                print(f"[geometric s{sample_id_counter}] budget exhausted during ramp; horizon>={lo}", flush=True)
+                return rows
+            if not converged:
+                break  # (lo, hi) now brackets the horizon -> bisect
+            if length >= max_len:
+                print(f"[geometric s{sample_id_counter}] converged at full prefix (seq_len={lo}); done", flush=True)
+                return rows  # converged at the full prefix; nothing left to grow
+            nxt = min(length * 2, max_len)
+            if nxt <= length:
+                nxt = min(length + step, max_len)
+            length = nxt
+
+        # --- Geometric back-off: pin the horizon inside the bracket (lo, hi). ---
+        if lo is None or hi is None:
+            return rows  # never bracketed (e.g. even the shortest prefix failed, or never failed)
+
+        if ctx.geometric_backoff == "linear":
+            # Restore the last converged checkpoint, then grow +1 token per stage (each
+            # warm-started from the previous converged stage) until a stage fails. The
+            # first failure pins the horizon at the last converged length (lo).
+            print(
+                f"[geometric s{sample_id_counter}] bracketed horizon in (lo={lo}, hi={hi}); "
+                f"linear +1 back-off from the converged checkpoint",
+                flush=True,
+            )
+            if best_state is not None:
+                self._restore_optimization_state(batch_ctx, best_state)
+            while lo + 1 < hi:
+                if not probe(lo + 1, phase="linear"):
+                    break  # first failure -> horizon is the last converged length (lo)
+                if exhausted():
+                    print(
+                        f"[geometric s{sample_id_counter}] budget exhausted during linear back-off; horizon>={lo}",
+                        flush=True,
+                    )
+                    return rows
+            print(f"[geometric s{sample_id_counter}] pinned horizon: converged_prefix_len={lo} (hi={hi})", flush=True)
+            return rows
+
+        # Default ("bisect"): restore the last converged state and bisect (lo, hi).
+        print(
+            f"[geometric s{sample_id_counter}] bracketed horizon in (lo={lo}, hi={hi}); " f"bisecting down to step={step}",
+            flush=True,
+        )
+        while hi - lo > step:
+            mid = (lo + hi) // 2
+            if mid <= lo:
+                break
+            # Warm-start the shorter bisection target from the last converged state
+            # (embedding + Adam moments + LR position), not the preceding failed probe.
+            if best_state is not None:
+                self._restore_optimization_state(batch_ctx, best_state)
+            probe(mid, phase="bisect")
+            if exhausted():
+                print(f"[geometric s{sample_id_counter}] budget exhausted during bisection; horizon>={lo}", flush=True)
+                return rows
+
+        print(f"[geometric s{sample_id_counter}] pinned horizon: converged_prefix_len={lo} (hi={hi})", flush=True)
+        return rows
+
+    def _snapshot_optimization_state(self, batch_ctx: _BatchContext) -> dict:
+        """Capture the per-sample embedding params + optimizer/scheduler state (and shared, if any).
+
+        Used by geometric back-off to warm-start each bisection probe from the last
+        *converged* stage. We clone the parameter tensors (the optimizers keep
+        referencing the live ``nn.Parameter`` objects, so ``param.copy_`` on restore
+        is enough) and deep-copy the optimizer/scheduler ``state_dict``s so later
+        steps do not mutate the snapshot.
+        """
+        return {
+            "params": [p.detach().clone() for p in batch_ctx.parametrization.parameters],
+            "shared_params": [p.detach().clone() for p in batch_ctx.parametrization.shared_parameters],
+            "optimizers": [copy.deepcopy(o.state_dict()) for o in batch_ctx.per_sample_optimizers],
+            "schedulers": [copy.deepcopy(s.state_dict()) if s is not None else None for s in batch_ctx.per_sample_schedulers],
+            "shared_optimizer": (
+                copy.deepcopy(batch_ctx.shared_optimizer.state_dict()) if batch_ctx.shared_optimizer is not None else None
+            ),
+            "shared_scheduler": (
+                copy.deepcopy(batch_ctx.shared_scheduler.state_dict()) if batch_ctx.shared_scheduler is not None else None
+            ),
+        }
+
+    def _restore_optimization_state(self, batch_ctx: _BatchContext, snapshot: dict) -> None:
+        """Restore the embedding params + optimizer/scheduler state captured by ``_snapshot_optimization_state``.
+
+        ``optimizer.load_state_dict`` / ``scheduler.load_state_dict`` rewind the Adam
+        moments and the cosine-LR step count to the converged anchor; copying the
+        saved tensors into the live parameters keeps those optimizer param references
+        valid.
+        """
+        with torch.no_grad():
+            for param, saved in zip(batch_ctx.parametrization.parameters, snapshot["params"]):
+                param.copy_(saved)
+            for param, saved in zip(batch_ctx.parametrization.shared_parameters, snapshot["shared_params"]):
+                param.copy_(saved)
+        for optimizer, saved in zip(batch_ctx.per_sample_optimizers, snapshot["optimizers"]):
+            optimizer.load_state_dict(saved)
+        for scheduler, saved in zip(batch_ctx.per_sample_schedulers, snapshot["schedulers"]):
+            if scheduler is not None and saved is not None:
+                scheduler.load_state_dict(saved)
+        if batch_ctx.shared_optimizer is not None and snapshot["shared_optimizer"] is not None:
+            batch_ctx.shared_optimizer.load_state_dict(snapshot["shared_optimizer"])
+        if batch_ctx.shared_scheduler is not None and snapshot["shared_scheduler"] is not None:
+            batch_ctx.shared_scheduler.load_state_dict(snapshot["shared_scheduler"])
+
     def _setup_stage(self, batch_ctx: _BatchContext, seq_len: int, stage_index: int) -> _StageContext:
         """Slice batch tensors to the current stage's seq_len."""
         return _StageContext(
@@ -430,7 +650,12 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         )
 
     def _run_stage_loop(
-        self, batch_ctx: _BatchContext, stage_ctx: _StageContext, ctx: _RunContext, state: ProgressiveSampleStateMachine
+        self,
+        batch_ctx: _BatchContext,
+        stage_ctx: _StageContext,
+        ctx: _RunContext,
+        state: ProgressiveSampleStateMachine,
+        max_steps_this_stage: int,
     ):
         """One stage with optional scheduler-reset retry on non-convergence. Returns (last_loss, last_convergence)."""
         state.reset_stage()
@@ -439,18 +664,18 @@ class ProgressiveCrammingTrainer(BaseTrainer):
 
         while True:
             last_loss, last_convergence, converged = self._run_steps(
-                batch_ctx, stage_ctx, ctx, state, retry=scheduler_reset_used
+                batch_ctx, stage_ctx, ctx, state, retry=scheduler_reset_used, max_steps=max_steps_this_stage
             )
             if converged:
                 return last_loss, last_convergence
             if not self.args.progressive_reset_lr_scheduler_on_non_convergence or scheduler_reset_used:
                 return last_loss, last_convergence
             print(f"Not converged at seq_len={stage_ctx.seq_len}, resetting LR schedulers for non-converged samples...")
-            self._reset_per_sample_optimizers(batch_ctx, ctx, state)
+            self._reset_per_sample_optimizers(batch_ctx, ctx, state, max_steps_this_stage)
             scheduler_reset_used = True
 
     def _reset_per_sample_optimizers(
-        self, batch_ctx: _BatchContext, ctx: _RunContext, state: ProgressiveSampleStateMachine
+        self, batch_ctx: _BatchContext, ctx: _RunContext, state: ProgressiveSampleStateMachine, max_steps: int
     ) -> None:
         """Rebuild optimizers/schedulers for samples still active in the current stage."""
         for j in range(batch_ctx.batch_size):
@@ -462,7 +687,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             else:
                 optimizer, scheduler = self._build_optimizer_and_scheduler(
                     [parameter],
-                    num_training_steps=self.args.max_optimization_steps_per_token,
+                    num_training_steps=max_steps,
                 )
             batch_ctx.per_sample_optimizers[j] = optimizer
             batch_ctx.per_sample_schedulers[j] = scheduler
@@ -474,11 +699,12 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         ctx: _RunContext,
         state: ProgressiveSampleStateMachine,
         retry: bool,
+        max_steps: int,
     ):
         """Inner step loop within a stage. Returns (last_loss, last_convergence, converged_bool)."""
         progress_bar = tqdm(
-            range(self.args.max_optimization_steps_per_token),
-            total=self.args.max_optimization_steps_per_token,
+            range(max_steps),
+            total=max_steps,
             leave=False,
         )
         progress_bar.set_description(f"Stage L={stage_ctx.seq_len}" + (" (retry)" if retry else ""))

@@ -58,6 +58,17 @@ class TableSpec:
     short: bool = False
     sample_id: int = 0
     tablefmt: str = "latex"
+    # stats key for the "Compressed Tokens" column. ``None`` -> the default
+    # ``num_embeddings`` (number of converged stages). Tables that ablate the
+    # progressive step (Δ tokens added per converged stage) set this to
+    # ``"converged_prefix_len"`` so the column reports the largest *converged*
+    # prefix length in actual tokens -- excluding the final non-converged stage,
+    # whose seq_len would otherwise inflate the count by up to Δ.
+    compressed_tokens_key: Optional[str] = None
+    # stats key for an optional trailing "Steps to Converge" column. ``None`` ->
+    # no extra column (every existing table). Set to ``"steps_to_converged"`` to
+    # show the cumulative optimization steps spent to reach the last converged token.
+    steps_to_converge_key: Optional[str] = None
 
 
 _EXP = "artifacts/experiments_progressive"
@@ -369,6 +380,53 @@ TABLES: List[TableSpec] = [
         ),
     ),
     TableSpec(
+        # Tokens-per-stage ablation: vary the progressive step Δ -- the number of
+        # target tokens appended to the prefix each time a stage converges (and then
+        # re-compressed) -- over Δ in {1,2,4,8,16,32,64,128} on SmolLM2-1.7B. Δ=1 is
+        # the main baseline run (grow one token at a time); Δ>1 runs set
+        # --progressive_step Δ and --progressive_min_seq_len Δ so the prefix is always
+        # a multiple of Δ. All rows share the canonical progressive eval config
+        # (pg19_1k / sl_4096 / lr_0.1). Submitted by run_jobs_added_tokens_ablation.py
+        # and driven by watch_ablation.py --launcher run_jobs_added_tokens_ablation.
+        # "Compressed Tokens" uses converged_prefix_len (largest *converged* prefix
+        # length): progressive cramming stops at the first non-converged stage, so the
+        # final stage's seq_len overshoots the achieved length by Δ -- counting only
+        # converged stages avoids that +Δ inflation. The extra "Steps to Converge"
+        # column (steps_to_converged) reports the cumulative optimization steps spent
+        # to reach that last converged token.
+        name="tab:added_tokens_ablation",
+        checkpoints=[
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_2/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_4/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_8/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_16/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_32/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_64/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_step_128/progressive_prefixes",
+            MIDRULE,
+            # Geometric growth: double the prefix per converged stage, then a back-off
+            # phase pins the exact horizon (adaptive added tokens), reaching it in
+            # ~log2 stages. Three back-off strategies are compared side by side:
+            #  * _geomgrow      -- bisect the (lo, hi) gap, probes inherit the preceding
+            #                      (failed, longer) probe's embedding/optimizer state;
+            #  * _geomgrow_wr   -- bisect, but each probe warm-restores the last
+            #                      *converged* embedding + optimizer (Adam) + LR state;
+            #  * _geomgrow_lin  -- warm-restore once, then grow +1 token/stage until a
+            #                      stage fails (linear back-off, mirrors Δ=1 near horizon).
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_geomgrow/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_geomgrow_wr/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_geomgrow_lin/progressive_prefixes",
+        ],
+        names_mapping=(
+            "1 token/stage,2 tokens/stage,4 tokens/stage,8 tokens/stage,"
+            "16 tokens/stage,32 tokens/stage,64 tokens/stage,128 tokens/stage,"
+            "geometric (bisect),geometric (bisect+restore),geometric (linear+restore)"
+        ),
+        compressed_tokens_key="converged_prefix_len",
+        steps_to_converge_key="steps_to_converged",
+    ),
+    TableSpec(
         # Single- vs dual-model compression-head training, across the SmolLM2 width family
         # (135M / 360M / 1.7B; first-4 + last-4 = 8 layers). In the single-model arm one model both
         # compresses and reconstructs; in the dual-model arm a separate compressor and reconstructor
@@ -416,11 +474,7 @@ TABLES: List[TableSpec] = [
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ftw-seq2048-lr1em3_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ftw-seq2048-lr2em3_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
         ],
-        names_mapping=(
-            "seq 512 / lr 0.0005,seq 512 / lr 0.001,"
-            "seq 1024 / lr 0.001 (baseline),"
-            "seq 2048 / lr 0.001,seq 2048 / lr 0.002"
-        ),
+        names_mapping=("seq 512 / lr 0.0005,seq 512 / lr 0.001," "seq 2048 / lr 0.001,seq 2048 / lr 0.002"),
     ),
 ]
 
@@ -533,6 +587,8 @@ def render_table(
         print(f"Loaded trajectory from {checkpoint_path}")
 
     midrules = midrule_indicies or None
+    compressed_tokens_key = spec.compressed_tokens_key or "num_embeddings"
+    steps_key = spec.steps_to_converge_key
 
     print_statistics_table(
         checkpoint_names,
@@ -540,6 +596,8 @@ def render_table(
         midrule_indicies=midrules,
         tablefmt=tablefmt_override or spec.tablefmt,
         short=spec.short,
+        compressed_tokens_key=compressed_tokens_key,
+        steps_key=steps_key,
     )
 
     if save_dir is not None:
@@ -549,6 +607,8 @@ def render_table(
             midrule_indicies=midrules,
             tablefmt="latex",
             short=spec.short,
+            compressed_tokens_key=compressed_tokens_key,
+            steps_key=steps_key,
         )
         os.makedirs(save_dir, exist_ok=True)
         filename = (save_name or table_slug(spec.name)) + ".tex"

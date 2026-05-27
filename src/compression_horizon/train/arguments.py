@@ -183,6 +183,35 @@ class MyTrainingArguments(TrainingArguments):
         default=False,
         metadata={"help": "Reset LR scheduler and continue training when convergence fails (once per stage)."},
     )
+    progressive_geometric_growth: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Progressive_train only. Instead of growing the prefix a fixed progressive_step "
+                "per converged stage, double the prefix length each time a stage converges (a "
+                "geometrically growing number of added tokens), then bisect the gap once a stage "
+                "fails to pin the exact largest converged prefix. Every stage is warm-started from "
+                "the previous converged embedding, so the reported prefix is always fully "
+                "reconstructed; the horizon is found in ~log2 stages instead of one per token. "
+                "Requires per_device_train_batch_size=1."
+            )
+        },
+    )
+    progressive_geometric_backoff: str = field(
+        default="bisect",
+        metadata={
+            "help": (
+                "progressive_geometric_growth only. Back-off strategy once the doubling ramp "
+                "brackets the horizon between the largest converged length (lo) and the smallest "
+                "failed length (hi). 'bisect': restore the last converged state and bisect the "
+                "(lo, hi) gap, O(log gap) probes. 'linear': restore the last converged checkpoint "
+                "and grow the prefix +1 token per stage (each warm-started from the previous "
+                "converged stage) until a stage fails -- the exact horizon, mirroring Delta=1 "
+                "cramming in the horizon neighborhood at the cost of (horizon - lo) probes. "
+                "Choices: bisect, linear."
+            )
+        },
+    )
     save_progressive_artifacts: bool = field(
         default=True,
         metadata={"help": "Whether to persist intermediate compression tokens for each stage."},
