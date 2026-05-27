@@ -260,7 +260,11 @@ class CompressionHeadTrainer(BaseTrainer):
 
                     if base_loss is None:
                         raise RuntimeError("Model did not return loss (labels missing?)")
-                    if torch.isnan(base_loss) or torch.isinf(base_loss):
+                    # base_loss only enters the objective when beta != 0 (see loss assembly below);
+                    # otherwise it is a logged-only diagnostic. An unweighted base_loss going NaN/Inf
+                    # (e.g. an untrained truncated LM head overflowing in bf16) must not abort an
+                    # otherwise-healthy run, so only treat it as fatal when it actually contributes.
+                    if args.compression_head_distill_beta != 0 and (torch.isnan(base_loss) or torch.isinf(base_loss)):
                         print(f"DEBUG: NaN/Inf detected in base_loss at step {update_step}, " f"micro_step {micro_step}")
                         raise RuntimeError(f"NaN/Inf in base_loss: {base_loss.item()}")
 
@@ -312,7 +316,11 @@ class CompressionHeadTrainer(BaseTrainer):
 
                     alpha = args.compression_head_distill_alpha
                     beta = args.compression_head_distill_beta
-                    loss = base_loss * beta + after_loss * alpha
+                    # Only fold base_loss in when weighted: with beta == 0, `base_loss * beta` would be
+                    # nan when base_loss is nan (IEEE nan*0 == nan) and needlessly poison the objective.
+                    loss = after_loss * alpha
+                    if beta != 0:
+                        loss = loss + base_loss * beta
 
                     if torch.isnan(loss) or torch.isinf(loss):
                         raise RuntimeError(f"NaN/Inf in total loss: {loss.item()}")
