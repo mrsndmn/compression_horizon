@@ -1,0 +1,12 @@
+\begin{tabular}{llllll}
+\toprule
+ Model           & Compressed Tokens         & Information Gain        & Trajectory Length       & PCA 99\%                   & Avg Prefix Surprisal (bits/tok)   \\
+\midrule
+ No prefix       & 335.1 {\small $\pm$ 61.3} & 1208 {\small $\pm$ 162} & 1051 {\small $\pm$ 147} & 33.22 {\small $\pm$ 2.82} & --                                \\
+ \midrule
+ P=128           & 361.5 {\small $\pm$ 78.4} & 1255 {\small $\pm$ 240} & 977 {\small $\pm$ 159}  & 33.38 {\small $\pm$ 3.68} & 4.09 {\small $\pm$ 0.63}          \\
+ P=256           & 352.8 {\small $\pm$ 87.9} & 1205 {\small $\pm$ 234} & 967 {\small $\pm$ 176}  & 33.98 {\small $\pm$ 3.8}  & 3.84 {\small $\pm$ 0.51}          \\
+ P=512           & 363.5 {\small $\pm$ 96.8} & 1206 {\small $\pm$ 278} & 1010 {\small $\pm$ 220} & 33.08 {\small $\pm$ 4.84} & 3.73 {\small $\pm$ 0.4}           \\
+ P=1024          & 360.2 {\small $\pm$ 98.3} & 1154 {\small $\pm$ 247} & 1022 {\small $\pm$ 268} & 33.78 {\small $\pm$ 4.94} & 3.62 {\small $\pm$ 0.37}          \\
+\bottomrule
+\end{tabular}

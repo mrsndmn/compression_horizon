@@ -73,7 +73,14 @@ def flatten_embedding(row: Dict[str, Any]) -> np.ndarray:
     return emb.reshape(-1).detach().cpu().numpy()
 
 
-CACHE_VERSION = 2
+# v3 on main (381ed0f) added the derived stats ``converged_prefix_len`` /
+# ``steps_to_converged`` for tab:added_tokens_ablation. Those are computed from the
+# trajectory stages and are NOT written to the cache file, so a v3 cache is identical
+# in *content* to a v2 one. This branch reads only the shared per-sample metrics
+# (trajectory_length, pca_99_var, information_gain, ...), which are unchanged, so it
+# is compatible with v3 caches written by main on the shared baseline dirs. Kept at 3
+# to read them without forcing a rebuild (and for a clean future merge with main).
+CACHE_VERSION = 3
 CACHE_FILENAME = "low_dimensional_cache.json"
 
 

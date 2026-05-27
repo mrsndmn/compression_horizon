@@ -345,7 +345,7 @@ Our main progressive-cramming setup asks a single compression token to reconstru
 
 All runs use the same PG19 sample set, learning rate ($0.1$), and optimization budget as our main SmolLM2-1.7B run, so the only varying factor is the prefix length $P$. Table~\ref{tab:prefix_ablation} reports, for each $P$, the achieved compressed (continuation) token count, the information gain of the compression token measured on top of the prefix context, trajectory length, the number of principal components explaining 99\% of trajectory variance (PCA 99\%), and the average base-LM surprisal over the prefix tokens themselves (bits per token).
 % BEGIN AUTOGEN prefix-ablation-trend (filled from the prefix-ablation eval results)
-The per-prefix-length compressed-token counts are filled in automatically once the prefix-ablation runs complete.
+Concretely, the mean number of perfectly reconstructed (compressed) tokens is 361.5 (p=128), 352.8 (p=256), 363.5 (p=512), 360.2 (p=1024).
 % END AUTOGEN prefix-ablation-trend
 
 \begin{table*}[t]
