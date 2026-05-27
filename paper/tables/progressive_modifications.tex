@@ -1,0 +1,17 @@
+\begin{tabular}{lllll}
+\toprule
+ Model                                         & Compressed Tokens           & Information Gain         & Trajectory Length            & PCA 99\%                    \\
+\midrule
+ Llama-3.1-8B {\small lr=0.1}                  & 1437.6 {\small $\pm$ 380.1} & 4391 {\small $\pm$ 1408} & 6174 {\small $\pm$ 1263}     & 82.78 {\small $\pm$ 9.07}  \\
+ Llama-3.1-8B {\small dim=256} {\small lr=0.1} & 1697.2 {\small $\pm$ 304.2} & 4814 {\small $\pm$ 1731} & 243424 {\small $\pm$ 57429}  & 58.58 {\small $\pm$ 6.4}   \\
+ \midrule
+ pythia-1.4b {\small lr=0.5}                   & 430.4 {\small $\pm$ 64.9}   & 1639 {\small $\pm$ 188}  & 6496 {\small $\pm$ 610}      & 50.06 {\small $\pm$ 3.31}  \\
+ pythia-1.4b {\small dim=256} {\small lr=0.5}  & 500.2 {\small $\pm$ 74.8}   & 1874 {\small $\pm$ 283}  & 598025 {\small $\pm$ 725213} & 67.58 {\small $\pm$ 19.82} \\
+ \midrule
+ SmolLM2-1.7B {\small lr=0.1}                  & 335.1 {\small $\pm$ 61.3}   & 1208 {\small $\pm$ 162}  & 1051 {\small $\pm$ 147}      & 33.22 {\small $\pm$ 2.82}  \\
+ SmolLM2-1.7B {\small dim=256} {\small lr=0.1} & 957.4 {\small $\pm$ 142.5}  & 3271 {\small $\pm$ 309}  & 132821 {\small $\pm$ 44546}  & 30.94 {\small $\pm$ 4.93}  \\
+ \midrule
+ gemma-3-4b-pt {\small lr=0.1}                 & 213.6 {\small $\pm$ 109.2}  & 783 {\small $\pm$ 370}   & 910 {\small $\pm$ 261}       & 30.8 {\small $\pm$ 9.45}   \\
+ gemma-3-4b-pt {\small dim=32} {\small lr=0.1} & 697.4 {\small $\pm$ 165.3}  & 2141 {\small $\pm$ 786}  & 27948 {\small $\pm$ 15706}   & 22.5 {\small $\pm$ 5.14}   \\
+\bottomrule
+\end{tabular}

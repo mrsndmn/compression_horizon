@@ -138,6 +138,45 @@ Notably, lowercasing (which should preserve high-level semantics) induces a mark
 
 
 
+\section{Activation Alignment}
+\label{app:activation_alignment}
+
+To stabilize optimization, we regularize hidden states toward those of the uncompressed sequence.
+Let $\mathbf{h}_l^{\text{cram}}(i)$ denote the hidden state at layer $l$ and token position $i$ when the model is conditioned on the compression embedding, and let $\mathbf{h}_l^{\text{clean}}(i)$ be the corresponding state for the same token position without compression.
+We align activations using cosine distance:
+%
+\begin{equation}
+    \mathcal{L}_{\text{align}} = \frac{1}{n} \sum_{l=1}^{K} \sum_{i=1}^{n} \left( 1 - \frac{\mathbf{h}_l^{\text{cram}}(i) \cdot \mathbf{h}_l^{\text{clean}}(i)}{\|\mathbf{h}_l^{\text{cram}}(i)\| \, \|\mathbf{h}_l^{\text{clean}}(i)\|} \right)
+\end{equation}
+%
+
+where $K$ is the number of layers used for alignment. We align the first $K$ transformer layers (closest to the embedding layer).
+
+The full objective combines reconstruction and alignment:
+
+\begin{equation}
+    \mathcal{L} = \mathcal{L}_{\text{cram}} + \alpha \mathcal{L}_{\text{align}}
+\end{equation}
+
+where $\alpha$ controls alignment strength.
+
+Table~\ref{tab:all_progressive_modifications} studies activation alignment and its interaction with low-dimensional projection.
+Alignment acts as a regularizer: it can significantly reduce trajectory length and PCA 99\% (indicating smoother, more constrained optimization), but it may trade off against raw cramming capacity depending on the model family.
+In particular, for Llama-3.1-8B, alignment increases information gain and token count relative to the baseline, whereas for SmolLM2-1.7B and Pythia-1.4B alignment alone reduces capacity but can be combined with projection to recover part of the loss.
+Across settings, we observe that alignment qualitatively changes attention behavior, often pushing attention hijacking effects toward deeper layers.
+
+\begin{table*}[t]
+    \centering
+    \caption{Progressive cramming variants and key metrics across model families. For each family we report baseline progressive cramming, low-dimensional projection only (``dim''), activation alignment only ($\alpha$, $L$), and their combination.}
+    \label{tab:all_progressive_modifications}
+
+    \begin{small}
+    \input{tables/all_progressive_modifications}
+    \end{small}
+
+\end{table*}
+
+
 \section{Full activation alignment experiments}
 
 Table~\ref{tab:full_activation_alignment_and_low_dim_projections} reports the full sweep over activation alignment strength \(\alpha\), number of aligned layers \(L\), and projection dimension, together with the resulting progressive cramming metrics.

@@ -74,7 +74,9 @@ def flatten_embedding(row: Dict[str, Any]) -> np.ndarray:
 
 
 # v3: stats dict gained ``converged_prefix_len`` and ``steps_to_converged``
-# (used by tab:added_tokens_ablation); old caches lack them and must be rebuilt.
+# (used by tab:added_tokens_ablation). These are derived from per-stage data, not
+# from the cache, so older cache files remain reusable as-is (see
+# load_experiment_cache, which never rebuilds or deletes on a version mismatch).
 CACHE_VERSION = 3
 CACHE_FILENAME = "low_dimensional_cache.json"
 
@@ -95,14 +97,17 @@ def load_experiment_cache(dataset_path: Optional[str]) -> Tuple[Dict[str, Any], 
             if not isinstance(cache_data, dict):
                 return {}, cache_file, False
             cache_version = cache_data.get("cache_version")
+            # Cache formats are compatible supersets across versions (newer versions only
+            # add fields), so reuse whatever is present regardless of version instead of
+            # discarding it. cache_has_metrics() decides per call whether the required
+            # metrics exist and recomputes only what is missing. We deliberately never
+            # delete a cache file, so a cache written by any other generator version stays
+            # on disk and remains available for reuse.
             if cache_version != CACHE_VERSION:
-                if cache_version is None or cache_version < CACHE_VERSION:
-                    try:
-                        os.remove(cache_file)
-                    except OSError as e:
-                        raise ValueError(f"Failed to remove outdated cache {cache_file}: {e}") from e
-                    return {}, cache_file, False
-                raise ValueError(f"Cache version mismatch for {cache_file}: expected {CACHE_VERSION}, got {cache_version}")
+                print(
+                    f"Note: cache {cache_file} has version {cache_version!r}; generator "
+                    f"expects {CACHE_VERSION}. Reading it as-is (no rebuild, not deleted)."
+                )
             return cache_data, cache_file, True
     except (json.JSONDecodeError, IOError, ValueError) as e:
         raise ValueError(f"Failed to load cache file {cache_file}: {e}") from e
