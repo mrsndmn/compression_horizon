@@ -64,6 +64,12 @@ Table~\ref{tab:progressive_for_model_scales} shows that larger models tend to us
 
 \end{table*}
 
+\section{On Gemma's Lower Information Gain}
+\label{app:gemma_softcapping}
+
+Gemma~3 reaches lower information gain at shorter reconstructed lengths than Llama and Pythia. One candidate explanation is logit softcapping \cite{gemma2}, which bounds logit magnitudes and limits how peaked the model's next-token distributions can become: because cramming drives the model toward high-confidence, token-specific predictions over long horizons, capped logits would reduce the separability between the correct token and its close alternatives and damp gradients in the high-confidence regime. This is consistent with Gemma's lower information gain and earlier saturation, but we do not isolate softcapping from other architectural and training-time differences, and leave confirming the mechanism to future work.
+
+
 \section{Prefix tuning}
 
 Prefix tuning introduces a separate trainable prefix embedding at each transformer layer, avoiding the per-layer forward-pass bottleneck of soft-prompt setups such as full or progressive cramming. The trade-off is parameter cost: it requires $L$ times more trainable embeddings, where $L$ is the number of hidden layers in the LLM.

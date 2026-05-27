@@ -429,8 +429,7 @@ For each sample, we run PCA on the stage embeddings $\{\mathbf{e}^{(k)}\}_{k=1}^
 We report this quantity averaged over samples.
 Across model families, trajectories are well-approximated by low-dimensional structure: a modest number of principal components explains 99\% of the trajectory variance, even when hundreds (or thousands) of tokens are reconstructed (Table~\ref{tab:progressive_modifications}).
 
-Notably, Gemma~3 achieves lower information gain at shorter reconstructed lengths than Llama and Pythia, consistent with stronger architectural or training-time constraints (e.g., logits softcapping \cite{gemma2}).
-One plausible mechanism is that logit softcapping limits the model's ability to produce extremely peaked next-token distributions. Since cramming optimization implicitly pushes the model toward high-confidence, token-specific predictions over long horizons, bounding logit magnitudes can reduce the maximum separability between the correct token and close alternatives and can damp gradients in the high-confidence regime. Both effects may make it harder to reach perfect autoregressive reconstruction with a fixed optimization budget, yielding lower information gain and earlier saturation in reconstructed length.
+Notably, Gemma~3 achieves lower information gain at shorter reconstructed lengths than Llama and Pythia, consistent with architectural or training-time constraints such as logit softcapping \cite{gemma2} (Appendix~\ref{app:gemma_softcapping}).
 
 Figure~\ref{fig:visual_abstract_optimization_trajectory_with_good_accuracy} visualizes a single trajectory projected onto the first two principal components.
 As the reconstructed prefix grows, the region of embeddings that attains near-perfect teacher-forced reconstruction contracts, suggesting that the optimization landscape becomes increasingly constrained at longer lengths.
