@@ -50,6 +50,13 @@ done
 # trajectory datasets) before this will reflect new runs.
 "$PY" scripts/paper/tables/solution_diversity.py --save
 
+# --- Trajectory cluster-structure: dwelling basins vs heavy-tailed wandering --
+# tab:trajectory_cluster_structure (+ _lr) and paper/figures/trajectory_cluster_dwelling_vs_scale.pdf.
+# Renders from the per-run summary.json caches written by
+# scripts/analyze_trajectory_clusters.py; regenerate those once per run (CPU only;
+# reads the saved trajectories) before this will reflect new runs.
+"$PY" scripts/paper/tables/trajectory_clusters.py --save --figure
+
 # --- Full vs. progressive cramming -------------------------------------------
 # tab:full_vs_progressive
 "$PY" scripts/paper/tables/full_cramming_table.py --save-dir paper/tables

@@ -485,3 +485,44 @@ reads only already-saved trajectories and adds no training cost.
 \vskip -0.1in
 \end{table*}
 
+
+\section{Trajectory Shape: Dwelling Basins vs.\ Heavy-Tailed Wandering}
+\label{app:trajectory_clusters}
+
+Appendix~\ref{app:solution_diversity} establishes that a trajectory's low dimensionality is a property of one warm-started \emph{path}, not of an intrinsic low-dimensional solution manifold. This raises a complementary question about that same path: what does it look like \emph{geometrically}? Is it a smooth low-dimensional curve, or a punctuated walk that dwells in a region and then leaps to a far-apart one---the ``disconnected local-minima basins'' picture suggested by the variable per-token cramming cost of Appendix~\ref{app:surprisal_steps}?
+
+\paragraph{Unit and method.} For each sample the converged embeddings $\{e^{(k)}\}_{k=1}^{n}$ (one per growing-prefix stage) form an \emph{ordered} point cloud; we analyse it in its own top-$k$ PCA subspace ($k$ = PCA 99\%, the same low-dimensional anchor as Table~\ref{tab:progressive_for_model_scales}). We summarise the consecutive jumps $d_k = \|e^{(k)}-e^{(k-1)}\|$ and calibrate every statistic against three nulls passed through the identical pipeline. The \emph{smooth-curve} null (a Gaussian process with an RBF kernel) fixes what an evenly traced low-dimensional curve looks like: its jump gap-ratio (max\,/\,median jump) is $\approx 1$, so a larger real value means a gappy, heavy-tailed jump distribution. The \emph{i.i.d.\ random-walk} null asks whether jumps are heavier-tailed than memoryless diffusion. The decisive \emph{jump-shuffle} null randomly reorders the real jump vectors and re-integrates them: this holds the jump-\emph{size} distribution exactly fixed and randomises only their order, so the lag-1 autocorrelation of jump magnitudes $r_1$ is $\approx 0$ by construction. A real $r_1$ above the shuffle band therefore means small and large jumps are bunched \emph{in order}---runs of small steps punctuated by occasional large ones---which is precisely the dwell-then-leap signature of moving between discrete basins, and cannot be reproduced by the jump-size distribution alone. We call a sample ``dwelling'' when its $r_1$ exceeds the shuffle-null $95$th percentile; ``Dwelling \%'' is the fraction of samples that qualify. The analysis reads only already-saved trajectories (\texttt{scripts/analyze\_trajectory\_clusters.py}) and adds no training cost.
+
+\paragraph{Trajectories are gappy at every scale, but only dwell at large scale.} Two facts hold for every run (Table~\ref{tab:trajectory_cluster_structure}): the trajectories are low-dimensional (PCA 99\% of $13$--$84$) yet decisively \emph{not} smooth curves (jump gap-ratio $7$--$37$ versus a smooth-curve null of $\approx 1.1$--$1.3$). What changes with scale is whether that gappiness reflects \emph{genuine dwelling}. At SmolLM2-135M the jump autocorrelation is indistinguishable from the shuffle null ($r_1 = +0.01$; only $10\%$ of samples dwelling): the gaps are fully explained by a heavy-tailed distribution of jump \emph{sizes}, i.e.\ heavy-tailed wandering rather than discrete basins. The signal then rises monotonically with model size---$+0.09$ at 360M ($30\%$), $+0.11$ at 1.7B ($62\%$)---up to Llama-3.1-8B, where $r_1 = +0.44$ and \emph{every} sample dwells (Figure~\ref{fig:trajectory_cluster_dwelling_vs_scale}). The strong ``disconnected far-apart basins'' reading of the trajectory is thus \emph{false at small scale and increasingly, then completely, true at large scale}, with basins that are well separated (mean inter- vs.\ intra-cluster distance up to ${\approx}70\times$).
+
+\paragraph{Learning rate tunes the dwelling, non-monotonically.} Holding the model fixed (SmolLM2-1.7B; Table~\ref{tab:trajectory_cluster_structure_lr}), the dwelling signal peaks at the \emph{middle} step size: $r_1 = +0.15,\,+0.24,\,+0.13$ ($70\%,\,100\%,\,80\%$ dwelling) at learning rates $0.1,\,0.5,\,1.0$. Too-small steps barely separate successive basins, while too-large steps blur the dwell-and-leap structure; the intermediate rate traces the cleanest staircase. Consistent with the displacement-knob role of the learning rate in Appendix~\ref{app:solution_diversity}, larger rates also inflate PCA 99\% and the overall gappiness.
+
+\paragraph{Relation to the solution set.} The two analyses are complementary cuts of the same object. Appendix~\ref{app:solution_diversity} shows the \emph{valid-solution set} for a prefix is wide and high-dimensional and that any one trajectory is a thin low-dimensional slice of it; here we add that the slice itself is not a smooth curve but, at sufficient scale, a punctuated walk through discrete, well-separated minima. Low dimensionality and discreteness coexist. Two caveats bound the claim. The smooth-curve null alone is a weak bar---every run clears it---so it would misleadingly label all models ``clustered''; it is the jump-shuffle autocorrelation that separates genuine dwelling from heavy-tailed wandering, and the component-count and inter/intra-distance figures (partly circular with the clustering rule) are corroborative rather than primary. And sample counts differ: only SmolLM2-1.7B and Llama-3.1-8B have $50$-sample runs, while the 360M model and the 1.7B learning-rate sweep use the $10$-sample runs (shown in the $N$ column); the monotone scale trend in $r_1$ is robust to this difference.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.78\linewidth]{trajectory_cluster_dwelling_vs_scale.pdf}
+    \caption{The dwell-and-jump basin signature emerges with model scale. Bars show the per-sample mean lag-1 autocorrelation of jump magnitudes $r_1$ (the order-sensitive dwelling signal); the dashed line is the jump-shuffle null ($r_1 \approx 0$ by construction). Annotations give the fraction of samples whose $r_1$ beats the shuffle null. At 135M trajectories are gappy but unordered (heavy-tailed wandering); by Llama-3.1-8B every sample shows ordered dwell-and-leap structure.}
+    \label{fig:trajectory_cluster_dwelling_vs_scale}
+\end{figure}
+
+\begin{table*}[t]
+    \centering
+    \caption{Trajectory cluster-structure across model scale (progressive cramming, PG19, sequence length $4096$, learning rate $0.1$). For each per-sample converged-embedding trajectory we report, in its top-$k$ PCA subspace ($k$ = PCA 99\%): the jump gap-ratio (max\,/\,median consecutive jump; the smooth-curve-null mean is in parentheses, $\approx 1$ for a smooth curve), the lag-1 autocorrelation of jump magnitudes $r_1$ (with the jump-shuffle null in parentheses, $\approx 0$ by construction), and ``Dwelling \%'', the fraction of samples whose $r_1$ beats the shuffle-null $95$th percentile. All runs are gappy and low-dimensional, but only larger models show genuine, order-dependent dwelling (large $r_1$). $N$ is the number of PG19 samples.}
+    \label{tab:trajectory_cluster_structure}
+    \begin{small}
+    \input{tables/trajectory_cluster_structure}
+    \end{small}
+\vskip -0.1in
+\end{table*}
+
+\begin{table}[t]
+    \centering
+    \caption{Learning-rate sweep of trajectory cluster-structure on SmolLM2-1.7B ($10$-sample runs; columns as in Table~\ref{tab:trajectory_cluster_structure}). The dwelling signal $r_1$ is non-monotonic in the learning rate, peaking at the intermediate rate $0.5$ ($100\%$ of samples dwelling) and weakening at both $0.1$ and $1.0$.}
+    \label{tab:trajectory_cluster_structure_lr}
+    \begin{small}
+    \input{tables/trajectory_cluster_structure_lr}
+    \end{small}
+\vskip -0.1in
+\end{table}
+

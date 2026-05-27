@@ -1,0 +1,156 @@
+"""Generate the trajectory cluster-structure tables (``tab:trajectory_cluster_structure*``).
+
+Companion to the solution-diversity analysis (Appendix~\\ref{app:solution_diversity}): that section
+shows a single progressive-cramming trajectory is low-dimensional because it is one warm-started
+*path*, not an intrinsic low-dim solution manifold. Here we characterise the *shape* of that path --
+is it a smooth low-dim curve, or a punctuated "dwell-and-jump" walk through disconnected basins?
+
+For each run we read the per-sample converged-embedding trajectory and, against three nulls, ask:
+  * smooth-curve null (Gaussian-process): is it more gapped than a smooth curve? (jump gap-ratio)
+  * i.i.d. random-walk null: are jumps heavier-tailed than diffusion?
+  * jump-shuffle null (decisive): does structure survive fixing the jump-size distribution? The
+    lag-1 autocorrelation of jump magnitudes is ~0 under the shuffle by construction, so a real
+    value above it means small/large jumps are bunched in ORDER -- genuine dwelling.
+
+This script only *renders* the LaTeX from the JSON caches written by
+``scripts/analyze_trajectory_clusters.py`` (one ``summary.json`` per run under
+``artifacts/analysis/trajectory_clusters_135m/<run>/``). Regenerate those caches first by running
+that script on each run (CPU only); then ``make tables`` re-renders without recomputation::
+
+    PYTHONPATH=./src python scripts/analyze_trajectory_clusters.py --run_dir <run>   # once per run
+    PYTHONPATH=./src:. python scripts/paper/tables/trajectory_clusters.py --save      # cheap re-render
+"""
+
+import argparse
+import json
+from pathlib import Path
+from typing import List, Tuple
+
+from tabulate import tabulate
+
+from compression_horizon.utils import hlines_to_booktabs
+
+_ANALYSIS = "artifacts/analysis/trajectory_clusters_135m"
+
+# Model-scale trend (all at lr=0.1). Sample counts differ (only 1.7B and 8B have 50-sample runs);
+# the N column makes that explicit.
+SCALE_ROWS: List[Tuple[str, str]] = [
+    ("SmolLM2-135M", "sl_4096_SmolLM2-135M_lr_0.1"),
+    ("SmolLM2-360M", "sl_4096_SmolLM2-360M_lr_0.1"),
+    ("SmolLM2-1.7B", "sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1"),
+    ("Llama-3.1-8B", "sl_4096_Meta-Llama-3.1-8B_ds_pg19_1k_limit_50_lr_0.1"),
+]
+
+# Learning-rate sweep (SmolLM2-1.7B, the 10-sample legacy runs, apples-to-apples across LR).
+LR_ROWS: List[Tuple[str, str]] = [
+    ("SmolLM2-1.7B {\\small lr=0.1}", "sl_4096_SmolLM2-1.7B_lr_0.1"),
+    ("SmolLM2-1.7B {\\small lr=0.5}", "sl_4096_SmolLM2-1.7B_lr_0.5"),
+    ("SmolLM2-1.7B {\\small lr=1.0}", "sl_4096_SmolLM2-1.7B_lr_1.0"),
+]
+
+
+def load_aggregate(run_name: str) -> dict:
+    path = Path(_ANALYSIS) / run_name / "summary.json"
+    if not path.exists():
+        raise SystemExit(
+            f"missing cache: {path}\n"
+            f"Run it first:  PYTHONPATH=./src python scripts/analyze_trajectory_clusters.py "
+            f"--run_dir artifacts/experiments_progressive/{run_name}"
+        )
+    return json.loads(path.read_text())["aggregate"]
+
+
+def _sgn(x: float) -> str:
+    """Signed 2-decimal format, collapsing -0.00 to +0.00."""
+    return f"{0.0 if abs(x) < 0.005 else x:+.2f}"
+
+
+def _row(display: str, agg: dict, latex: bool) -> list:
+    gap = (
+        f"{agg['gap_ratio_real_mean']:.1f} {{\\small ({agg['gap_ratio_null_mean']:.1f})}}"
+        if latex
+        else f"{agg['gap_ratio_real_mean']:.1f} ({agg['gap_ratio_null_mean']:.1f})"
+    )
+    r_acf, s_acf = _sgn(agg["jump_autocorr_real_mean"]), _sgn(agg["jump_autocorr_shuffle_mean"])
+    acf = f"{r_acf} {{\\small ({s_acf})}}" if latex else f"{r_acf} ({s_acf})"
+    dwell = f"{agg['fraction_dwelling_basins'] * 100:.0f}\\%" if latex else f"{agg['fraction_dwelling_basins'] * 100:.0f}%"
+    return [display, str(agg["n_samples"]), f"{agg['pca99_mean']:.0f}", gap, acf, dwell]
+
+
+def format_table(rows_spec: List[Tuple[str, str]], tablefmt: str = "latex") -> str:
+    latex = tablefmt == "latex"
+    rows = [_row(disp, load_aggregate(run), latex) for disp, run in rows_spec]
+    headers = [
+        "Model",
+        "$N$" if latex else "N",
+        "PCA 99\\%" if latex else "PCA99",
+        "Gap-ratio {\\small (null)}" if latex else "Gap-ratio (null)",
+        "Jump acf $r_1$ {\\small (shuffle)}" if latex else "Jump acf r1 (shuffle)",
+        "Dwelling \\%" if latex else "Dwelling %",
+    ]
+    fmt = "latex_raw" if latex else (tablefmt or "github")
+    out = tabulate(rows, headers=headers, tablefmt=fmt, colalign=["left"] * len(headers))
+    return hlines_to_booktabs(out) if latex else out
+
+
+def make_figure(out_path: Path) -> None:
+    """Bar plot of the dwelling signal (jump autocorrelation) vs model scale, with the shuffle null."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    aggs = [load_aggregate(run) for _, run in SCALE_ROWS]
+    labels = [d for d, _ in SCALE_ROWS]
+    acf = [a["jump_autocorr_real_mean"] for a in aggs]
+    shuf = [a["jump_autocorr_shuffle_mean"] for a in aggs]
+    dwell = [a["fraction_dwelling_basins"] * 100 for a in aggs]
+    x = range(len(labels))
+
+    fig, ax = plt.subplots(figsize=(5.2, 3.2))
+    ax.bar(x, acf, color="#4477aa", width=0.6, label="real (per-sample mean)")
+    ax.axhline(0.0, color="0.5", lw=0.8)
+    ax.plot(x, shuf, "o--", color="#cc3311", ms=4, lw=1, label="jump-shuffle null ($\\approx 0$)")
+    for xi, (a, d) in enumerate(zip(acf, dwell)):
+        ax.text(xi, a + 0.012, f"{d:.0f}\\% dwell", ha="center", va="bottom", fontsize=7)
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(labels, rotation=15, ha="right", fontsize=8)
+    ax.set_ylabel("jump-magnitude autocorrelation $r_1$", fontsize=9)
+    ax.set_title("Dwell-and-jump basin structure emerges with scale", fontsize=9)
+    ax.legend(fontsize=7, loc="upper left")
+    ax.set_ylim(-0.05, max(acf) * 1.25 + 0.05)
+    fig.tight_layout()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path)
+    plt.close(fig)
+    print(f"Saved figure to {out_path}")
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--tablefmt", default="latex", help="tabulate format for stdout preview (default: latex->github)")
+    ap.add_argument("--save", action="store_true", help="Write the LaTeX tables to <save-dir>/<name>.tex")
+    ap.add_argument("--save-dir", default="paper/tables")
+    ap.add_argument("--figure", action="store_true", help="Also render the scale figure PDF to paper/figures/")
+    args = ap.parse_args()
+
+    preview_fmt = "github" if args.tablefmt == "latex" else args.tablefmt
+    print("== Model-scale trend (tab:trajectory_cluster_structure) ==")
+    print(format_table(SCALE_ROWS, tablefmt=preview_fmt))
+    print("\n== Learning-rate sweep (tab:trajectory_cluster_structure_lr) ==")
+    print(format_table(LR_ROWS, tablefmt=preview_fmt))
+
+    if args.save:
+        out_dir = Path(args.save_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for name, spec in (("trajectory_cluster_structure", SCALE_ROWS), ("trajectory_cluster_structure_lr", LR_ROWS)):
+            tex = format_table(spec, tablefmt="latex")
+            (out_dir / f"{name}.tex").write_text(tex + "\n", encoding="utf-8")
+            print(f"Saved 'tab:{name}' to {out_dir / f'{name}.tex'}")
+
+    if args.figure:
+        make_figure(Path("paper/figures/trajectory_cluster_dwelling_vs_scale.pdf"))
+
+
+if __name__ == "__main__":
+    main()
