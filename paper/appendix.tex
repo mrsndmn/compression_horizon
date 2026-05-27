@@ -381,8 +381,7 @@ The prefix becomes more predictable as it lengthens: the base model's average su
     \caption{Fixed-prefix progressive cramming ablation on SmolLM2-1.7B. The model attends to a fixed, uncompressed prefix of $P$ real tokens and crams only the continuation that follows; the $P=0$ row is the no-prefix reference. All rows use the identical progressive-cramming eval (PG19, $\mathrm{lr}=0.1$). ``Compressed Tokens'' is the achieved continuation length $n$ (excluding the prefix), ``Trajectory Length'' is $L_{\text{traj}}$, ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance, and ``Avg Prefix Surprisal'' is the base-LM next-token cross-entropy over the prefix tokens, in bits per token.}
     \label{tab:prefix_ablation}
     \begin{small}
-    % TODO: tables/prefix_ablation.tex not generated in this worktree; restore once the prefix-ablation runs land.
-    % \input{tables/prefix_ablation}
+    \input{tables/prefix_ablation}
     \end{small}
 \vskip -0.1in
 \end{table*}
