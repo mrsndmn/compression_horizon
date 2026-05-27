@@ -69,6 +69,9 @@ class TableSpec:
     # no extra column (every existing table). Set to ``"steps_to_converged"`` to
     # show the cumulative optimization steps spent to reach the last converged token.
     steps_to_converge_key: Optional[str] = None
+    # Opt-in extra column: average base-LM prefix surprisal (bits/token). Only meaningful for the
+    # fixed-prefix progressive ablation; leave False for every other table.
+    prefix_surprisal: bool = False
 
 
 _EXP = "artifacts/experiments_progressive"
@@ -367,17 +370,18 @@ TABLES: List[TableSpec] = [
         name="tab:width_ablation",
         checkpoints=[
             f"{_EXP}/sl_4096_SmolLM2-135M-firstlast4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
-            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-135M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            # Q-Former width-ablation arm commented out (qformer width experiments hidden):
+            # f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-135M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
             MIDRULE,
             f"{_EXP}/sl_4096_SmolLM2-360M-firstlast4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
-            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-360M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            # f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-360M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
             MIDRULE,
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ftw_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
-            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+            # f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_1024_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
         ],
-        names_mapping=(
-            "135M (causal-LM),135M (Q-Former)," "360M (causal-LM),360M (Q-Former)," "1.7B (causal-LM),1.7B (Q-Former)"
-        ),
+        # Q-Former labels commented out alongside the rows above:
+        # names_mapping=("135M (causal-LM),135M (Q-Former),360M (causal-LM),360M (Q-Former),1.7B (causal-LM),1.7B (Q-Former)"),
+        names_mapping="135M (causal-LM),360M (causal-LM),1.7B (causal-LM)",
     ),
     TableSpec(
         # Tokens-per-stage ablation: vary the progressive step Δ -- the number of
@@ -426,35 +430,36 @@ TABLES: List[TableSpec] = [
         compressed_tokens_key="converged_prefix_len",
         steps_to_converge_key="steps_to_converged",
     ),
-    TableSpec(
-        # Single- vs dual-model compression-head training, across the SmolLM2 width family
-        # (135M / 360M / 1.7B; first-4 + last-4 = 8 layers). In the single-model arm one model both
-        # compresses and reconstructs; in the dual-model arm a separate compressor and reconstructor
-        # are trained (--separate_reconstructor_model) so the compression and reconstruction
-        # gradients never overlap on shared weights. Both arms use the same Q-Former head
-        # (num_queries=1, layers=3, heads=8), lr 1e-3, distill alpha 1.0 / beta 0.0, fineweb-edu.
-        # Unlike tab:width_ablation (uniform seq_1024), each width trains at its OWN sequence length
-        # (135M @ 64, 360M @ 128, 1.7B @ 512) -- the regime where the eval_paraphrase comparison
-        # suggested decoupling might help -- so the paths carry seq_{64,128,512}. Heads + evals from
-        # run_jobs_compression_head_width.py (--stage train / --stage eval); each row is the
-        # progressive eval (pg19_1k / sl_4096 / lr_0.1) seeded via compression_head_forward.
-        name="tab:width_dualmodel_ablation",
-        checkpoints=[
-            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-135M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_64_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
-            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-135M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_64_lr_0.001_a_1.0_b_0.0_unfrozen_dualmodel_v3/progressive_prefixes",
-            MIDRULE,
-            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-360M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_128_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
-            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-360M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_128_lr_0.001_a_1.0_b_0.0_unfrozen_dualmodel_v3/progressive_prefixes",
-            MIDRULE,
-            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_512_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
-            f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_512_lr_0.001_a_1.0_b_0.0_unfrozen_dualmodel_v3/progressive_prefixes",
-        ],
-        names_mapping=(
-            "135M (single-model),135M (dual-model),"
-            "360M (single-model),360M (dual-model),"
-            "1.7B (single-model),1.7B (dual-model)"
-        ),
-    ),
+    # Q-Former single-vs-dual-model ablation commented out (qformer width experiments hidden):
+    # TableSpec(
+    #     # Single- vs dual-model compression-head training, across the SmolLM2 width family
+    #     # (135M / 360M / 1.7B; first-4 + last-4 = 8 layers). In the single-model arm one model both
+    #     # compresses and reconstructs; in the dual-model arm a separate compressor and reconstructor
+    #     # are trained (--separate_reconstructor_model) so the compression and reconstruction
+    #     # gradients never overlap on shared weights. Both arms use the same Q-Former head
+    #     # (num_queries=1, layers=3, heads=8), lr 1e-3, distill alpha 1.0 / beta 0.0, fineweb-edu.
+    #     # Unlike tab:width_ablation (uniform seq_1024), each width trains at its OWN sequence length
+    #     # (135M @ 64, 360M @ 128, 1.7B @ 512) -- the regime where the eval_paraphrase comparison
+    #     # suggested decoupling might help -- so the paths carry seq_{64,128,512}. Heads + evals from
+    #     # run_jobs_compression_head_width.py (--stage train / --stage eval); each row is the
+    #     # progressive eval (pg19_1k / sl_4096 / lr_0.1) seeded via compression_head_forward.
+    #     name="tab:width_dualmodel_ablation",
+    #     checkpoints=[
+    #         f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-135M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_64_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+    #         f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-135M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_64_lr_0.001_a_1.0_b_0.0_unfrozen_dualmodel_v3/progressive_prefixes",
+    #         MIDRULE,
+    #         f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-360M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_128_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+    #         f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-360M-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_128_lr_0.001_a_1.0_b_0.0_unfrozen_dualmodel_v3/progressive_prefixes",
+    #         MIDRULE,
+    #         f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_512_lr_0.001_a_1.0_b_0.0_unfrozen_v3/progressive_prefixes",
+    #         f"{_EXP}/progeval_chfwd_ch_head_SmolLM2-1.7B-firstlast4_qformer_q1_l3_h8_ds_fineweb-edu_seq_512_lr_0.001_a_1.0_b_0.0_unfrozen_dualmodel_v3/progressive_prefixes",
+    #     ],
+    #     names_mapping=(
+    #         "135M (single-model),135M (dual-model),"
+    #         "360M (single-model),360M (dual-model),"
+    #         "1.7B (single-model),1.7B (dual-model)"
+    #     ),
+    # ),
     TableSpec(
         # Finetune-sequence-length ablation: does the causal-LM finetuning sequence length affect the
         # compression measured afterward? The width ablation's 1.7B arm finetunes SmolLM2-1.7B-firstlast4
@@ -475,6 +480,29 @@ TABLES: List[TableSpec] = [
             f"{_EXP}/sl_4096_SmolLM2-1.7B-firstlast4-ftw-seq2048-lr2em3_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
         ],
         names_mapping=("seq 512 / lr 0.0005,seq 512 / lr 0.001," "seq 2048 / lr 0.001,seq 2048 / lr 0.002"),
+    ),
+    TableSpec(
+        # Fixed-prefix progressive cramming ablation: SmolLM2-1.7B is shown a fixed, uncompressed
+        # prefix of P real tokens that it attends to but never crams; it then progressively crams the
+        # continuation that follows. As P grows we read off how the cramming task changes -- compressed
+        # tokens (the converged continuation horizon, excluding the prefix), information gain of the
+        # compression token (measured on top of the prefix context), trajectory length, and PCA-99%.
+        # The extra "Avg Prefix Surprisal" column reports the base-LM surprisal (bits/token) over the
+        # prefix itself. The "No prefix" row is the existing P=0 baseline run (shared with the other
+        # SmolLM2-1.7B ablation tables). Runs launched by scripts/jobs/run_jobs_prefix_ablation.py and
+        # driven by scripts/jobs/watch_ablation.py --launcher run_jobs_prefix_ablation. All rows share
+        # the canonical progressive eval config (pg19_1k / limit 50 / sl_4096 / lr 0.1).
+        name="tab:prefix_ablation",
+        checkpoints=[
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_prefix_128/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_prefix_256/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_prefix_512/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1_prefix_1024/progressive_prefixes",
+        ],
+        names_mapping="No prefix,P=128,P=256,P=512,P=1024",
+        prefix_surprisal=True,
     ),
 ]
 
@@ -598,6 +626,7 @@ def render_table(
         short=spec.short,
         compressed_tokens_key=compressed_tokens_key,
         steps_key=steps_key,
+        show_prefix_surprisal=spec.prefix_surprisal,
     )
 
     if save_dir is not None:
@@ -609,6 +638,7 @@ def render_table(
             short=spec.short,
             compressed_tokens_key=compressed_tokens_key,
             steps_key=steps_key,
+            show_prefix_surprisal=spec.prefix_surprisal,
         )
         os.makedirs(save_dir, exist_ok=True)
         filename = (save_name or table_slug(spec.name)) + ".tex"
