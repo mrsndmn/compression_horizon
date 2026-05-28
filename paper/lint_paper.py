@@ -136,6 +136,9 @@ SAMPLE_COUNT_ALLOWLIST = {
     # Benchmark table: its "samples" are HellaSwag/ARC-Easy instances, not PG19
     # cramming samples, so the 50-sample rule does not apply.
     "semantic_evaluation": "benchmark instances (HellaSwag/ARC), not PG19 samples",
+    # Hand-authored benchmark table (tables/manual/): token-normalized HellaSwag/
+    # ARC accuracy under different scoring strategies, not PG19 cramming samples.
+    "semantic_benchmarks_token": "benchmark instances (HellaSwag/ARC), not PG19 samples",
     # TODO: remove once the 50-sample full-cramming re-run lands. The "Full"
     # baseline currently exists only at limit_10, so this table is 10-sample.
     "full_vs_progressive": "pending 50-sample full-cramming re-run",

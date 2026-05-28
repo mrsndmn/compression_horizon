@@ -500,6 +500,21 @@ This highlights a key limitation of using reconstruction accuracy alone: perfect
 Appendix~\ref{app:imperfect_reconstruction} further confirms that this drop reflects the compression embedding itself rather than residual reconstruction errors: because HellaSwag and ARC score fixed context--continuation pairs without regenerating the prefix, restricting the evaluation to perfectly reconstructed instances leaves accuracy essentially unchanged.
 This degradation becomes a complete collapse under a \emph{generative} benchmark: on 5-shot MMLU (Appendix~\ref{app:mmlu}, Table~\ref{tab:rebuttle_mmlu}), compressing the full prefix drives accuracy to near zero with no valid parseable answers, while a random control embedding leaves accuracy nearly intact -- confirming that the degradation is specifically caused by the optimized compression embedding rather than by conditioning on an out-of-distribution token.
 
+\paragraph{Where the information is lost.}
+We further localize the degradation by varying which token logits enter the likelihood score on SmolLM2-1.7B, over perfectly reconstructed instances (Table~\ref{tab:semantic_benchmarks_token}).
+Replacing the prefix with its compression embedding while scoring the full context plus the candidate ending drops HellaSwag from $52.4\%$ to $36.5\%$ and ARC-Challenge from $36.7\%$ to $28.6\%$.
+Scoring only the answer-ending tokens -- which do not require reading the compressed prefix -- recovers part of the gap (HellaSwag $40.7\%$), and replacing the context entirely with the embedding (``compression only'') is worst ($34.6\%$ / $22.9\%$).
+Across every scoring strategy the compressed conditions remain well below baseline, reinforcing that faithful reconstruction does not translate into usable downstream semantics.
+
+\begin{table}[t]
+    \centering
+    \caption{Token-normalized accuracy (\%) on HellaSwag, ARC-Easy (ARC-E), and ARC-Challenge (ARC-C) for SmolLM2-1.7B under different likelihood-scoring strategies, over perfectly reconstructed instances. \emph{Baseline} uses the original prefix; \emph{Compression} replaces the prefix with its crammed embedding; \emph{compression only} drops the prefix and keeps only the embedding. ``context $+$ ending'' scores all tokens, while ``ending only'' scores just the candidate-continuation tokens.}
+    \label{tab:semantic_benchmarks_token}
+    \begin{small}
+    \input{tables/manual/semantic_benchmarks_token}
+    \end{small}
+\end{table}
+
 
 % =============================================================================
 \section{Causal Analysis: Attention Mass vs. Causal Importance}
