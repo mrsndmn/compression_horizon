@@ -596,6 +596,27 @@ The same collapse extends beyond likelihood-based scoring to a \emph{generative}
 
 
 % =============================================================================
+\section{Compression Capacity Scales with Depth and Model Size}
+\label{sec:depth_size}
+% =============================================================================
+
+How much a single embedding can cram is not fixed: it is bounded by the capacity of the frozen model that must reconstruct from it. We probe that bound directly by truncating pretrained models to their first $N$ decoder layers, repairing the cut with a short causal-LM finetune on fineweb-edu, and running the standard progressive-cramming evaluation (PG19, $50$ samples, $\mathrm{lr}=0.1$) on each truncated checkpoint. Sweeping $N \in \{1,2,4,8\}$ and the full model across five families that span $1.7$--$8$B parameters and $24$--$36$ layers (Table~\ref{tab:layer_ablation}) separates two axes of capacity: network \emph{depth} (within a family) and model \emph{size} (across families at a matched truncated depth).
+
+Both axes drive compression monotonically, and they compound. \textbf{Depth:} within every family the number of perfectly crammed tokens rises with retained depth---roughly doubling per layer-doubling (e.g.\ Qwen3-8B: $119 \to 180 \to 304 \to 625$ at first-$1$/$2$/$4$/$8$). \textbf{Size:} at any matched truncated depth the larger model crams strictly more (Qwen3-8B $>$ Qwen3-4B $>$ SmolLM3-3B at every $N$). The two effects reinforce one another: with enough width a shallow truncation already recovers most of the full-model capacity---the $8$-of-$36$-layer Qwen3-8B and Qwen3-4B reach ${\approx}81\%$ of their untruncated references, and the $8$-layer Qwen3-8B exceeds the \emph{full} $36$-layer Qwen3-4B. Capacity is thus jointly governed by depth and width---intuitively, depth unpacks the crammed code while width stores it---so a deficit in one can be partly offset by a surplus in the other.
+
+These trends are robust to the design choices detailed in the appendix: the same monotone-in-depth behavior holds for alternative truncation schemes (keeping the first \emph{and} last layers, or only the last layers; Appendix~\ref{app:layer_ablation}), when only width is varied at a fixed depth within one family (Appendix~\ref{app:width_ablation}), and when each truncated model is recovered with a learned compression head instead of a plain finetune (Appendix~\ref{app:ch_qformer_layer_ablation}).
+
+\begin{table*}[t]
+    \centering
+    \caption{Compression capacity vs.\ network depth and model size. Each pretrained model (name annotated with its total decoder-layer count, e.g.\ ``(24L)'') is truncated to its first $N$ decoder layers, recovered by a short causal-LM finetune on fineweb-edu, and evaluated with progressive cramming (PG19, $50$ samples, sequence length $4096$, $\mathrm{lr}=0.1$, random per-sample initialization); ``full'' is the untruncated model. ``Compressed Tokens'' is the achieved prefix length $n$ (higher is better), ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance. Compression rises monotonically with both retained depth (within each family) and model size (across families at matched depth). Detailed cuts and alternative truncation/recovery schemes are in Appendix~\ref{app:layer_ablation}.}
+    \label{tab:layer_ablation}
+    \begin{small}
+    \input{tables/layer_ablation}
+    \end{small}
+\vskip -0.1in
+\end{table*}
+
+% =============================================================================
 \section{Causal Analysis: Attention Mass vs. Causal Importance}
 \label{sec:causal}
 % =============================================================================

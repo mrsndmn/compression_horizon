@@ -30,6 +30,7 @@ PROGRESSIVE_TABLES=(
   tab:all_progressive_modifications
   tab:progressive_no_bos_token
   tab:layer_ablation
+  tab:layer_ablation_schemes
   tab:init_ablation
   tab:prefix_ablation
   tab:added_tokens_ablation
