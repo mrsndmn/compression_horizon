@@ -297,7 +297,7 @@ Once the autoregressive process deviates at the first or second token, all
 subsequent tokens are generated conditioned on an incorrect prefix, leading to
 rapid and irreversible divergence.
 Consistently across all evaluated models, we observe that mean greedy convergence
-collapses to near zero (at most ${\sim}2\%$) whenever compression training fails to
+collapses to near zero (at most ${\sim}4\%$) whenever compression training fails to
 achieve perfect reconstruction.
 In practice, a single early mismatch nullifies the utility of the remaining
 correctly reconstructed tokens, despite high aggregate training accuracy.
