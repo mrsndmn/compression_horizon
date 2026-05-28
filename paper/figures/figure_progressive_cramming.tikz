@@ -13,8 +13,8 @@
     check/.style={font=\small\sffamily\bfseries, text=successgreen},
 ]
 
-% === STEP k ===
-\node[stage] (stage1) {Step $k$};
+% === Stage k ===
+\node[stage] (stage1) {Stage $k$};
 \node[emb, right=0.5cm of stage1] (e1) {$\mathbf{e}^{(k)}$};
 \node[font=\scriptsize\sffamily, text=progblue!70, above=0.02cm of e1] {trainable};
 \node[llm, right=0.6cm of e1] (llm1) {LLM};
@@ -42,10 +42,10 @@
 \draw[optim] (loop1_left) -| (e1.south);
 \node[font=\scriptsize\sffamily, text=progblue!70] at ($(loop1_left)!0.5!(loop1_right) + (0, -0.2)$) {optimize};
 
-% === STEP k+1 ===
+% === Stage k+1 ===
 % Define vertical offset
 \coordinate (row2) at ($(stage1) + (0, -2.0)$);
-\node[stage] (stage2) at (stage1.center |- row2) {Step $k{+}1$};
+\node[stage] (stage2) at (stage1.center |- row2) {Stage $k{+}1$};
 \node[emb] (e2) at (e1.center |- row2) {$\mathbf{e}^{(k+1)}$};
 \node[font=\scriptsize\sffamily, text=progblue!70, above=0.02cm of e2] {trainable};
 \node[llm] (llm2) at (llm1.center |- row2) {LLM};
