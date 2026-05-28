@@ -1,0 +1,83 @@
+
+\resizebox{\columnwidth}{!}{%
+\begin{tikzpicture}[
+    box/.style={rectangle, rounded corners=2pt, minimum height=0.6cm, draw, thick, font=\small\sffamily},
+    emb/.style={box, fill=progblue!40, draw=progblue, line width=1.2pt, double, double distance=1pt, minimum width=1.1cm},
+    llm/.style={box, fill=gray!15, draw=gray!60, minimum width=1.3cm, minimum height=0.8cm},
+    token/.style={box, fill=white, draw=gray!50, minimum width=0.6cm, minimum height=0.6cm, font=\small\sffamily},
+    newtoken/.style={token, fill=progblue!15, draw=progblue!60},
+    arrow/.style={-{Stealth[length=2mm]}, thick},
+    optim/.style={-{Stealth[length=1.8mm]}, thick, progblue!60, densely dashed},
+    init/.style={-{Stealth[length=2mm]}, thick, orange!70!black},
+    stage/.style={font=\small\sffamily\bfseries, text=black},
+    check/.style={font=\small\sffamily\bfseries, text=successgreen},
+]
+
+% === Stage k ===
+\node[stage] (stage1) {Stage $k$};
+\node[emb, right=0.5cm of stage1] (e1) {$\mathbf{e}^{(k)}$};
+\node[font=\scriptsize\sffamily, text=progblue!70, above=0.02cm of e1] {trainable};
+\node[llm, right=0.6cm of e1] (llm1) {LLM};
+\node[font=\scriptsize\sffamily, text=gray, above=0.02cm of llm1] {frozen};
+
+\node[token, right=0.6cm of llm1] (t1_1) {$t_1$};
+\node[token, right=0.1cm of t1_1] (t1_2) {$t_2$};
+\node[right=0.1cm of t1_2, font=\small, text=gray!60] (dots1) {$\cdots$};
+\node[token, right=0.1cm of dots1] (t1_k) {$t_k$};
+
+% Arrows
+\draw[arrow, progblue] (e1) -- (llm1);
+\draw[arrow, gray!60] (llm1) -- (t1_1);
+
+% Checkmark
+% \node[check, right=0.25cm of t1_k] (check1) {\checkmark};
+
+% Optimization loop - arrows from all tokens
+\coordinate (loop1_right) at ($(t1_k.south) + (0, -0.4)$);
+\coordinate (loop1_left) at ($(t1_1.south) + (0, -0.4)$);
+\draw[optim] (t1_1.south) -- (loop1_left);
+\draw[optim] (t1_2.south) -- ++(0, -0.4);
+\draw[optim] (t1_k.south) -- (loop1_right);
+\draw[optim] (loop1_right) -- (loop1_left);
+\draw[optim] (loop1_left) -| (e1.south);
+\node[font=\scriptsize\sffamily, text=progblue!70] at ($(loop1_left)!0.5!(loop1_right) + (0, -0.2)$) {optimize};
+
+% === Stage k+1 ===
+% Define vertical offset
+\coordinate (row2) at ($(stage1) + (0, -2.0)$);
+\node[stage] (stage2) at (stage1.center |- row2) {Stage $k{+}1$};
+\node[emb] (e2) at (e1.center |- row2) {$\mathbf{e}^{(k+1)}$};
+\node[font=\scriptsize\sffamily, text=progblue!70, above=0.02cm of e2] {trainable};
+\node[llm] (llm2) at (llm1.center |- row2) {LLM};
+\node[font=\scriptsize\sffamily, text=gray, above=0.02cm of llm2] {frozen};
+
+\node[token] (t2_1) at (t1_1.center |- row2) {$t_1$};
+\node[token, right=0.1cm of t2_1] (t2_2) {$t_2$};
+\node[right=0.1cm of t2_2, font=\small, text=gray!60] (dots2) {$\cdots$};
+\node[token, right=0.1cm of dots2] (t2_k) {$t_k$};
+\node[newtoken, right=0.1cm of t2_k] (t2_k1) {$t_{k+1}$};
+
+% Arrows
+\draw[arrow, progblue] (e2) -- (llm2);
+\draw[arrow, gray!60] (llm2) -- (t2_1);
+
+% Checkmark
+% \node[check, right=0.25cm of t2_k1] (check2) {\checkmark};
+
+% Optimization loop - arrows from all tokens
+\coordinate (loop2_right) at ($(t2_k1.south) + (0, -0.4)$);
+\coordinate (loop2_left) at ($(t2_1.south) + (0, -0.4)$);
+\draw[optim] (t2_1.south) -- (loop2_left);
+\draw[optim] (t2_2.south) -- ++(0, -0.4);
+\draw[optim] (t2_k.south) -- ++(0, -0.4);
+\draw[optim] (t2_k1.south) -- (loop2_right);
+\draw[optim] (loop2_right) -- (loop2_left);
+\draw[optim] (loop2_left) -| (e2.south);
+\node[font=\scriptsize\sffamily, text=progblue!70] at ($(loop2_left)!0.5!(loop2_right) + (0, -0.2)$) {optimize};
+
+% === INITIALIZATION ARROW (curved half-circle) ===
+\draw[init] (e1.west) to[out=240, in=120, looseness=1.0]
+    node[pos=0.5, left=0.15cm, font=\scriptsize\sffamily, text=orange!70!black, align=center] {warm\\start} (e2.west);
+
+\end{tikzpicture}%
+}

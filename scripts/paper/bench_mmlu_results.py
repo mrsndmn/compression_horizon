@@ -373,7 +373,18 @@ def build_latex_table(
                 # row.append(latex_escape(cell))
         table_rows.append(row)
 
-    return tabulate(table_rows, headers=headers, tablefmt=tablefmt)
+    result = tabulate(table_rows, headers=headers, tablefmt=tablefmt)
+    # Use booktabs rules (\toprule/\midrule/\bottomrule) instead of tabulate's \hline.
+    lines = result.split("\n")
+    rule_idx = [i for i, ln in enumerate(lines) if ln.strip() == "\\hline"]
+    for n, i in enumerate(rule_idx):
+        if n == 0:
+            lines[i] = "\\toprule"
+        elif n == len(rule_idx) - 1:
+            lines[i] = "\\bottomrule"
+        else:
+            lines[i] = "\\midrule"
+    return "\n".join(lines)
 
 
 # ----------------------- Per-Subject Breakdown Plot ------------------------ #

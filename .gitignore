@@ -11,6 +11,7 @@ __pycache__
 
 # Data and artifacts
 artifacts/
+artifacts
 datasets/
 hub/
 xet/
@@ -34,3 +35,6 @@ supplemetnary.zip
 # Paper drafts / under-review PDFs
 *.pdf
 *.docx
+**/.omc/
+
+worktrees

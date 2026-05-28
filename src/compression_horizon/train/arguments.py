@@ -198,9 +198,48 @@ class MyTrainingArguments(TrainingArguments):
         default=0,
         metadata={"help": "Optional cap on number of progressive stages (0 = no cap)."},
     )
+    progressive_prefix_len: int = field(
+        default=0,
+        metadata={
+            "help": "Number of leading real (uncompressed) prefix tokens the model attends to before "
+            "the crammed continuation in progressive training. The prefix is fed as real token "
+            "embeddings (visible context) but is never compressed into the [mem] token; loss, "
+            "convergence, and information gain are computed only over the post-prefix continuation. "
+            "0 = no prefix (default, identical to the original trainer)."
+        },
+    )
     progressive_reset_lr_scheduler_on_non_convergence: bool = field(
         default=False,
         metadata={"help": "Reset LR scheduler and continue training when convergence fails (once per stage)."},
+    )
+    progressive_geometric_growth: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Progressive_train only. Instead of growing the prefix a fixed progressive_step "
+                "per converged stage, double the prefix length each time a stage converges (a "
+                "geometrically growing number of added tokens), then bisect the gap once a stage "
+                "fails to pin the exact largest converged prefix. Every stage is warm-started from "
+                "the previous converged embedding, so the reported prefix is always fully "
+                "reconstructed; the horizon is found in ~log2 stages instead of one per token. "
+                "Requires per_device_train_batch_size=1."
+            )
+        },
+    )
+    progressive_geometric_backoff: str = field(
+        default="bisect",
+        metadata={
+            "help": (
+                "progressive_geometric_growth only. Back-off strategy once the doubling ramp "
+                "brackets the horizon between the largest converged length (lo) and the smallest "
+                "failed length (hi). 'bisect': restore the last converged state and bisect the "
+                "(lo, hi) gap, O(log gap) probes. 'linear': restore the last converged checkpoint "
+                "and grow the prefix +1 token per stage (each warm-started from the previous "
+                "converged stage) until a stage fails -- the exact horizon, mirroring Delta=1 "
+                "cramming in the horizon neighborhood at the cost of (horizon - lo) probes. "
+                "Choices: bisect, linear."
+            )
+        },
     )
     save_progressive_artifacts: bool = field(
         default=True,
@@ -232,11 +271,56 @@ class MyTrainingArguments(TrainingArguments):
     )
     compression_head_distill_alpha: float = field(
         default=1.0,
-        metadata={"help": "Weight for distillation loss for non-selected compression embeddings."},
+        metadata={"help": "Weight for the compressed-sequence (after) loss term in the compression-head objective."},
+    )
+    compression_head_distill_beta: float = field(
+        default=0.0,
+        metadata={
+            "help": "Weight for the base-LM loss term (uncompressed full-sequence loss). "
+            "Default 0.0 keeps the base loss out of the objective so training optimizes the "
+            "compression objective only; set > 0 to also train on the plain next-token loss."
+        },
     )
     compression_head_freeze_base_model: bool = field(
         default=True,
         metadata={"help": "Freeze base LM parameters and train only compression head parameters."},
+    )
+    separate_reconstructor_model: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Compression-head training: when True, build a second copy of the base LM (no CH adapter) "
+                "from the same checkpoint and route the second (reconstruction) forward through it while the "
+                "first (compression) forward stays on the CH model. Both copies are optimised jointly. "
+                "Has no effect outside the compression-head trainer."
+            )
+        },
+    )
+    compression_head_kind: str = field(
+        default="mlp",
+        metadata={
+            "help": "Compression-head architecture: 'mlp' (Linear-GELU-Linear on the last prefix hidden state) "
+            "or 'qformer' (learnable queries cross-attending to the prefix hidden states)."
+        },
+    )
+    compression_head_num_queries: int = field(
+        default=1,
+        metadata={"help": "Q-Former: number of learnable query tokens (= number of compression embeddings produced)."},
+    )
+    compression_head_num_layers: int = field(
+        default=2,
+        metadata={"help": "Q-Former: number of cross-attention blocks."},
+    )
+    compression_head_num_heads: int = field(
+        default=8,
+        metadata={"help": "Q-Former: number of attention heads per block."},
+    )
+    compression_head_query_proj_factor: int = field(
+        default=1,
+        metadata={
+            "help": "Q-Former wide-init: keep the learnable query in dimension factor*H and "
+            "project down to H (more optimizer degrees of freedom). 1 disables it."
+        },
     )
 
     # --- Other trainer modes --------------------------------------------

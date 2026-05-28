@@ -88,6 +88,21 @@ class ProgressiveSampleStateMachine:
                 self.skipped[j] = True
                 print(f"Sample {j} failed to converge at seq_len={seq_len}, marking as skipped.")
 
+    def mark_exhausted(self, max_steps_per_sample: int) -> bool:
+        """Permanently skip active samples whose cumulative ``steps_taken`` reached the cap.
+
+        Returns True iff every sample is now done (skipped or converged-in-stage),
+        so the caller can short-circuit the stage loop.
+        """
+        for j in range(self.batch_size):
+            if self.is_active(j) and self.steps_taken[j] >= max_steps_per_sample:
+                self.skipped[j] = True
+                print(
+                    f"Sample {j} exhausted step budget "
+                    f"({self.steps_taken[j]} >= {max_steps_per_sample}), marking as skipped."
+                )
+        return all(self.converged_in_stage[j] or self.skipped[j] for j in range(self.batch_size))
+
     @property
     def all_skipped(self) -> bool:
         return all(self.skipped)

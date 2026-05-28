@@ -15,7 +15,7 @@ from sklearn.decomposition import PCA
 from tabulate import tabulate
 from tqdm.auto import tqdm
 
-from compression_horizon.utils import to_mean_std_cell
+from compression_horizon.utils import hlines_to_booktabs, to_mean_std_cell
 
 
 def parse_args() -> argparse.Namespace:
@@ -303,6 +303,9 @@ def main() -> None:
     import re
 
     result = re.sub(r"REMOVE.+", "", result)
+
+    if args.tablefmt == "latex":
+        result = hlines_to_booktabs(result)
 
     print(result)
 
