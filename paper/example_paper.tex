@@ -467,8 +467,10 @@ This behavior appears whenever reconstruction accuracy is below 100\%; with perf
     \label{fig:pca_reconstruction_accuracy}
 \end{figure}
 
-\subsection{Downstream Evaluation}
+% =============================================================================
+\section{Downstream Evaluation}
 \label{sec:semantic_evaluation}
+% =============================================================================
 
 We test whether cramming preserves the \emph{useful} information in a prefix by evaluating standard multiple-choice benchmarks (HellaSwag and ARC) under likelihood-based scoring.
 These benchmarks use relatively short contexts, so they isolate capability failures that occur even when the task does not require long-range context retention.
@@ -582,6 +584,7 @@ These trends are robust to the design choices detailed in the appendix: the same
 We introduced progressive cramming, which grows the reconstruction target token-by-token and enables controlled measurement of when embedding-based reconstruction succeeds or fails under a fixed optimization budget.
 Across model families, progressive trajectories are low-dimensional, and attention-mass analyses show that crammed embeddings can become intermediate-layer attention sinks (Appendix~\ref{app:attention_concentration}).
 Causal attention-knockout interventions further localize the downstream collapse to the compression embedding's interactions in the early layers, and show that the late layers carrying the most attention mass have little causal effect -- attention mass is a symptom rather than the cause of capability loss.
+Separately, we find that how much a single embedding can store is bounded by the frozen reconstructor itself: compression capacity rises monotonically with both retained model depth and width.
 Critically, downstream evaluation indicates that optimizing embeddings for reconstruction can coincide with large capability drops, even when the original prefix remains in context, so reconstruction accuracy alone is not a sufficient criterion for meaningful compression.
 
 Our study remains limited in scope: we use a small number of PG19 samples. Our causal interventions cover three model families---Llama-3.1-8B in the main text, with consistent results for Pythia-1.4B and SmolLM2-1.7B in Appendix~\ref{app:knockout_models}---but a single evaluation dataset.
