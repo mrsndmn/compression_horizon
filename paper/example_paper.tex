@@ -139,6 +139,7 @@
     On likelihood-based multiple-choice evaluation, prepending a crammed embedding causes a moderate but consistent accuracy drop, even with the original prefix in context; under generative evaluation, where the model must use the compressed prefix, capability collapses almost entirely.
     These results suggest that perfect reconstruction can arise from brittle steering rather than a transferable semantic representation.
     Our results position progressive cramming as a tool for studying compression limits, while showing that perfect reconstruction is insufficient for meaningful compression.
+    Code and the progressive-cramming compression-embedding optimization trajectories are publicly available at \url{https://github.com/FusionBrainLab/progressive_cramming}.
 \end{abstract}
 
 
@@ -410,6 +411,8 @@ We record the sequence of optimized embeddings $\{\mathbf{e}^{(k)}\}_{k=1}^{n}$ 
 For each sample, we run PCA on the stage embeddings $\{\mathbf{e}^{(k)}\}_{k=1}^{n}$ across $k$ (using standard PCA mean-centering across stages) and define ``PCA 99\%'' as the minimum number of components whose cumulative explained-variance ratio reaches 99\%.
 We report this quantity averaged over samples.
 Across model families, trajectories are well-approximated by low-dimensional structure: a modest number of principal components explains 99\% of the trajectory variance, even when hundreds (or thousands) of tokens are reconstructed (Table~\ref{tab:progressive_modifications}).
+We emphasize that this is a property of the optimization \emph{path}, not of the underlying solution set: in Appendix~\ref{app:solution_diversity} we show that equally-good solutions reached from the same initialization by different learning rates are far apart and nearly orthogonal, so the set of valid compression embeddings is itself wide and high-dimensional, and the low-dimensional trajectory is one thin slice of it.
+We further characterize the \emph{shape} of this path (Appendix~\ref{app:trajectory_clusters}): measured in optimization \emph{steps}---an effort-based, model-agnostic unit---progressive cramming proceeds as a punctuated ``dwell-and-leap'' walk, alternating runs of cheap tokens with occasional expensive ones (positive lag-1 jump autocorrelation, $r_1 \approx 0.16$--$0.29$) at \emph{every} model scale rather than as a smooth glide.
 
 Notably, Gemma~3 achieves lower information gain at shorter reconstructed lengths than Llama and Pythia, consistent with architectural or training-time constraints such as logit softcapping \cite{gemma2} (Appendix~\ref{app:gemma_softcapping}).
 
@@ -502,6 +505,26 @@ This highlights a key limitation of using reconstruction accuracy alone: perfect
 Appendix~\ref{app:imperfect_reconstruction} further confirms that this drop reflects the compression embedding itself rather than residual reconstruction errors: because HellaSwag and ARC score fixed context--continuation pairs without regenerating the prefix, restricting the evaluation to perfectly reconstructed instances leaves accuracy essentially unchanged.
 This degradation becomes a complete collapse under a \emph{generative} benchmark: on 5-shot MMLU (Appendix~\ref{app:mmlu}, Table~\ref{tab:rebuttle_mmlu}), compressing the full prefix drives accuracy to near zero with no valid parseable answers, while a random control embedding leaves accuracy nearly intact -- confirming that the degradation is specifically caused by the optimized compression embedding rather than by conditioning on an out-of-distribution token.
 
+
+% =============================================================================
+\section{Compression Capacity Scales with Depth and Model Size}
+\label{sec:depth_size}
+% =============================================================================
+
+How much a single embedding can cram is not fixed: it is bounded by the capacity of the frozen model that must reconstruct from it. We probe that bound directly by truncating pretrained models to their first $N$ decoder layers, repairing the cut with a short causal-LM finetune on fineweb-edu, and running the standard progressive-cramming evaluation (PG19, $50$ samples, $\mathrm{lr}=0.1$) on each truncated checkpoint. Sweeping $N \in \{1,2,4,8\}$ and the full model across five families that span $1.7$--$8$B parameters and $24$--$36$ layers (Table~\ref{tab:depth_size_pivot}) separates two axes of capacity: network \emph{depth} (within a family) and model \emph{size} (across families at a matched truncated depth).
+
+Both axes drive compression monotonically, and they compound. \textbf{Depth:} within every family the number of perfectly crammed tokens rises with retained depth---roughly doubling per layer-doubling (e.g.\ Qwen3-8B: $119 \to 180 \to 304 \to 625$ at first-$1$/$2$/$4$/$8$). \textbf{Size:} at any matched truncated depth the larger model crams strictly more (Qwen3-8B $>$ Qwen3-4B $>$ SmolLM3-3B at every $N$). The two effects reinforce one another: with enough width a shallow truncation already recovers most of the full-model capacity---the $8$-of-$36$-layer Qwen3-8B and Qwen3-4B reach ${\approx}81\%$ of their untruncated references, and the $8$-layer Qwen3-8B exceeds the \emph{full} $36$-layer Qwen3-4B. Capacity is thus jointly governed by depth and width---intuitively, depth unpacks the crammed code while width stores it---so a deficit in one can be partly offset by a surplus in the other.
+
+These trends are robust to the design choices detailed in the appendix: the same monotone-in-depth behavior holds for alternative truncation schemes (keeping the first \emph{and} last layers, or only the last layers; Appendix~\ref{app:layer_ablation}), when only width is varied at a fixed depth within one family (Appendix~\ref{app:width_ablation}), and when each truncated model is recovered with a learned compression head instead of a plain finetune (Appendix~\ref{app:ch_qformer_layer_ablation}).
+
+\begin{table}[t]
+    \centering
+    \caption{Compression capacity (mean perfectly crammed tokens over $50$ PG19 samples) vs.\ model and retained depth. Columns give the number of first decoder layers kept (then finetuned); ``Full'' is the untruncated model; each model name carries its total decoder-layer count. ``--'' marks configurations we did not run. Compression rises with both retained depth (left to right) and model size (top to bottom). The full per-metric breakdown (information gain, trajectory length, PCA 99\%) and the alternative truncation/recovery schemes are in Table~\ref{tab:layer_ablation} (Appendix~\ref{app:layer_ablation}).}
+    \label{tab:depth_size_pivot}
+    \begin{small}
+    \input{tables/depth_size_pivot}
+    \end{small}
+\end{table}
 
 % =============================================================================
 \section{Causal Analysis: Attention Mass vs. Causal Importance}

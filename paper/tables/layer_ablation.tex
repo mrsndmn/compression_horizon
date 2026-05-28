@@ -1,19 +1,33 @@
 \begin{tabular}{lllll}
 \toprule
- Model                 & Compressed Tokens         & Information Gain         & Trajectory Length       & PCA 99\%                   \\
+ Model                      & Compressed Tokens           & Information Gain         & Trajectory Length        & PCA 99\%                   \\
 \midrule
- 2 layers              & 76.9 {\small $\pm$ 39.3}  & 2082 {\small $\pm$ 1285} & 1060 {\small $\pm$ 345} & 23.12 {\small $\pm$ 5.14} \\
- 2 layers (finetuned)  & 218 {\small $\pm$ 27.1}   & 1269 {\small $\pm$ 120}  & 1877 {\small $\pm$ 216} & 33.08 {\small $\pm$ 1.21} \\
+ SmolLM2-1.7B (24L) first 1 & 50 {\small $\pm$ 5.9}       & 301 {\small $\pm$ 26}    & 627 {\small $\pm$ 107}   & 17.12 {\small $\pm$ 1.56} \\
+ SmolLM2-1.7B (24L) first 2 & 240.5 {\small $\pm$ 30}     & 1291 {\small $\pm$ 134}  & 1966 {\small $\pm$ 195}  & 31.3 {\small $\pm$ 1.78}  \\
+ SmolLM2-1.7B (24L) first 4 & 404.5 {\small $\pm$ 58.2}   & 2058 {\small $\pm$ 160}  & 2120 {\small $\pm$ 223}  & 31.82 {\small $\pm$ 2.05} \\
+ SmolLM2-1.7B (24L) first 8 & 455 {\small $\pm$ 68.5}     & 2172 {\small $\pm$ 191}  & 1552 {\small $\pm$ 318}  & 31.46 {\small $\pm$ 3.38} \\
+ SmolLM2-1.7B (24L) full    & 335.1 {\small $\pm$ 61.3}   & 1208 {\small $\pm$ 162}  & 1051 {\small $\pm$ 147}  & 33.22 {\small $\pm$ 2.82} \\
  \midrule
- 4 layers              & 270.9 {\small $\pm$ 50.4} & 5198 {\small $\pm$ 857}  & 1665 {\small $\pm$ 253} & 32.48 {\small $\pm$ 1.99} \\
- 4 layers (finetuned)  & 393.4 {\small $\pm$ 50}   & 2224 {\small $\pm$ 114}  & 2028 {\small $\pm$ 194} & 34.56 {\small $\pm$ 1.98} \\
+ SmolLM3-3B (36L) first 1   & 20.2 {\small $\pm$ 4}       & 126 {\small $\pm$ 15}    & 253 {\small $\pm$ 60}    & 9.4 {\small $\pm$ 1.33}   \\
+ SmolLM3-3B (36L) first 2   & 38.7 {\small $\pm$ 7.3}     & 216 {\small $\pm$ 20}    & 485 {\small $\pm$ 75}    & 14.08 {\small $\pm$ 1.43} \\
+ SmolLM3-3B (36L) first 4   & 113.8 {\small $\pm$ 13.2}   & 566 {\small $\pm$ 45}    & 960 {\small $\pm$ 141}   & 22.64 {\small $\pm$ 1.66} \\
+ SmolLM3-3B (36L) first 8   & 300.1 {\small $\pm$ 40.6}   & 1390 {\small $\pm$ 127}  & 1928 {\small $\pm$ 209}  & 29.88 {\small $\pm$ 1.14} \\
  \midrule
- 8 layers              & 240.8 {\small $\pm$ 54.7} & 5585 {\small $\pm$ 1998} & 1036 {\small $\pm$ 234} & 27.78 {\small $\pm$ 3.37} \\
- 8 layers (finetuned)  & 393.8 {\small $\pm$ 57.8} & 1990 {\small $\pm$ 191}  & 1358 {\small $\pm$ 184} & 31.14 {\small $\pm$ 2.58} \\
+ Qwen3-4B (36L) first 1     & 79.3 {\small $\pm$ 13.2}    & 460 {\small $\pm$ 47}    & 1078 {\small $\pm$ 101}  & 18.96 {\small $\pm$ 1.15} \\
+ Qwen3-4B (36L) first 2     & 146.7 {\small $\pm$ 23.7}   & 792 {\small $\pm$ 87}    & 1672 {\small $\pm$ 148}  & 26.6 {\small $\pm$ 1.43}  \\
+ Qwen3-4B (36L) first 4     & 192.3 {\small $\pm$ 34.3}   & 991 {\small $\pm$ 128}   & 1564 {\small $\pm$ 182}  & 29.1 {\small $\pm$ 1.73}  \\
+ Qwen3-4B (36L) first 8     & 420.8 {\small $\pm$ 55.1}   & 2007 {\small $\pm$ 155}  & 2473 {\small $\pm$ 203}  & 37.32 {\small $\pm$ 1.41} \\
+ Qwen3-4B (36L) full        & 512 {\small $\pm$ 105.2}    & 2389 {\small $\pm$ 324}  & 2043 {\small $\pm$ 269}  & 47.28 {\small $\pm$ 4.69} \\
  \midrule
- 16 layers             & 272.5 {\small $\pm$ 38.3} & 1544 {\small $\pm$ 223}  & 1083 {\small $\pm$ 120} & 34.48 {\small $\pm$ 3.09} \\
- 16 layers (finetuned) & 379.4 {\small $\pm$ 69.8} & 1561 {\small $\pm$ 180}  & 1172 {\small $\pm$ 143} & 32.82 {\small $\pm$ 3.57} \\
+ Qwen3-8B (36L) first 1     & 119 {\small $\pm$ 15.9}     & 680 {\small $\pm$ 60}    & 1739 {\small $\pm$ 167}  & 22.72 {\small $\pm$ 1.06} \\
+ Qwen3-8B (36L) first 2     & 179.9 {\small $\pm$ 25.9}   & 963 {\small $\pm$ 96}    & 2384 {\small $\pm$ 187}  & 28.92 {\small $\pm$ 1.09} \\
+ Qwen3-8B (36L) first 4     & 303.5 {\small $\pm$ 46.6}   & 1552 {\small $\pm$ 153}  & 2864 {\small $\pm$ 216}  & 33.76 {\small $\pm$ 1.35} \\
+ Qwen3-8B (36L) first 8     & 624.5 {\small $\pm$ 79.4}   & 2969 {\small $\pm$ 176}  & 4170 {\small $\pm$ 251}  & 42.98 {\small $\pm$ 1.39} \\
+ Qwen3-8B (36L) full        & 774.2 {\small $\pm$ 158.9}  & 3093 {\small $\pm$ 453}  & 3380 {\small $\pm$ 585}  & 53.9 {\small $\pm$ 5.94}  \\
  \midrule
- 24 layers (full)      & 335.1 {\small $\pm$ 61.3} & 1208 {\small $\pm$ 162}  & 1051 {\small $\pm$ 147} & 33.22 {\small $\pm$ 2.82} \\
+ Llama-3.1-8B (32L) first 1 & 96.7 {\small $\pm$ 10.7}    & 545 {\small $\pm$ 41}    & 1447 {\small $\pm$ 134}  & 31 {\small $\pm$ 1.52}    \\
+ Llama-3.1-8B (32L) first 2 & 183.8 {\small $\pm$ 31.5}   & 896 {\small $\pm$ 116}   & 2225 {\small $\pm$ 337}  & 33.12 {\small $\pm$ 2.57} \\
+ Llama-3.1-8B (32L) first 4 & 399.7 {\small $\pm$ 104}    & 1858 {\small $\pm$ 404}  & 3031 {\small $\pm$ 367}  & 36.02 {\small $\pm$ 1.35} \\
+ Llama-3.1-8B (32L) full    & 1437.6 {\small $\pm$ 380.1} & 4391 {\small $\pm$ 1408} & 6174 {\small $\pm$ 1263} & 82.78 {\small $\pm$ 9.07} \\
 \bottomrule
 \end{tabular}

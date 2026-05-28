@@ -1,32 +1,37 @@
-"""Background watcher/eval-driver for the model-width ablation (both arms).
+"""Background watcher/eval-driver for the Llama-3.1-8B transformer-depth ablation.
 
-The width ablation produces, per model width (SmolLM2 135M / 360M / 1.7B, all
-first-4+last-4 = 8 layers), two recovered checkpoints to evaluate with progressive
-cramming on PG19:
+Llama-3.1-8B companion to ``scripts/jobs/watch_finetune_truncated.py`` (SmolLM2-1.7B),
+structured like ``scripts/jobs/watch_width_ablation.py`` (single self-contained poll
+loop that exits with a ``DONE.json`` summary so a background task notifies on
+completion).
 
-  * causal-LM arm: ``…-firstlast4-ftw`` (from run_jobs_finetune_width.py), evaluated
-    with the baseline init ``embedding_init_method=random0.02`` via
-    ``run_jobs_width_ablation_ft.py``;
-  * Q-Former arm: ``ch_head_…`` (from run_jobs_compression_head_width.py), evaluated
-    with ``embedding_init_method=compression_head_forward`` via
-    ``run_jobs_compression_head_width.py --stage eval``.
+This ablation has ONE arm (finetuned only -- the user chose to skip raw-truncated
+rows for Llama): per truncated depth N in {1,2,4} we
 
-This watcher polls all six (3 widths x 2 arms) targets. As each training output
-becomes ready it submits that target's progressive-eval job; it retries a failed
-eval (saving ``mls job logs`` + cleaning the partial output dir) up to
-``--max-retries``. It EXITS once every target is terminal -- writing a machine
--readable ``DONE.json`` summary -- so running it as a background task notifies the
-caller on completion (no in-watcher Telegram/sentinel polling). The watcher does
-NOT regenerate the paper table; ``tab:width_ablation`` + the appendix section are a
-deliberate follow-up step performed after this exits.
+  * finetune ``Meta-Llama-3.1-8B-firstlast{N}`` -> ``…-firstlast{N}-ftw`` with the
+    width/compression-head recipe (run_jobs_finetune_truncated_llama.py), then
+  * evaluate it on progressive cramming (PG19, baseline init random0.02) via
+    run_jobs_layer_ablation_ft_llama.py.
 
-Training must already be submitted (run the two train launchers first) OR pass
-``--submit-train`` to have this watcher submit any missing training jobs at startup.
+The watcher polls all three targets; as each finetune output becomes ready it
+submits that target's progressive-eval job and retries a failed eval (saving
+``mls job logs`` + cleaning the partial output dir) up to ``--max-retries``. It
+EXITS once every target is terminal, writing ``DONE.json``. The full-depth
+(32-layer) ``sl_4096_Meta-Llama-3.1-8B_ds_pg19_1k_limit_50_lr_0.1`` run already has
+data and is the table's reference row -- it is reported but not waited on.
+
+Training must already be submitted (run the finetune launcher first) OR pass
+``--submit-train`` to have this watcher pre-build the shared packed-dataset cache
+(once, on the login node) and submit the three finetune jobs at startup.
+
+The watcher does NOT regenerate the paper table; extending ``tab:layer_ablation``
+with the Llama rows + the appendix text is a deliberate follow-up performed after
+this exits.
 
 Usage:
-    python scripts/jobs/watch_width_ablation.py --plan                 # print states, don't wait
-    python scripts/jobs/watch_width_ablation.py --submit-train         # submit training + watch + eval
-    python scripts/jobs/watch_width_ablation.py --max-retries 2 --poll 180
+    python scripts/jobs/watch_finetune_truncated_llama.py --plan            # print states, don't wait
+    python scripts/jobs/watch_finetune_truncated_llama.py --submit-train    # prebuild + submit + watch + eval
+    python scripts/jobs/watch_finetune_truncated_llama.py --max-retries 2 --poll 180
 """
 
 from __future__ import annotations
@@ -42,16 +47,14 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import run_jobs_compression_head_width as CW  # noqa: E402
-import run_jobs_finetune_width as FW  # noqa: E402
-import run_jobs_width_ablation_ft as EW  # noqa: E402
+import run_jobs_finetune_truncated_llama as FT  # noqa: E402
+import run_jobs_layer_ablation_ft_llama as EV  # noqa: E402
 
 PROJ = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 MLS_BIN = os.environ.get("MLS_BIN", "/home/jovyan/.mlspace/envs/compression_horizon/bin/mls")
 PYTHON = os.environ.get("WATCH_PYTHON", "/workspace-SR004.nfs2/d.tarasov/envs/compression_horizon/bin/python")
-CW_LAUNCHER = os.path.join(PROJ, "scripts", "jobs", "run_jobs_compression_head_width.py")
-FW_LAUNCHER = os.path.join(PROJ, "scripts", "jobs", "run_jobs_finetune_width.py")
-STATE_DIR = os.path.join(PROJ, ".omc", "ablation_watch", "width_ablation")
+FT_LAUNCHER = os.path.join(PROJ, "scripts", "jobs", "run_jobs_finetune_truncated_llama.py")
+STATE_DIR = os.path.join(PROJ, ".omc", "ablation_watch", "finetune_truncated_llama")
 LOG_DIR = os.path.join(STATE_DIR, "logs")
 WATCH_LOG = os.path.join(STATE_DIR, "watch.log")
 DONE_JSON = os.path.join(STATE_DIR, "DONE.json")
@@ -123,7 +126,7 @@ def save_logs(name: str, tail: int = 400) -> str:
 
 
 def model_saved(out_dir: str) -> bool:
-    """A training job is done once its dir holds a saved model (config + .safetensors)."""
+    """A finetune job is done once its dir holds a saved model (config + .safetensors)."""
     abs_dir = os.path.join(PROJ, out_dir)
     if not os.path.isfile(os.path.join(abs_dir, "config.json")):
         return False
@@ -144,48 +147,30 @@ def _ensure_client():
     # watchers (submissions fail with error_code 20 "access_token expired"). The `mls`
     # CLI calls already re-auth per subprocess; only this in-process client needed the fix.
     global _client, _extra
-    _client, _extra = FW.make_client()
+    _client, _extra = EV.make_client()
     return _client, _extra
 
 
 # --------------------------------------------------------------------------- #
 def build_targets() -> list[dict]:
-    """One entry per (width x arm) eval target."""
+    """One entry per truncated depth (finetuned-only arm)."""
     targets: list[dict] = []
-
-    # Causal-LM arm: -ftw checkpoints, baseline (random0.02) progressive eval.
-    for ck in FW.FINETUNE_CHECKPOINTS:
-        ft = FW.finetuned_dir(ck)
-        exp = next((e for e in EW.EXPERIMENTS if e["model_checkpoint"] == ft), None)
+    for ck in FT.FINETUNE_CHECKPOINTS:
+        ft = FT.finetuned_dir(ck)
+        exp = next((e for e in EV.EXPERIMENTS if e["model_checkpoint"] == ft), None)
         if exp is None:
-            log(f"  WARN: no width-ft eval experiment matches {ft}; skipping target")
+            log(f"  WARN: no eval experiment matches {ft}; skipping target")
             continue
-        _, _eval_suffix, eval_out = EW.render_job(exp)
+        _, eval_suffix, eval_out = EV.render_job(exp)
         targets.append(
             {
-                "arm": "causal_lm",
-                "label": f"{os.path.basename(ck)} [causalLM]",
+                "label": os.path.basename(ck),
+                "checkpoint": ck,
                 "train_out": ft,
-                "train_desc": FW.job_desc_for(os.path.basename(ck)),
+                "train_desc": FT.job_desc_for(os.path.basename(ck)),
                 "eval_exp": exp,
                 "eval_out": eval_out,
-                "eval_desc": EW.job_desc_for(_eval_suffix),
-            }
-        )
-
-    # Q-Former arm: ch_head_ checkpoints, compression_head_forward progressive eval.
-    for exp in CW.EXPERIMENTS:
-        _, ch_suffix, ch_out = CW.render_ch_job(exp)
-        _, eval_suffix, eval_out = CW.render_eval_job(ch_out, ch_suffix)
-        targets.append(
-            {
-                "arm": "ch_qformer",
-                "label": f"{os.path.basename(ch_out)} [qformer]",
-                "train_out": ch_out,
-                "train_desc": CW.ch_job_desc(ch_suffix),
-                "eval_exp": exp,
-                "eval_out": eval_out,
-                "eval_desc": CW.eval_job_desc(eval_suffix),
+                "eval_desc": EV.job_desc_for(eval_suffix),
             }
         )
     return targets
@@ -216,56 +201,52 @@ def classify(target: dict, jobs: list[dict]) -> tuple[str, str | None]:
 
 
 def submit_eval(target: dict, force: bool = False) -> None:
-    """Submit the progressive-eval job for one ready target (idempotent per arm)."""
+    """Submit the progressive-eval job for one ready target (idempotent)."""
     if force:
         abs_eval = os.path.join(PROJ, target["eval_out"])
         if os.path.isdir(abs_eval) and not eval_has_output(target["eval_out"]):
             log(f"  removing partial eval dir before retry: {target['eval_out']}")
             shutil.rmtree(abs_eval, ignore_errors=True)
 
-    if target["arm"] == "causal_lm":
-        client, extra = _ensure_client()
-        for attempt in range(3):
-            result = EW.submit_experiment(target["eval_exp"], client, extra, force=force)
-            name = (result or {}).get("job_name")
-            if name:
-                log(f"  submitted baseline eval for {target['label']} -> {name}")
-                return
-            log(f"  baseline eval submit for {target['label']} returned no job (attempt {attempt + 1}/3); retrying")
-            time.sleep(5)
-        log(f"  WARN: baseline eval for {target['label']} not submitted after retries")
-    else:  # ch_qformer: reuse the idempotent launcher (submits all ready heads' evals)
-        cp = subprocess.run([PYTHON, CW_LAUNCHER, "--stage", "eval"], capture_output=True, text=True, env=_env(), cwd=PROJ)
-        for line in (cp.stdout or "").splitlines():
-            if "job_name" in line or "exists, skip" in line or "Would launch" in line:
-                log(f"  ch-eval-submit: {line.strip()}")
-        if cp.returncode != 0:
-            log(f"  WARN: ch eval submit returned {cp.returncode}: {(cp.stderr or '').strip()[-200:]}")
+    client, extra = _ensure_client()
+    for attempt in range(3):
+        result = EV.submit_experiment(target["eval_exp"], client, extra, force=force)
+        name = (result or {}).get("job_name")
+        if name:
+            log(f"  submitted eval for {target['label']} -> {name}")
+            return
+        log(f"  eval submit for {target['label']} returned no job (attempt {attempt + 1}/3); retrying")
+        time.sleep(5)
+    log(f"  WARN: eval for {target['label']} not submitted after retries")
 
 
 def submit_training() -> None:
-    """Submit any missing training jobs for both arms (idempotent launchers)."""
-    log("submit-train: submitting missing causal-LM + Q-Former training jobs")
-    for desc, cmd in (
-        ("causal-LM finetune", [PYTHON, FW_LAUNCHER]),
-        ("Q-Former train", [PYTHON, CW_LAUNCHER, "--stage", "train"]),
-    ):
-        cp = subprocess.run(cmd, capture_output=True, text=True, env=_env(), cwd=PROJ)
-        for line in (cp.stdout or "").splitlines():
-            if any(k in line for k in ("job_name", "Would launch", "exists, skip", "already in queue")):
-                log(f"  {desc}: {line.strip()}")
-        if cp.returncode != 0:
-            log(f"  WARN: {desc} submit returned {cp.returncode}: {(cp.stderr or '').strip()[-200:]}")
+    """Pre-build the shared packed-dataset cache (once) then submit the finetune jobs."""
+    log("submit-train: prebuilding shared packed-dataset cache (login node, one-time; no-op if present) ...")
+    cp = subprocess.run([PYTHON, FT_LAUNCHER, "--prebuild-only"], env=_env(), cwd=PROJ)
+    if cp.returncode != 0:
+        log(f"  WARN: dataset prebuild returned {cp.returncode}; finetune jobs may race the cache build")
+    else:
+        log("  dataset cache ready")
+
+    log("submit-train: submitting missing causal-LM finetune jobs")
+    cp = subprocess.run([PYTHON, FT_LAUNCHER], capture_output=True, text=True, env=_env(), cwd=PROJ)
+    for line in (cp.stdout or "").splitlines():
+        if any(k in line for k in ("job_name", "Would launch", "exists, skip", "already in queue")):
+            log(f"  finetune: {line.strip()}")
+    if cp.returncode != 0:
+        log(f"  WARN: finetune submit returned {cp.returncode}: {(cp.stderr or '').strip()[-200:]}")
 
 
 def write_done(targets: list[dict], states: dict[str, str], status: str) -> None:
     summary = {
         "status": status,
         "finished_at": datetime.now().isoformat(),
+        "reference_out": EV.REFERENCE_OUT_DIR,
+        "reference_has_output": eval_has_output(EV.REFERENCE_OUT_DIR),
         "targets": [
             {
                 "label": t["label"],
-                "arm": t["arm"],
                 "state": states.get(t["label"], "?"),
                 "eval_out": t["eval_out"],
                 "has_output": eval_has_output(t["eval_out"]),
@@ -291,14 +272,16 @@ def main() -> int:
         "(absorbs scheduler lag right after submission; default 10).",
     )
     parser.add_argument("--plan", action="store_true", help="Print current target states once and exit.")
-    parser.add_argument("--submit-train", action="store_true", help="Submit missing training jobs at startup.")
+    parser.add_argument("--submit-train", action="store_true", help="Prebuild cache + submit finetune jobs at startup.")
     args = parser.parse_args()
 
     targets = build_targets()
 
     if args.plan:
         jobs = mls_list()
-        log(f"PLAN -- width-ablation watcher ({len(targets)} targets, no waiting):")
+        log(f"PLAN -- Llama depth-ablation watcher ({len(targets)} targets, no waiting):")
+        ref_ok = eval_has_output(EV.REFERENCE_OUT_DIR)
+        log(f"  reference (full 32 layers): has_output={ref_ok}  {EV.REFERENCE_OUT_DIR}")
         for t in targets:
             state, name = classify(t, jobs)
             log(f"  [{state:13}] {t['label']}  (job={name})")
@@ -306,7 +289,11 @@ def main() -> int:
             log(f"                 eval_out={t['eval_out']}")
         return 0
 
-    log(f"=== width-ablation watcher start (targets={len(targets)}, max_retries={args.max_retries}, poll={args.poll}s) ===")
+    log(
+        f"=== Llama depth-ablation watcher start (targets={len(targets)}, max_retries={args.max_retries}, poll={args.poll}s) ==="
+    )
+    if not eval_has_output(EV.REFERENCE_OUT_DIR):
+        log(f"  NOTE: reference row has no data yet: {EV.REFERENCE_OUT_DIR}")
     if args.submit_train:
         submit_training()
 
@@ -351,8 +338,6 @@ def main() -> int:
                     p = save_logs(name)
                     log(f"{label}: TRAINING failed (job={name}); logs -> {os.path.relpath(p, PROJ)}")
             elif state == "train_pending":
-                # No training job yet. This is normal briefly after submission (scheduler lag);
-                # keep waiting up to a grace window, then give up so a background run still exits.
                 pending_polls[label] += 1
                 log(
                     f"{label}: no training job/checkpoint yet "
@@ -364,13 +349,10 @@ def main() -> int:
                     gave_up.add(label)
                     states[label] = "gaveup"
 
-        # Progress summary.
         n_done = sum(1 for s in states.values() if s == "eval_done")
-        log("  states: " + ", ".join(f"{t['label'].split()[-1]}={states[t['label']]}" for t in targets))
+        log("  states: " + ", ".join(f"{t['label'].split('-')[-1]}={states[t['label']]}" for t in targets))
         log(f"--- {n_done}/{len(targets)} eval_done ---")
 
-        # Terminal: no target is still making progress (train_pending counts as in-progress
-        # until its grace window is exhausted, above).
         in_progress = any(
             states[t["label"]] in ("train_pending", "train_ready", "train_running", "eval_running")
             or (states[t["label"]] == "eval_failed" and eval_attempts[t["label"]] <= args.max_retries)
@@ -378,7 +360,7 @@ def main() -> int:
         )
         all_done = n_done == len(targets)
         if all_done:
-            log("All width-ablation evals have output. Watcher exiting (success).")
+            log("All Llama depth-ablation evals have output. Watcher exiting (success).")
             write_done(targets, states, "complete")
             return 0
         if not in_progress:

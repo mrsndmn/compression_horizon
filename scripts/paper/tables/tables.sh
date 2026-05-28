@@ -30,6 +30,7 @@ PROGRESSIVE_TABLES=(
   tab:all_progressive_modifications
   tab:progressive_no_bos_token
   tab:layer_ablation
+  tab:layer_ablation_schemes
   tab:init_ablation
   tab:prefix_ablation
   tab:added_tokens_ablation
@@ -38,6 +39,30 @@ PROGRESSIVE_TABLES=(
 for name in "${PROGRESSIVE_TABLES[@]}"; do
   "$PY" scripts/paper/tables/progressive.py --name "$name" --save
 done
+
+# --- Depth x size pivot (main-text overview of compressed tokens) ------------
+# tab:depth_size_pivot. Compact rows=model x cols=first-N layers (+ Full) view of
+# the compressed-token means in tab:layer_ablation; edit MODELS/columns in the script.
+"$PY" scripts/paper/tables/depth_size_pivot.py --save
+
+# --- Surprisal vs. steps-to-converge -----------------------------------------
+# tab:surprisal_steps_correlation. Renders from the per-checkpoint
+# surprisal_steps_cache.json files (no GPU). Regenerate those caches once with
+# `--compute` (needs a GPU + the four base models) before this will reflect new runs.
+"$PY" scripts/paper/tables/surprisal_steps_correlation.py --save
+
+# --- Solution diversity across learning rates --------------------------------
+# tab:solution_diversity. Renders from artifacts/paper/solution_diversity/<key>.json.
+# Regenerate those caches once with `--compute` (CPU only; reads the LR-sweep
+# trajectory datasets) before this will reflect new runs.
+"$PY" scripts/paper/tables/solution_diversity.py --save
+
+# --- Trajectory shape: Euclidean- and step-based jumps (merged tables) -------
+# tab:trajectory_cluster_structure (+ _lr) place the two jump definitions side-by-side per row.
+# Renders from two cache sets; regenerate each once per run (CPU only) before this reflects new runs:
+#   Euclidean jumps:  scripts/analyze_trajectory_clusters.py --run_dir <run>  (writes summary.json)
+#   Step jumps:       scripts/paper/tables/trajectory_steps.py --compute      (writes trajectory_steps/<run>.json)
+"$PY" scripts/paper/tables/trajectory_clusters.py --save
 
 # --- Full vs. progressive cramming -------------------------------------------
 # tab:full_vs_progressive
