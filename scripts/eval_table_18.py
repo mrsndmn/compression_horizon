@@ -30,6 +30,18 @@ from compression_horizon.inference.generation import calculate_logits, generate_
 from compression_horizon.utils.launch import resolve_torch_dtype
 
 
+def _load_prior_summary(path: str) -> dict | None:
+    """Load a previously written eval JSON if it exists (for --skip_greedy merge)."""
+    p = Path(path)
+    if not p.is_file():
+        return None
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
 @torch.no_grad()
 def _teacher_forced_matches(
     *,
@@ -68,6 +80,7 @@ def _evaluate_one(
     device: torch.device,
     model_dtype: torch.dtype,
     num_mismatch_positions: int = 3,
+    skip_greedy: bool = False,
 ) -> dict:
     input_ids = torch.tensor(row["input_ids"], dtype=torch.long, device=device)
     num_tokens = int(input_ids.shape[0])
@@ -76,7 +89,7 @@ def _evaluate_one(
             "sample_id": int(row.get("sample_id", -1)),
             "num_tokens": 0,
             "final_convergence": float(row.get("final_convergence", float("nan"))),
-            "greedy_match_rate": float("nan"),
+            "greedy_match_rate": None,
             "mismatch_at_position": [],
             "greedy_mismatch_at_position": [],
             "tf_mismatch_at_position": [],
@@ -87,32 +100,43 @@ def _evaluate_one(
         embedding = embedding.unsqueeze(0)  # [1, H]
     compression_tokens = embedding.unsqueeze(0).to(model_dtype)  # [1, C, H]
 
-    _texts, generated_ids = generate_from_compression(
-        model=model,
-        tokenizer=tokenizer,
-        compression_token_embeddings=compression_tokens,
-        max_new_tokens=num_tokens,
-        num_return_sequences=1,
-        return_generated_ids=True,
-    )
-    generated = generated_ids[0].to(device)
-    # generate_from_compression aborts on EOS, so it may return < num_tokens
-    # predictions. Pad the tail with EOS (or pad_token) so position-wise
-    # mismatch counts at indices 0/1/2 stay well-defined and any post-EOS
-    # gap counts as a mismatch against the ground-truth tokens.
-    n_pred = int(generated.shape[0])
-    if n_pred < num_tokens:
-        fill_id = (
-            tokenizer.eos_token_id
-            if tokenizer.eos_token_id is not None
-            else (tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0)
-        )
-        pad = torch.full((num_tokens - n_pred,), int(fill_id), dtype=generated.dtype, device=device)
-        generated = torch.cat([generated, pad], dim=0)
-    greedy_matches = (generated == input_ids).to(torch.long)
-    greedy_match_rate = float(greedy_matches.float().mean().item())
+    k_max = min(num_mismatch_positions, num_tokens)
 
-    # Teacher-forced per-position matches (ground-truth prefix at each step).
+    # Greedy autoregressive decode (the expensive part: N sequential forwards).
+    # Skipped when --skip_greedy to save time when only teacher-forced @k is needed.
+    greedy_match_rate = None
+    greedy_mismatch_at_position: list[int] = []
+    predicted_first3: list[int] = []
+    n_pred = 0
+    if not skip_greedy:
+        _texts, generated_ids = generate_from_compression(
+            model=model,
+            tokenizer=tokenizer,
+            compression_token_embeddings=compression_tokens,
+            max_new_tokens=num_tokens,
+            num_return_sequences=1,
+            return_generated_ids=True,
+        )
+        generated = generated_ids[0].to(device)
+        # generate_from_compression aborts on EOS, so it may return < num_tokens
+        # predictions. Pad the tail with EOS (or pad_token) so position-wise
+        # mismatch counts at indices 0/1/2 stay well-defined and any post-EOS
+        # gap counts as a mismatch against the ground-truth tokens.
+        n_pred = int(generated.shape[0])
+        if n_pred < num_tokens:
+            fill_id = (
+                tokenizer.eos_token_id
+                if tokenizer.eos_token_id is not None
+                else (tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0)
+            )
+            pad = torch.full((num_tokens - n_pred,), int(fill_id), dtype=generated.dtype, device=device)
+            generated = torch.cat([generated, pad], dim=0)
+        greedy_matches = (generated == input_ids).to(torch.long)
+        greedy_match_rate = float(greedy_matches.float().mean().item())
+        greedy_mismatch_at_position = [int((1 - greedy_matches[k]).item()) for k in range(k_max)]
+        predicted_first3 = generated[: min(3, num_tokens)].cpu().tolist()
+
+    # Teacher-forced per-position matches (ground-truth prefix at each step): one forward.
     tf_matches = _teacher_forced_matches(
         model=model,
         compression_tokens=compression_tokens,
@@ -120,9 +144,6 @@ def _evaluate_one(
         device=device,
         model_dtype=model_dtype,
     )
-
-    k_max = min(num_mismatch_positions, num_tokens)
-    greedy_mismatch_at_position = [int((1 - greedy_matches[k]).item()) for k in range(k_max)]
     tf_mismatch_at_position = [int((1 - tf_matches[k]).item()) for k in range(k_max)]
 
     return {
@@ -136,7 +157,7 @@ def _evaluate_one(
         "mismatch_at_position": greedy_mismatch_at_position[: min(3, k_max)],
         "greedy_mismatch_at_position": greedy_mismatch_at_position,
         "tf_mismatch_at_position": tf_mismatch_at_position,
-        "predicted_first3": generated[: min(3, num_tokens)].cpu().tolist(),
+        "predicted_first3": predicted_first3,
         "target_first3": input_ids[: min(3, num_tokens)].cpu().tolist(),
     }
 
@@ -157,7 +178,9 @@ def _aggregate(per_sample: list[dict], num_mismatch_positions: int) -> dict:
         return {"num_samples": 0}
 
     final_conv = sum(r["final_convergence"] for r in valid) / n
-    greedy_conv = sum(r["greedy_match_rate"] for r in valid) / n
+    # greedy_match_rate may be None when --skip_greedy was used.
+    greedy_vals = [r["greedy_match_rate"] for r in valid if r.get("greedy_match_rate") is not None]
+    greedy_conv = (sum(greedy_vals) / len(greedy_vals)) if greedy_vals else None
     tf_conv = sum(r.get("tf_match_rate", float("nan")) for r in valid) / n
 
     # Back-compat scalar fields consumed by build_table_18.py (greedy @0/1/2).
@@ -211,6 +234,13 @@ def main() -> None:
         help="How many leading positions to record per-position mismatch for "
         "(greedy AND teacher-forced). Use e.g. 25 to inspect the error curve.",
     )
+    parser.add_argument(
+        "--skip_greedy",
+        action="store_true",
+        help="Skip the (expensive) greedy autoregressive decode and compute only "
+        "teacher-forced metrics. Greedy aggregate fields are preserved from a prior "
+        "eval JSON at the output path if present, so the Greedy conv. column survives.",
+    )
     args = parser.parse_args()
 
     torch.manual_seed(int(args.seed))
@@ -247,12 +277,14 @@ def main() -> None:
             device=device,
             model_dtype=model_dtype,
             num_mismatch_positions=args.num_mismatch_positions,
+            skip_greedy=args.skip_greedy,
         )
+        greedy_str = "skip" if result["greedy_match_rate"] is None else f"{result['greedy_match_rate']:.4f}"
         print(
             f"[{i+1}/{len(ds)}] sample_id={result['sample_id']} "
-            f"final={result['final_convergence']:.4f} greedy={result['greedy_match_rate']:.4f} "
+            f"final={result['final_convergence']:.4f} greedy={greedy_str} "
             f"tf={result.get('tf_match_rate', float('nan')):.4f} "
-            f"greedy_mismatch@0/1/2={result['mismatch_at_position']}"
+            f"tf_mismatch@0/1/2={result['tf_mismatch_at_position']}"
         )
         per_sample.append(result)
 
@@ -262,6 +294,28 @@ def main() -> None:
     summary["per_sample"] = per_sample
 
     out_path = args.output_json or str(Path(args.compressed_prefixes_path).parent / "table_18_eval.json")
+
+    # When greedy was skipped, carry over greedy aggregates from a prior eval JSON
+    # so the "Greedy conv." column (and legacy mismatch_at_k) is not lost.
+    if args.skip_greedy:
+
+        def _needs_fill(x) -> bool:
+            # Missing if None, empty list, or a list whose entries are all None.
+            if x is None or x == []:
+                return True
+            if isinstance(x, list) and all(v is None for v in x):
+                return True
+            return False
+
+        prior = _load_prior_summary(out_path)
+        if prior is not None:
+            for key in ("greedy_match_rate_mean", "mismatch_at_0", "mismatch_at_1", "mismatch_at_2", "greedy_mismatch_curve"):
+                if _needs_fill(summary.get(key)) and not _needs_fill(prior.get(key)):
+                    summary[key] = prior[key]
+            print(f"[skip_greedy] preserved greedy aggregates from prior {out_path}")
+        else:
+            print(f"[skip_greedy] WARNING: no prior JSON at {out_path}; greedy fields will be empty")
+
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
