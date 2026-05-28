@@ -297,7 +297,7 @@ Once the autoregressive process deviates at the first or second token, all
 subsequent tokens are generated conditioned on an incorrect prefix, leading to
 rapid and irreversible divergence.
 Consistently across all evaluated models, we observe that mean greedy convergence
-collapses to near zero (at most ${\sim}2\%$) whenever compression training fails to
+collapses to near zero (at most ${\sim}4\%$) whenever compression training fails to
 achieve perfect reconstruction.
 In practice, a single early mismatch nullifies the utility of the remaining
 correctly reconstructed tokens, despite high aggregate training accuracy.
@@ -359,6 +359,7 @@ This motivates constraining optimization to a learned projection:
 
 where $\mathbf{z} \in \mathbb{R}^k$ with $k \ll d$, $\mathbf{W} \in \mathbb{R}^{d \times k}$, and $\mathbf{b} \in \mathbb{R}^d$.
 For each sample, we randomly initialize $(\mathbf{W}, \mathbf{b}, \mathbf{z})$ and optimize them jointly, which restricts the compression embedding to a rank-$k$ affine subspace.
+While $(\mathbf{W}, \mathbf{b})$ are fit per sample by default, the same parameterization also admits a \emph{shared} projection---a single $(\mathbf{W}, \mathbf{b})$ trained jointly across a corpus, with only the per-sample coefficients $\mathbf{z}$ left free---which lets us ask whether the low-rank subspace of valid solutions is corpus-universal or sample-specific.
 
 After optimization, the effective embedding $\mathbf{e}$ can be materialized once and reused; the projection primarily changes the optimization geometry by introducing optimizer state (e.g., momentum) in the low-dimensional coordinates.
 
@@ -457,6 +458,12 @@ Empirically, this can improve stability and alter the effective capacity:
 
 Table~\ref{tab:progressive_modifications} compares baseline progressive cramming to a representative low-dimensional projection setting (``dim'') for each family. We can see stable metrics growth across all models families.
 
+\paragraph{Is the low-rank subspace shared or sample-specific?}
+The projection parameterization lets us probe whether valid compression embeddings inhabit a corpus-wide low-rank subspace or a sample-specific one.
+Training a single shared projection $(\mathbf{W}, \mathbf{b})$ jointly across 50 PG19 samples on SmolLM2-1.7B (per-sample $\mathbf{z}$, $k=256$) reaches $742 \pm 177$ compressed tokens and $2566 \pm 511$ bits of information gain---only modestly below the per-sample projection ($957 \pm 142$ tokens, $3271 \pm 309$ bits), so a single basis can serve an entire corpus.
+However, freezing this shared basis and transferring it to 50 unseen PG19 samples---optimizing only $\mathbf{z}$---collapses capacity to $8.7 \pm 6.8$ tokens and $36 \pm 29$ bits.
+The shared basis thus succeeds only because $(\mathbf{W}, \mathbf{b})$ co-adapt with the specific coefficients seen during training; the low-rank subspace of valid solutions is sample-specific rather than a universal property of the model, consistent with the wide, near-orthogonal solution set documented in Appendix~\ref{app:solution_diversity}.
+
 
 \subsection{PCA Reconstruction}
 \label{sec:pca_reconstruction}
@@ -515,6 +522,7 @@ This highlights a key limitation of using reconstruction accuracy alone: perfect
 Appendix~\ref{app:imperfect_reconstruction} further confirms that this drop reflects the compression embedding itself rather than residual reconstruction errors: because HellaSwag and ARC score fixed context--continuation pairs without regenerating the prefix, restricting the evaluation to perfectly reconstructed instances leaves accuracy essentially unchanged.
 Varying which token logits enter the likelihood score localizes \emph{where} this information is lost---scoring the full context, only the candidate ending, or the embedding alone---yet the compressed conditions remain well below baseline under every strategy (Appendix~\ref{app:scoring_strategies}).
 This degradation becomes a complete collapse under a \emph{generative} benchmark: on 5-shot MMLU (Appendix~\ref{app:mmlu}, Table~\ref{tab:rebuttle_mmlu}), compressing the full prefix drives accuracy to near zero with no valid parseable answers, while a random control embedding leaves accuracy nearly intact -- confirming that the degradation is specifically caused by the optimized compression embedding rather than by conditioning on an out-of-distribution token.
+Beyond fixed-choice tasks, a small LLM-as-judge study of open-ended continuations generated from the compression embedding (Appendix~\ref{app:llm_judge}) finds that activation alignment, at matched reconstruction fidelity, improves the coherence and relevance of generation beyond the compressed window.
 
 % =============================================================================
 \section{Causal Analysis: Attention Mass vs. Causal Importance}
