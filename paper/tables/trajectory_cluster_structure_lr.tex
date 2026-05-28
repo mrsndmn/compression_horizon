@@ -1,0 +1,11 @@
+\begin{tabular}{lllllllll}
+\toprule
+ &  &  & \multicolumn{3}{c}{Euclidean-based} & \multicolumn{3}{c}{Step-based} \\
+\cmidrule(lr){4-6} \cmidrule(lr){7-9}
+Model & Stages & PCA 99\% & Gap-ratio & $r_1$ {\small (shuffle)} & Dwelling \% & Gap-ratio & $r_1$ {\small (shuffle)} & Dwelling \% \\
+\midrule
+SmolLM2-1.7B {\small lr=0.1} & 335 & 33 & 17.5 {\small (1.2)} & +0.11 {\small (+0.00)} & 60\% & 118.8 & +0.28 {\small (+0.00)} & 88\% \\
+SmolLM2-1.7B {\small lr=0.5} & 455 & 72 & 15.5 {\small (1.1)} & +0.19 {\small (+0.00)} & 92\% & 71.0 & +0.21 {\small (+0.00)} & 94\% \\
+SmolLM2-1.7B {\small lr=1.0} & 500 & 100 & 23.0 {\small (1.1)} & +0.15 {\small (+0.00)} & 78\% & 81.5 & +0.16 {\small (+0.00)} & 82\% \\
+\bottomrule
+\end{tabular}
