@@ -40,6 +40,11 @@ for name in "${PROGRESSIVE_TABLES[@]}"; do
   "$PY" scripts/paper/tables/progressive.py --name "$name" --save
 done
 
+# --- Depth x size pivot (main-text overview of compressed tokens) ------------
+# tab:depth_size_pivot. Compact rows=model x cols=first-N layers (+ Full) view of
+# the compressed-token means in tab:layer_ablation; edit MODELS/columns in the script.
+"$PY" scripts/paper/tables/depth_size_pivot.py --save
+
 # --- Surprisal vs. steps-to-converge -----------------------------------------
 # tab:surprisal_steps_correlation. Renders from the per-checkpoint
 # surprisal_steps_cache.json files (no GPU). Regenerate those caches once with
