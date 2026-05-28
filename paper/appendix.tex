@@ -478,11 +478,10 @@ solutions $\{e^*_{\eta}\}$ reached from one common starting point.
 
 For every such matched group we measure three things. The solutions are equally good by construction
 (all reach perfect reconstruction); we confirm they are also equivalent in capacity through the
-coefficient of variation of their information gain (``IG CV''). We measure how far apart they are by
-the mean pairwise Euclidean distance between the $e^*_{\eta}$, expressed in units of their mean
-displacement-from-init $\|e^*_{\eta}-e_0\|$ (``Sol.\ dist.''); reporting distance relative to
-displacement makes it scale-free, so a large value cannot be an artifact of the larger steps that high
-learning rates take. Finally we measure whether the solutions differ along shared or independent
+coefficient of variation of their information gain (``IG CV''). We measure how far apart they are by the
+mean pairwise distance between the $e^*_{\eta}$, relative to their mean displacement-from-init
+$\|e^*_{\eta}-e_0\|$ (``Sol.\ dist.''). This ratio is scale-free, so a large value is not just an
+artifact of the larger steps high learning rates take. Finally we measure whether the solutions differ along shared or independent
 directions through the mean pairwise cosine of the displacement vectors $(e^*_{\eta}-e_0)$
 (``Dir.\ cos.''); the baseline for unrelated directions in $d$ dimensions is $\approx 1/\sqrt{d}$, i.e.\
 $0.016$--$0.022$ for these hidden sizes. We pool these over all matched groups (a geometric grid of
@@ -506,21 +505,18 @@ scattered in largely independent directions, and a higher learning rate simply r
 members of that set. The low PCA-$99\%$ of any one trajectory (Section~\ref{sec:trajectory}) is
 therefore a property of a single, lazily warm-started \emph{path}---one thin slice of the solution
 set---not of an intrinsic low-dimensional solution manifold. This directly explains why
-low-dimensional projection (Section~\ref{sec:lowdim}) preserves cramming quality: if valid solutions
-are spread densely across the embedding space, confining optimization to a random rank-$k$ affine
-subspace still intersects the solution set, so quality is retained while the optimization geometry
-simplifies. It also explains why, for a model such as Llama-3.1-8B, raising the learning rate inflates
+low-dimensional projection (Section~\ref{sec:lowdim}) preserves cramming quality. If valid solutions
+are spread densely across the embedding space, even a random rank-$k$ affine subspace still intersects
+the solution set, so quality is retained while the optimization geometry simplifies. It also explains why, for a model such as Llama-3.1-8B, raising the learning rate inflates
 trajectory length and dimensionality without improving information gain---the extra exploration finds
 different solutions, not better ones.
 
 Two caveats temper the claim. First, although the scale-free distance and the direction cosines are
 robust to the step-size confound, these solutions still share an initialization and warm-start history, so
-they are correlated rather than fully independent draws; the small but positive direction cosines
-(largest for Pythia, smallest for Gemma) reflect a weak shared component on top of the dominant
-idiosyncratic ones. Second, the cleanest test---independent random restarts at a \emph{fixed} learning
+they are correlated rather than fully independent draws; their positive direction cosines (largest for
+Pythia, smallest for Gemma) reflect this shared component. Second, the cleanest test---independent random restarts at a \emph{fixed} learning
 rate---would remove the shared-init confound entirely; we expect it to strengthen the conclusion, since
-independent initializations can only increase diversity, and leave it to future work. The analysis here
-reads only already-saved trajectories and adds no training cost.
+independent initializations can only increase diversity, and leave it to future work.
 
 \begin{table*}[t]
     \centering
