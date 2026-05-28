@@ -77,7 +77,7 @@ def _row(display: str, agg: dict, latex: bool) -> list:
     r_acf, s_acf = _sgn(agg["jump_autocorr_real_mean"]), _sgn(agg["jump_autocorr_shuffle_mean"])
     acf = f"{r_acf} {{\\small ({s_acf})}}" if latex else f"{r_acf} ({s_acf})"
     dwell = f"{agg['fraction_dwelling_basins'] * 100:.0f}\\%" if latex else f"{agg['fraction_dwelling_basins'] * 100:.0f}%"
-    return [display, str(agg["n_samples"]), f"{agg['pca99_mean']:.0f}", gap, acf, dwell]
+    return [display, f"{agg['pca99_mean']:.0f}", gap, acf, dwell]
 
 
 def format_table(rows_spec: List[Tuple[str, str]], tablefmt: str = "latex") -> str:
@@ -85,7 +85,6 @@ def format_table(rows_spec: List[Tuple[str, str]], tablefmt: str = "latex") -> s
     rows = [_row(disp, load_aggregate(run), latex) for disp, run in rows_spec]
     headers = [
         "Model",
-        "$N$" if latex else "N",
         "PCA 99\\%" if latex else "PCA99",
         "Gap-ratio {\\small (null)}" if latex else "Gap-ratio (null)",
         "Jump acf $r_1$ {\\small (shuffle)}" if latex else "Jump acf r1 (shuffle)",
