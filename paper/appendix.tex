@@ -23,7 +23,7 @@ Each experiment ran on a single NVIDIA A100 80GB GPU, with up to 16 GPUs used in
 \section{Full cramming vs progressive.}
 \label{app:1}
 
-In Table~\ref{tab:full_vs_progressive_appendix} we present results from Section~\ref{sec:experiments} for full and compressive cramming comparison for different model sizes of Llama and Pythia families.
+In Table~\ref{tab:full_vs_progressive_appendix} we present results from Section~\ref{sec:experiments} for full and progressive cramming comparison for different model sizes of Llama and Pythia families.
 
 \begin{table}[!htbp]
     \caption{Full vs. progressive cramming on PG19. ``Full'' cramming uses a fixed token budget and may stop below perfect reconstruction \cite{kuratov2025cramming}; progressive cramming fixes reconstruction at 100\% and reports the achieved token count.}
@@ -370,7 +370,7 @@ the loss of the first two tokens by a factor of three (2 leading).}
 \end{table*}
 
 
-\section{Analysis of the Recostruction Accuracy}
+\section{Analysis of the Reconstruction Accuracy}
 \label{app:I}
 
 As noted in Section~\ref{sec:prior_limitations}, a 99\% token-level accuracy threshold is insufficient to guarantee correct reconstruction when evaluation is performed without \emph{teacher forcing} (i.e., when generated tokens are fed back into the prefix rather than replacing them with the ground-truth tokens). Table~\ref{tab:compression_reconstruction_summary} shows that under non-progressive training, the remaining $\sim$1\% error is concentrated in the first few positions (indices 0-2); these early mistakes then compound, leading to divergent generations.

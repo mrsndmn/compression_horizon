@@ -58,8 +58,8 @@
 
 % Todonotes is useful during development; simply uncomment the next line
 %    and comment out the line below the next line to turn off comments
-%\usepackage[disable,textsize=tiny]{todonotes}
-\usepackage[textsize=tiny]{todonotes}
+\usepackage[disable,textsize=tiny]{todonotes}
+%\usepackage[textsize=tiny]{todonotes}
 
 % The \icmltitle you define below is probably too long as a header.
 % Therefore, a short form for the running title is supplied here:
@@ -151,11 +151,6 @@
 
 
 
-% TODO выкидываем это в апендикс или основной текст?
-% НЕ Уточнили границы крамминга
-% А научились точно вовремя останавливать крамминг с идеальной точностью. А 1% ошибок - это очень плохо.
-
-
 \section{Introduction}
 \label{sec:introduction}
 
@@ -236,9 +231,6 @@ The optimization of continuous embeddings as model inputs originated in paramete
 \citet{lester-etal-2021-prompt-tuning} propose prompt tuning, a simplified approach that learns soft prompts only at the input layer rather than at every transformer layer. They demonstrate that prompt tuning becomes increasingly competitive with full model tuning as model scale increases, with billion-parameter models closing the gap entirely. This finding suggests that larger models develop embedding spaces with sufficient structure to support rich task-specific conditioning through input manipulation alone.
 
 These methods establish that frozen language models can be effectively steered through learned embeddings without modifying model parameters. Token cramming can be viewed as an extreme case of this paradigm: rather than encoding task-specific instructions, the learned embedding must encode the complete information content of an arbitrary token sequence. Our progressive cramming methodology bridges these perspectives by studying how compression tokens interact with the model's attention and activation patterns as the encoding task becomes increasingly demanding.
-
-% \paragraph{Mechanistic Interpretability.}
-% {\color{red} TODO? Logit lens, activation patching, attention analysis. Methods we use for understanding hijacking.}
 
 
 % =============================================================================
@@ -589,29 +581,6 @@ Critically, downstream evaluation indicates that optimizing embeddings for recon
 
 Our study remains limited in scope: we use a small number of PG19 samples. Our causal interventions cover three model families---Llama-3.1-8B in the main text, with consistent results for Pythia-1.4B and SmolLM2-1.7B in Appendix~\ref{app:knockout_models}---but a single evaluation dataset.
 Future work should extend these interventions to larger and more diverse models and develop a \emph{fast} compressor that produces semantically meaningful compression embeddings.
-
-
-% ---------------------------------------------------------------------------
-% TODO / notes (kept for future revisions; all commented intentionally)
-% ---------------------------------------------------------------------------
-% {\color{red} how much bos token is similar to bos token?}  -- won't fix
-% {\color{red} looks like attention sliv (sink?)}
-% {\color{red} run more samples experiments to validate mainpaper}
-% {\color{red} my own optimizer that explores more dimensions? if we found bad local minima, we can explore more dimensions?}
-% TODO а сколько реально нужно компонент, чтобы достичь идеальной точности для генеративной реконструкции?
-% {\color{red} TODO - how and why exactly softcapping?}
-% {\color{red} TODO - shared subspaces?}
-% вообще занятно, конечно, можно ради интересна замерить бенч с добавленным рандомным токеном перед префиксом, или эмбеддом усредненным по всему словарю
-% {\color{red} TODO - does filtering only perfectly-compressed prefixes for sem evaluation - what acccuracy would they have?}
-% {\color{red} TODO - ranged loss weight increase for tokens?}
-% {\color{red} TODO visualize Optimization Landscape.}
-% \begin{itemize}
-%     \item \todo{Models tested (only decoder-only? specific families?)}
-%     \item \todo{Sequence types (only English text? specific domains?)}
-%     \item \todo{Computational cost of progressive approach}
-%     \item \todo{PCA analysis lacks strong null hypothesis comparison}
-% \end{itemize}
-% ===========
 
 \section*{Impact Statement}
 
