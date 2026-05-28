@@ -90,6 +90,37 @@ def _size_from_area(area: float, a_min: float, a_max: float) -> float:
     return 120.0 + 320.0 * (t**0.5)
 
 
+def _fit_to_aspect(rect: Tuple[float, float, float, float], aspect: float) -> Tuple[float, float, float, float]:
+    """Expand a (x0,x1,y0,y1) rect about its center until dx/dy == aspect.
+
+    Keeping every camera rect at one aspect ratio lets us interpolate limits
+    frame-to-frame without the axes box (and thus the trajectory's proportions)
+    changing shape during a smooth zoom.
+    """
+    x0, x1, y0, y1 = rect
+    dx = max(x1 - x0, 1e-9)
+    dy = max(y1 - y0, 1e-9)
+    cur = dx / dy
+    if cur < aspect:  # too narrow -> widen x
+        new_dx = aspect * dy
+        cx = 0.5 * (x0 + x1)
+        x0, x1 = cx - 0.5 * new_dx, cx + 0.5 * new_dx
+    elif cur > aspect:  # too wide -> heighten y
+        new_dy = dx / aspect
+        cy = 0.5 * (y0 + y1)
+        y0, y1 = cy - 0.5 * new_dy, cy + 0.5 * new_dy
+    return (x0, x1, y0, y1)
+
+
+def _smoothstep(z: float) -> float:
+    z = float(np.clip(z, 0.0, 1.0))
+    return z * z * (3.0 - 2.0 * z)
+
+
+def _lerp_rect(a: Tuple[float, float, float, float], b: Tuple[float, float, float, float], t: float):
+    return tuple(float(ai + (bi - ai) * t) for ai, bi in zip(a, b))
+
+
 def _load_steps_per_point(npz: Dict, n_expected: int):
     """Per-stage optimizer ``steps_taken`` aligned with the trajectory ``coords`` order.
 
@@ -201,6 +232,30 @@ def main() -> None:
         help="Show all accuracy regions from frame 0 (default: each fades in as the cursor reaches its anchor).",
     )
     ap.add_argument("--trail-alpha", "--trail_alpha", dest="trail_alpha", type=float, default=0.45)
+    ap.add_argument(
+        "--opacity",
+        choices=["steps", "uniform"],
+        default="steps",
+        help="'steps' (default): each trail point's opacity scales (log) with the optimizer steps that "
+        "token took to converge -- hard tokens render darker, surfacing the dwell-and-leap basin edges. "
+        "'uniform': every point uses --trail-alpha.",
+    )
+    ap.add_argument(
+        "--trail-alpha-min",
+        "--trail_alpha_min",
+        dest="trail_alpha_min",
+        type=float,
+        default=0.12,
+        help="Trail-point alpha for the fewest-step token when --opacity steps.",
+    )
+    ap.add_argument(
+        "--trail-alpha-max",
+        "--trail_alpha_max",
+        dest="trail_alpha_max",
+        type=float,
+        default=0.9,
+        help="Trail-point alpha for the most-step token when --opacity steps.",
+    )
     ap.add_argument("--dpi", type=int, default=150)
     ap.add_argument("--gif-width", "--gif_width", dest="gif_width", type=int, default=900)
     ap.add_argument(
@@ -209,6 +264,23 @@ def main() -> None:
         default="steps",
         help="'steps' (default): each token's dwell time is proportional to the optimizer "
         "steps it took to converge (read from the cached dataset). 'uniform': equal time per token.",
+    )
+    ap.add_argument(
+        "--zoom-start",
+        "--zoom_start",
+        dest="zoom_start",
+        type=int,
+        default=0,
+        help="If >0, smoothly zoom the camera into the END of the trajectory (tokens [zoom_start:] and their "
+        "anchors/regions) as the cursor reaches token zoom_start. 0 = no zoom (full view throughout).",
+    )
+    ap.add_argument(
+        "--zoom-seconds",
+        "--zoom_seconds",
+        dest="zoom_seconds",
+        type=float,
+        default=1.5,
+        help="Duration (s) of the smooth camera zoom transition.",
     )
     ap.add_argument("--no-mp4", dest="no_mp4", action="store_true", help="Skip MP4 output.")
     ap.add_argument("--no-gif", dest="no_gif", action="store_true", help="Skip GIF output.")
@@ -235,6 +307,11 @@ def main() -> None:
     coords = npz["coords"].astype(np.float32)
     coords_xy = coords[:, :2]
     n_traj = int(coords_xy.shape[0])
+
+    zoom_start = int(args.zoom_start)
+    if zoom_start < 0 or zoom_start >= n_traj:
+        raise ValueError(f"--zoom-start out of range: {zoom_start} (valid: 0..{n_traj - 1})")
+    zoom_enabled = zoom_start > 0
 
     explained = npz["explained_variance_ratio"].astype(np.float64)
     ev_cum_2 = float(explained[0] + explained[1])
@@ -295,6 +372,39 @@ def main() -> None:
     dy = max(y_max - y_min, 1e-6)
     pad_x, pad_bot, pad_top = 0.06, 0.07, 0.20  # extra headroom so top region/label clears the title
 
+    full_rect = (x_min - pad_x * dx, x_max + pad_x * dx, y_min - pad_bot * dy, y_max + pad_top * dy)
+    cam_aspect = (full_rect[1] - full_rect[0]) / max(full_rect[3] - full_rect[2], 1e-9)
+
+    # Zoom target: the end of the trajectory (tokens [zoom_start:]) plus the anchors/regions
+    # at index >= zoom_start. Fit to the full view's aspect so the camera move doesn't distort.
+    zoom_rect = full_rect
+    if zoom_enabled:
+        zx0 = [float(coords_xy[zoom_start:, 0].min())]
+        zx1 = [float(coords_xy[zoom_start:, 0].max())]
+        zy0 = [float(coords_xy[zoom_start:, 1].min())]
+        zy1 = [float(coords_xy[zoom_start:, 1].max())]
+        for a, r in enumerate(regions):
+            if int(sampled_indices[a]) < zoom_start:
+                continue
+            zx0.append(float(anchor_xy_all[a, 0]))
+            zx1.append(float(anchor_xy_all[a, 0]))
+            zy0.append(float(anchor_xy_all[a, 1]))
+            zy1.append(float(anchor_xy_all[a, 1]))
+            mb = r["mask_bounds"]
+            if mb is not None:
+                zx0.append(mb[0])
+                zx1.append(mb[1])
+                zy0.append(mb[2])
+                zy1.append(mb[3])
+        zx_min, zx_max = min(zx0), max(zx1)
+        zy_min, zy_max = min(zy0), max(zy1)
+        zdx = max(zx_max - zx_min, 1e-6)
+        zdy = max(zy_max - zy_min, 1e-6)
+        zoom_rect = _fit_to_aspect(
+            (zx_min - pad_x * zdx, zx_max + pad_x * zdx, zy_min - pad_bot * zdy, zy_max + pad_top * zdy),
+            cam_aspect,
+        )
+
     # Styling (talk: large fonts).
     if sns is not None:
         sns.set_theme(style="whitegrid")
@@ -309,8 +419,8 @@ def main() -> None:
     )
 
     fig, ax = plt.subplots(1, 1, figsize=(12.0, 9.0))
-    ax.set_xlim(x_min - pad_x * dx, x_max + pad_x * dx)
-    ax.set_ylim(y_min - pad_bot * dy, y_max + pad_top * dy)
+    ax.set_xlim(full_rect[0], full_rect[1])
+    ax.set_ylim(full_rect[2], full_rect[3])
     ax.set_xlabel(f"PC1  ({float(explained[0]):.1%})")
     ax.set_ylabel(f"PC2  ({float(explained[1]):.1%})")
     ax.set_aspect("equal", adjustable="box")
@@ -359,7 +469,7 @@ def main() -> None:
         label_artists.append(lab)
 
     (path_line,) = ax.plot([], [], color="black", alpha=0.30, linewidth=1.6, zorder=1.9)
-    trail = ax.scatter([], [], s=16, c="black", alpha=float(args.trail_alpha), linewidths=0, zorder=2)
+    trail = ax.scatter([], [], s=16, linewidths=0, zorder=2)
     head = ax.scatter([], [], s=300, marker="*", c="red", edgecolors="black", linewidths=1.0, zorder=8)
     title = ax.set_title("", pad=16)
 
@@ -369,8 +479,8 @@ def main() -> None:
     # Pace the reveal so each token's on-screen dwell is proportional to the optimizer
     # steps it took to converge: walk a cumulative "optimizer-step time" axis at constant
     # real-time speed, so hard-to-cram tokens (many steps) linger and easy ones flash by.
-    steps_per_point = _load_steps_per_point(npz, n_traj) if args.pace == "steps" else None
-    if steps_per_point is not None:
+    steps_per_point = _load_steps_per_point(npz, n_traj)
+    if args.pace == "steps" and steps_per_point is not None:
         w = np.clip(steps_per_point.astype(np.float64), 1.0, None)
         cum = np.cumsum(w)
         t = (np.arange(1, anim_frames + 1) / float(anim_frames)) * float(cum[-1])
@@ -380,7 +490,31 @@ def main() -> None:
     reveal_counts = np.concatenate([reveal_counts, np.full(hold_frames, n_traj, dtype=int)])
     total_frames = int(reveal_counts.shape[0])
 
+    # Per-point trail opacity: scale (log) with the optimizer steps each token took to
+    # converge, so hard tokens render darker and the dwell-and-leap basin edges stand out.
+    if args.opacity == "steps" and steps_per_point is not None:
+        la = np.log(np.clip(steps_per_point.astype(np.float64), 1.0, None))
+        span = float(la.max() - la.min())
+        rng01 = (la - la.min()) / span if span > 1e-12 else np.full(n_traj, 0.5)
+        pt_alpha = float(args.trail_alpha_min) + (float(args.trail_alpha_max) - float(args.trail_alpha_min)) * rng01
+    else:
+        pt_alpha = np.full(n_traj, float(args.trail_alpha))
+    trail_rgba = np.zeros((n_traj, 4), dtype=np.float64)
+    trail_rgba[:, 3] = np.clip(pt_alpha, 0.0, 1.0)  # black points, per-token alpha
+
+    # Smooth camera-zoom schedule: start easing when the cursor reaches token zoom_start.
+    heads = reveal_counts - 1
+    if zoom_enabled:
+        reached = np.where(heads >= zoom_start)[0]
+        f_zoom_start = int(reached[0]) if reached.size else total_frames
+        zoom_span = max(int(round(args.zoom_seconds * args.fps)), 1)
+    else:
+        f_zoom_start = total_frames
+        zoom_span = 1
+
     def init():
+        ax.set_xlim(full_rect[0], full_rect[1])
+        ax.set_ylim(full_rect[2], full_rect[3])
         path_line.set_data([], [])
         trail.set_offsets(np.empty((0, 2)))
         head.set_offsets(np.empty((0, 2)))
@@ -389,8 +523,14 @@ def main() -> None:
     def update(f):
         k = int(reveal_counts[f])
         h = k - 1
+        if zoom_enabled:
+            z = _smoothstep((f - f_zoom_start) / float(zoom_span))
+            cx0, cx1, cy0, cy1 = _lerp_rect(full_rect, zoom_rect, z)
+            ax.set_xlim(cx0, cx1)
+            ax.set_ylim(cy0, cy1)
         path_line.set_data(coords_xy[:k, 0], coords_xy[:k, 1])
         trail.set_offsets(coords_xy[:k])
+        trail.set_facecolors(trail_rgba[:k])
         head.set_offsets(coords_xy[h : h + 1])
         for a, r in enumerate(regions):
             show = bool(args.regions_upfront) or (h >= r["reach"])
@@ -414,7 +554,8 @@ def main() -> None:
 
     out_base = args.output
     if out_base is None:
-        out_base = os.path.join(os.path.dirname(args.npz_path), "visual_abstract_trajectory")
+        name = "visual_abstract_trajectory" + (f"_zoom{zoom_start}" if zoom_enabled else "")
+        out_base = os.path.join(os.path.dirname(args.npz_path), name)
     os.makedirs(os.path.dirname(out_base) or ".", exist_ok=True)
 
     mp4_path = out_base + ".mp4"
