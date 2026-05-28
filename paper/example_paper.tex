@@ -192,9 +192,9 @@ Our main contributions are as follows:
     \item We introduce progressive cramming, which grows the target prefix token-by-token and targets 100\% reconstruction, enabling a sharp success/failure boundary beyond fixed-budget, 99\% protocols.
     \item We show that progressive optimization trajectories $\{\mathbf{e}^{(k)}\}$ are low-dimensional: across model families, 30--100 PCA components explain 99\% of per-sample trajectory variance in 2048--4096 dimensional embedding spaces.
     \item We demonstrate that optimizing for reconstruction does not imply preserved downstream utility: on likelihood-based multiple-choice evaluation (HellaSwag, ARC-Easy), prepending a crammed compression embedding causes a moderate but consistent accuracy drop across model families even when the original prefix remains in context, and under generative evaluation it collapses capability almost entirely.
-    \item Using \emph{attention knockout} on Llama-3.1-8B, we causally localize this degradation to the compression embedding's interactions in the \emph{early} layers: masking them restores downstream capability, whereas the late layers that carry the most attention mass have little causal effect. The embedding's attention concentration is therefore a \emph{symptom} of cramming rather than the cause of capability loss.
-    \item We show that cramming capacity is bounded by the frozen reconstructor: truncating pretrained models to their first $N$ layers (then repairing the cut with a short finetune) reveals that compression capacity rises monotonically with both retained depth and model width, and the two compound---an 8-of-36-layer Qwen3-8B out-crams the full 36-layer Qwen3-4B.
-    \item We publicly release our code and the full set of progressive-cramming optimization trajectories at \url{https://github.com/FusionBrainLab/progressive_cramming}.
+    \item Using \emph{attention knockout} we causally localize this degradation to the compression embedding's interactions in the \emph{early} layers: masking them restores downstream capability, whereas the late layers that carry the most attention mass have little causal effect. The embedding's attention concentration is therefore a \emph{symptom} of cramming rather than the cause of capability loss.
+    \item We show that cramming capacity is bounded by the frozen reconstructor: truncating pretrained models to their first $N$ layers (then repairing the cut with a short finetune) reveals that compression capacity rises monotonically with both retained depth and model width.
+    \item We publicly release our code and the set of progressive-cramming optimization trajectories.\footnote{\url{https://github.com/FusionBrainLab/progressive_cramming}}
 \end{itemize}
 
 
@@ -385,8 +385,7 @@ To confirm that our findings are not specific to a single corpus, we replicate t
 
 Table~\ref{tab:full_vs_progressive} compares progressive cramming (targeting 100\% reconstruction) to ``full'' cramming baselines that use fixed token budgets and may terminate below perfect accuracy.
 Because autoregressive decoding is brittle to early errors (Section~\ref{sec:prior_limitations}), we interpret this comparison primarily through the lens of \emph{perfect} reconstruction: progressive cramming trades a fixed-budget constraint for a fixed-accuracy constraint.
-In the default setting, progressive cramming underperforms full cramming in both information gain and reconstructed length for most models (e.g., Llama-3.1-8B), though Pythia-1.4B is an exception, surpassing the fixed-budget full baseline on both metrics.
-However, a low-dimensional projection (Section~\ref{sec:lowdim}) can recover much of this capacity; for Llama-3.1-8B it reaches $4814 \pm 1731$ bits of information gain, comparable to $4865.7 \pm 546.6$ reported by \citet{kuratov2025cramming}. A detailed comparison across additional model sizes can be found in Table~\ref{tab:full_vs_progressive_appendix} (Appendix~\ref{app:1}).
+In the default setting, progressive cramming underperforms full cramming in both information gain and reconstructed length for most models (e.g., Llama-3.1-8B), though Pythia-1.4B surpasses the fixed-budget full baseline on both metrics. Crucially, however, progressive cramming guarantees perfect reconstruction under autoregressive generation, whereas full cramming, which may stop below 100\% accuracy, does not.
 
 \begin{table}[]
     \centering
@@ -402,7 +401,7 @@ However, a low-dimensional projection (Section~\ref{sec:lowdim}) can recover muc
 
 \begin{table*}[]
     \centering
-    \caption{Progressive cramming variants across model families: baseline progressive cramming vs.\ low-dimensional projection only (``dim''). Activation alignment and its combination with projection are reported in Appendix~\ref{app:activation_alignment} (Table~\ref{tab:all_progressive_modifications}).}
+    \caption{Progressive cramming variants across model families: baseline progressive cramming vs.\ low-dimensional projection only (``dim'').}
     \label{tab:progressive_modifications}
 
     \begin{small}
@@ -453,7 +452,7 @@ Low-dimensional projection (Section~\ref{sec:lowdim}) changes the optimization g
 Empirically, this can improve stability and alter the effective capacity:
 \begin{itemize}
     \item It often reduces sensitivity to learning rate by concentrating optimization into a smaller coordinate system.
-    \item It can reduce the intrinsic dimensionality of trajectories (PCA 99\%) while preserving, or sometimes increasing, information gain.
+    \item It can reduce the intrinsic dimensionality of trajectories (PCA 99\%) while consistently increasing information gain.
 \end{itemize}
 
 Table~\ref{tab:progressive_modifications} compares baseline progressive cramming to a representative low-dimensional projection setting (``dim'') for each family. We can see stable metrics growth across all models families.
@@ -467,7 +466,7 @@ Figure~\ref{fig:pca_reconstruction_accuracy} reports accuracy as a function of t
 Although Table~\ref{tab:progressive_modifications} suggests that for Llama-3.1-8B roughly 83 PCA components explain 99\% of trajectory variance, achieving near-perfect teacher-forced reconstruction requires substantially more components.
 We also observe the same failure mode as in the full cramming setup (Section~\ref{sec:prior_limitations}):
 errors cluster at the start of the sequence (often at the first decoded token), which then propagates and breaks subsequent autoregressive decoding.
-This behavior appears whenever reconstruction accuracy is below 100\%; with perfect reconstruction, this failure mode disappears.
+
 
 \begin{figure}[t]
     \centering
@@ -510,7 +509,7 @@ Under this 4-way multiple-choice protocol, random guessing yields 25\% accuracy.
 
 \end{table*}
 
-Table~\ref{tab:semantic_evaluation} shows that prepending a crammed compression embedding consistently reduces downstream accuracy across model families, a moderate but reliable drop that nonetheless stays above chance on these multiple-choice benchmarks.
+Table~\ref{tab:semantic_evaluation} shows that prepending a crammed compression embedding consistently reduces downstream accuracy across model families, a moderate but reliable drop that nonetheless stays above chance on these multiple-choice benchmarks. Compression embeddings from progressive and full cramming perform comparably here.
 Together with the attention analysis, these results suggest that high reconstruction performance can coincide with brittle steering rather than a transferable semantic representation.
 This highlights a key limitation of using reconstruction accuracy alone: perfect reconstruction is insufficient, and future work must explicitly evaluate capability preservation in any downstream semantic evaluation and broader capability benchmarks overall.
 Appendix~\ref{app:imperfect_reconstruction} further confirms that this drop reflects the compression embedding itself rather than residual reconstruction errors: because HellaSwag and ARC score fixed context--continuation pairs without regenerating the prefix, restricting the evaluation to perfectly reconstructed instances leaves accuracy essentially unchanged.
@@ -576,7 +575,7 @@ How much a single embedding can cram is not fixed: it is bounded by the capacity
 
 Both axes drive compression monotonically, and they compound. \textbf{Depth:} within every family the number of perfectly crammed tokens rises with retained depth---roughly doubling per layer-doubling (e.g.\ Qwen3-8B: $119 \to 180 \to 304 \to 625$ at first-$1$/$2$/$4$/$8$). \textbf{Size:} at any matched truncated depth the larger model crams strictly more (Qwen3-8B $>$ Qwen3-4B $>$ SmolLM3-3B at every $N$). The two effects reinforce one another: with enough width a shallow truncation already recovers most of the full-model capacity---the $8$-of-$36$-layer Qwen3-8B and Qwen3-4B reach ${\approx}81$--$82\%$ of their untruncated references, and the $8$-layer Qwen3-8B exceeds the \emph{full} $36$-layer Qwen3-4B. Capacity is thus jointly governed by depth and width---intuitively, depth unpacks the crammed code while width stores it---so a deficit in one can be partly offset by a surplus in the other.
 
-These trends are robust to the design choices detailed in the appendix: the same monotone-in-depth behavior holds for alternative truncation schemes (keeping the first \emph{and} last layers, or only the last layers; Appendix~\ref{app:layer_ablation}), when only width is varied at a fixed depth within one family (Appendix~\ref{app:width_ablation}), and when each truncated model is recovered with a learned compression head instead of a plain finetune (Appendix~\ref{app:ch_qformer_layer_ablation}).
+These trends are robust to the design choices detailed in the appendix: the same monotone-in-depth behavior holds for alternative truncation schemes (keeping the first \emph{and} last layers, or only the last layers; Appendix~\ref{app:layer_ablation}), and when only width is varied at a fixed depth within one family (Appendix~\ref{app:width_ablation}).
 
 \begin{table}[t]
     \centering
@@ -598,9 +597,12 @@ Separately, we find that how much a single embedding can store is bounded by the
 Because the two axes partly substitute for one another, it is the reconstructor's architecture---not parameter count alone---that sets the compression ceiling, so compressibility can be improved by reshaping the model and not only by scaling it.
 Critically, downstream evaluation indicates that optimizing embeddings for reconstruction can coincide with large capability drops, even when the original prefix remains in context, so reconstruction accuracy alone is not a sufficient criterion for meaningful compression.
 
-Our study remains limited in scope: we use a small number of PG19 samples. Our causal interventions cover three model families---Llama-3.1-8B in the main text, with consistent results for Pythia-1.4B and SmolLM2-1.7B in Appendix~\ref{app:knockout_models}---but a single evaluation dataset.
-Encouragingly, our core compression findings already replicate on a second corpus: progressive cramming on Fanfics reproduces the same information-gain and low-dimensional-projection trends across four model families (Appendix~\ref{app:fanfics}).
-Future work should extend these interventions to larger and more diverse models and develop a \emph{fast} compressor that produces semantically meaningful compression embeddings.
+Our study leaves several questions open, each pointing to a concrete direction for future work.
+First, we do not yet know how to make a single embedding both perfectly reconstructable and semantically faithful; reconciling these two objectives remains the central open problem.
+Second, progressive cramming is costly: it is roughly twice as slow as full cramming and resists batching, since each sample reaches perfect reconstruction at its own rate.
+A fast compressor that produced semantically meaningful embeddings in a single forward pass, without per-sample backpropagation, would remove this bottleneck.
+Third, predicting the reconstruction boundary in advance would speed up convergence; information gain is the most reliable proxy we found, but it is still too coarse to pinpoint a model's capacity exactly.
+Finally, our low-dimensional-projection results suggest that better optimizers could compress longer sequences than we reach here.
 
 \section*{Impact Statement}
 
