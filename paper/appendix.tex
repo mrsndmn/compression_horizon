@@ -562,6 +562,26 @@ The key findings are consistent with those observed on PG-19. Information gain f
 \vskip -0.1in
 \end{table*}
 
+\subsection{Free-Generation Quality (LLM-as-Judge)}
+\label{app:llm_judge}
+
+The downstream evaluations above probe fixed-choice tasks (multiple choice, 5-shot MMLU). To assess open-ended generation \emph{beyond} the compressed window, we run a small LLM-as-judge study on SmolLM2-1.7B. For each of $16$ PG-19 samples we compress a $32$-token prefix into a single embedding and then autoregressively generate $64$ tokens conditioned only on that embedding: the first ${\sim}32$ tokens reconstruct the prefix and the remainder is a free continuation past the compressed span. We compare two training objectives for the embedding: the standard cross-entropy reconstruction loss (\emph{Common}) and a hybrid loss that adds cosine activation alignment (\emph{Hybrid}; $\alpha=1$, $L=5$; Appendix~\ref{app:activation_alignment}).
+
+An instruction-tuned judge (\texttt{grok-4.1-fast}, temperature $0$, structured binary output) rates each output on five criteria: adequacy of the restored prefix, and coherence, relevance, fluency, and style consistency of the continuation. An independent judge (\texttt{gemini-2.5-flash}) yields the same conclusions, indicating the verdicts are not an artifact of the judge model.
+
+Table~\ref{tab:llm_judge_eval} reports the fraction of samples passing each criterion. Prefix restoration is identical for both objectives ($0.938$), confirming matched reconstruction fidelity. On the free continuation, however, Hybrid is consistently better: coherence $0.500 \to 0.625$, relevance $0.625 \to 0.750$, and fluency $0.562 \to 0.625$, with style consistency unchanged ($0.625$). At equal reconstruction fidelity, activation alignment thus yields an embedding that carries more usable semantics for generation beyond the compressed window, reinforcing the paper's theme that reconstruction accuracy alone does not capture a representation's downstream value.
+
+\begin{table}[t]
+    \centering
+    \caption{LLM-as-judge evaluation of free continuations generated from a single compression embedding (SmolLM2-1.7B, $16$ PG-19 samples, $32$-token compressed prefix, $64$-token generation). Values are the fraction of samples for which the judge (\texttt{grok-4.1-fast}) returns \texttt{True} on each binary criterion. \emph{Common}: cross-entropy reconstruction; \emph{Hybrid}: with cosine activation alignment ($\alpha=1$, $L=5$).}
+    \label{tab:llm_judge_eval}
+    \begin{small}
+    \input{tables/manual/llm_judge_eval}
+    \end{small}
+\end{table}
+
+These results are a qualitative complement rather than a benchmark: the sample is small ($16$), the criteria are binary, and we use a single model and compression length. The study is also restricted to embeddings that reach near-perfect reconstruction; under imperfect reconstruction the free continuation degrades, consistent with the autoregressive collapse documented in Appendix~\ref{app:I}.
+
 \section{Mechanism: Attention and Causality}
 \label{app:part_mechanism}
 
