@@ -264,10 +264,26 @@ teacher forcing), often in conjunction with a fixed token budget.
 Our results indicate that this evaluation protocol substantially underestimates
 critical failure modes that emerge during autoregressive generation.
 
+\begin{table}[t]
+    \centering
+    \caption{Reconstruction brittleness on PG19. Despite high teacher-forcing
+    convergence (TF conv.), greedy decoding from the compression embedding
+    collapses (Greedy ${\approx}\,0$) because the residual ${\sim}1\%$ error is
+    concentrated at the first two token positions (mismatch rate at indices
+    0/1). Full per-variant breakdown in
+    Table~\ref{tab:compression_reconstruction_summary} (Appendix~\ref{app:I}).}
+    \label{tab:compression_reconstruction_main}
+
+    \begin{small}
+    \input{tables/manual/compression_reconstruction_main}
+    \end{small}
+
+\end{table}
+
 \paragraph{The ``last 1\%'' problem.}
 While a 99\% reconstruction accuracy suggests near-perfect training performance,
 the remaining errors are not uniformly distributed nor benign.
-As shown in Table~\ref{tab:compression_reconstruction_summary}, reconstruction
+As shown in Table~\ref{tab:compression_reconstruction_main}, reconstruction
 mismatches are almost entirely concentrated at the earliest token positions,
 specifically at indices 0 and 1.
 Even when mean teacher-forcing convergence is high (95--99\%), the probability of an
@@ -291,7 +307,7 @@ Finally, evaluation under a fixed token budget further masks this brittleness.
 Methods with similar final convergence values may exhibit qualitatively different
 failure modes, depending on whether reconstruction errors occur early or late in
 the sequence.
-As demonstrated in Table~\ref{tab:compression_reconstruction_summary}, high average
+As demonstrated in Table~\ref{tab:compression_reconstruction_main}, high average
 token-level accuracy does not guarantee usable autoregressive behavior.
 Instead, perfect reconstruction of the earliest tokens emerges as a necessary
 condition for reliable decoding from compressed representations.
