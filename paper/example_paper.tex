@@ -132,13 +132,12 @@
 % \printAffiliationsAndNotice{\icmlEqualContribution}
 
 \begin{abstract}
-    Token cramming compresses sequences into learned embeddings with near-perfect reconstruction, but prior work used fixed token budgets and 99\% accuracy thresholds, obscuring whether residual errors reflect optimization failures or fundamental limits.
-    We introduce progressive cramming, which grows the target prefix token-by-token and stops only when reconstruction is no longer achievable within a fixed optimization budget.
-    Using progressive trajectories, we find that optimization paths occupy surprisingly low-dimensional structure in the embedding space.
-    On likelihood-based multiple-choice evaluation, prepending a crammed embedding causes a moderate but consistent accuracy drop, even with the original prefix in context; under generative evaluation, where the model must use the compressed prefix, capability collapses almost entirely.
-    Causal attention-knockout interventions show that this degradation is driven by the compression embedding's interactions in the model's early layers.
-    Together, these results position progressive cramming as a tool for studying compression limits and show that perfect reconstruction---achievable through brittle steering rather than a transferable semantic representation---is insufficient for meaningful compression.
-    Code and the progressive-cramming compression-embedding optimization trajectories are publicly available at \url{https://github.com/FusionBrainLab/progressive_cramming}.
+    Token cramming compresses sequences into learned embeddings with near-perfect reconstruction, but fixed token budgets and 99\% accuracy thresholds leave it unclear whether residual errors reflect optimization failures or fundamental limits.
+    We introduce progressive cramming, which grows the target prefix token-by-token, stopping only when reconstruction is no longer achievable within a fixed optimization budget.
+    Progressive trajectories occupy surprisingly low-dimensional structure in embedding space.
+    Prepending a crammed embedding causes a moderate but consistent accuracy drop on multiple-choice benchmarks even with the original prefix in context, and collapses capability almost entirely under generative evaluation.
+    Causal attention-knockout interventions trace this degradation to the embedding's interactions in the model's early layers.
+    These results position progressive cramming as a tool for studying compression limits and show that perfect reconstruction---achievable through brittle steering rather than transferable semantics---is insufficient for meaningful compression.
 \end{abstract}
 
 
@@ -195,6 +194,7 @@ Our main contributions are as follows:
     \item We demonstrate that optimizing for reconstruction does not imply preserved downstream utility: on likelihood-based multiple-choice evaluation (HellaSwag, ARC-Easy), prepending a crammed compression embedding causes a moderate but consistent accuracy drop across model families even when the original prefix remains in context, and under generative evaluation it collapses capability almost entirely.
     \item Using \emph{attention knockout} on Llama-3.1-8B, we causally localize this degradation to the compression embedding's interactions in the \emph{early} layers: masking them restores downstream capability, whereas the late layers that carry the most attention mass have little causal effect. The embedding's attention concentration is therefore a \emph{symptom} of cramming rather than the cause of capability loss.
     \item We show that cramming capacity is bounded by the frozen reconstructor: truncating pretrained models to their first $N$ layers (then repairing the cut with a short finetune) reveals that compression capacity rises monotonically with both retained depth and model width, and the two compound---an 8-of-36-layer Qwen3-8B out-crams the full 36-layer Qwen3-4B.
+    \item We publicly release our code and the full set of progressive-cramming optimization trajectories at \url{https://github.com/FusionBrainLab/progressive_cramming}.
 \end{itemize}
 
 
