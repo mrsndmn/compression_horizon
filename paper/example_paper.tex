@@ -136,8 +136,8 @@
     We introduce progressive cramming, which grows the target prefix token-by-token and stops only when reconstruction is no longer achievable within a fixed optimization budget.
     Using progressive trajectories, we find that optimization paths occupy surprisingly low-dimensional structure in the embedding space.
     Attention analysis shows that compression embeddings often become attention sinks in specific intermediate layers, which correlates with both optimization difficulty and downstream degradation.
-    On likelihood-based multiple-choice evaluation, prepending a crammed embedding drops accuracy to close to random guessing, even with the original prefix in context.
-    These results suggest that perfect reconstruction can arise from brittle steering and attention hijacking, rather than a transferable semantic representation.
+    On likelihood-based multiple-choice evaluation, prepending a crammed embedding causes a moderate but consistent accuracy drop, even with the original prefix in context; under generative evaluation, where the model must use the compressed prefix, capability collapses almost entirely.
+    These results suggest that perfect reconstruction can arise from brittle steering rather than a transferable semantic representation.
     Our results position progressive cramming as a tool for studying compression limits, while showing that perfect reconstruction is insufficient for meaningful compression.
     Code and the progressive-cramming compression-embedding optimization trajectories are publicly available at \url{https://github.com/FusionBrainLab/progressive_cramming}.
 \end{abstract}
@@ -173,33 +173,33 @@ Understanding this mechanism matters beyond cramming: it can shed light on how t
 % PARAGRAPH 3: Methodological improvements enabling study
 We first address methodological limitations that complicate controlled study.
 Prior work used fixed token budgets and 99\% accuracy thresholds with teacher forcing. But the last 1\% of errors may lead to catastrophic failures in autoregressive generation without teacher forcing.
-We introduce \emph{progressive cramming}: sequentially adding tokens until perfect reconstruction, with two stabilizing techniques -- activation alignment and low-dimensional projection.
+We introduce \emph{progressive cramming}: sequentially adding tokens until perfect reconstruction, with a low-dimensional projection that stabilizes optimization.
 This achieves reliable 100\% accuracy and enables precise measurement of where compression fails. Figure~\ref{fig:visual_abstract} shows comparison of full and progressive cramming frameworks.
 
 % PARAGRAPH 4: What we find - the mechanism
 With these tools, we investigate the cramming mechanism.
 Analysis of optimization trajectories shows they occupy surprisingly low-dimensional manifolds: 30-100 PCA components explain 99\% of variance in 2048-4096 dimensional embedding spaces.
-More critically, attention pattern analysis indicates that reconstruction is associated with attention hijacking: compression embeddings capture 20-60\% of attention mass in intermediate layers.
-We use the term \emph{attention hijacking} to emphasize that this attention concentration is associated with a breakdown of downstream language modeling capabilities, rather than benign attention focusing.
+More critically, attention-pattern analysis shows that the compression embedding becomes a strong attention sink, capturing 20--60\% of attention mass in intermediate layers.
+This concentration coincides with a breakdown of downstream language-modeling capabilities rather than benign attention focusing; our causal analysis (Section~\ref{sec:causal}) further shows it is a \emph{symptom} of that breakdown rather than its cause.
 This concentration is invariant to sequence length -- the same layers are dominated whether cramming 32 or 512 tokens -- consistent with compression engaging relatively fixed circuits rather than scaling information density.
 
 % PARAGRAPH 5: What this means - not semantic encoding
 This mechanism has consequences.
 If cramming worked through semantic encoding, compressed prefixes should preserve downstream capabilities.
-Evaluation on HellaSwag and ARC shows the opposite: accuracy drops toward random guessing, even when the original prefix remains in context.
+Evaluation on HellaSwag and ARC shows the opposite: accuracy consistently drops below the uncompressed baseline even when the original prefix remains in context, and under generative evaluation it collapses almost entirely.
 Together with the attention results, this suggests that cramming can achieve reconstruction via brittle steering (e.g., attention capture) rather than by encoding information the model can flexibly use.
 
 % PARAGRAPH 6: Implications
 These findings reframe what cramming reveals about transformers.
-The high capacity demonstrated by prior work reflects not dense semantic encoding but the ease of hijacking attention mechanisms.
+The high capacity demonstrated by prior work reflects not dense semantic encoding but the ease of steering the model through its attention mechanisms.
 This distinction matters for future work on learned compression: methods that override computation can achieve perfect reconstruction while encoding nothing transferable.
 
 Our main contributions are as follows:
 \begin{itemize}
     \item We introduce progressive cramming, which grows the target prefix token-by-token and targets 100\% reconstruction, enabling a sharp success/failure boundary beyond fixed-budget, 99\% protocols.
     \item We show that progressive optimization trajectories $\{\mathbf{e}^{(k)}\}$ are low-dimensional: across model families, 30--100 PCA components explain 99\% of per-sample trajectory variance in 2048--4096 dimensional embedding spaces.
-    \item We quantify attention hijacking during cramming via attention mass to position 0 and find that compression embeddings can capture substantial mass in specific intermediate layers (often 20--60\%), with strong model-family dependence.
-    \item We demonstrate that optimizing for reconstruction does not imply preserved downstream utility: on likelihood-based multiple-choice evaluation (HellaSwag, ARC-Easy), prepending a crammed compression embedding reduces accuracy to close to random guessing across model families, even when the original prefix remains in context.
+    \item We demonstrate that optimizing for reconstruction does not imply preserved downstream utility: on likelihood-based multiple-choice evaluation (HellaSwag, ARC-Easy), prepending a crammed compression embedding causes a moderate but consistent accuracy drop across model families even when the original prefix remains in context, and under generative evaluation it collapses capability almost entirely.
+    \item Using \emph{attention knockout} on Llama-3.1-8B, we causally localize this degradation to the compression embedding's interactions in the \emph{early} layers: masking them restores downstream capability, whereas the late layers that carry the most attention mass have little causal effect. The embedding's attention concentration (often 20--60\% of attention mass in intermediate layers, with strong model-family dependence) is therefore a \emph{symptom} of cramming rather than the cause of capability loss.
 \end{itemize}
 
 
@@ -339,29 +339,6 @@ We define the (stage-wise) trajectory length as the sum of Euclidean distances b
     \label{fig:progressive}
 \end{figure}
 
-\subsection{Activation Alignment}
-\label{sec:activation_alignment}
-
-To stabilize optimization, we regularize hidden states toward those of the uncompressed sequence.
-Let $\mathbf{h}_l^{\text{cram}}(i)$ denote the hidden state at layer $l$ and token position $i$ when the model is conditioned on the compression embedding, and let $\mathbf{h}_l^{\text{clean}}(i)$ be the corresponding state for the same token position without compression.
-We align activations using cosine distance:
-%
-\begin{equation}
-    \mathcal{L}_{\text{align}} = \frac{1}{n} \sum_{l=1}^{K} \sum_{i=1}^{n} \left( 1 - \frac{\mathbf{h}_l^{\text{cram}}(i) \cdot \mathbf{h}_l^{\text{clean}}(i)}{\|\mathbf{h}_l^{\text{cram}}(i)\| \, \|\mathbf{h}_l^{\text{clean}}(i)\|} \right)
-\end{equation}
-%
-
-where $K$ is the number of layers used for alignment. We align the first $K$ transformer layers (closest to the embedding layer).
-
-The full objective combines reconstruction and alignment:
-
-\begin{equation}
-    \mathcal{L} = \mathcal{L}_{\text{cram}} + \alpha \mathcal{L}_{\text{align}}
-\end{equation}
-
-where $\alpha$ controls alignment strength.
-
-
 \subsection{Low-Dimensional Projection}
 \label{sec:lowdim}
 
@@ -377,23 +354,7 @@ For each sample, we randomly initialize $(\mathbf{W}, \mathbf{b}, \mathbf{z})$ a
 
 After optimization, the effective embedding $\mathbf{e}$ can be materialized once and reused; the projection primarily changes the optimization geometry by introducing optimizer state (e.g., momentum) in the low-dimensional coordinates.
 
-\subsection{Attention Mass}
-\label{sec:attention_mass}
-
-To quantify attention hijacking (Section~\ref{sec:attention}), we measure how much attention mass other positions allocate to the first position (position $0$), which corresponds to the compression embedding in crammed inputs or the BOS token in the uncompressed baseline.
-Let $\mathbf{A}_l \in [0,1]^{S \times S}$ denote the attention matrix at layer $l$ after averaging over heads.
-For a given prefix length $s \le S$, we define the attention mass on position $0$ as
-%
-\begin{equation}
-    m_l(s) = \frac{1}{s-1} \sum_{q=1}^{s-1} \mathbf{A}_l(q, 0)
-\end{equation}
-%
-which excludes self-attention ($q=0$) and averages over query positions.
-We report $100 \cdot m_l(s)$ as a percentage, and average over a set of target prefix lengths $\mathcal{S}$:
-%
-\begin{equation}
-    \bar{m}_l = \frac{1}{|\mathcal{S}|} \sum_{s \in \mathcal{S}} m_l(s)
-\end{equation}
+We additionally explore an activation-alignment regularizer that pulls the crammed hidden states toward their uncompressed counterparts; because it helps only some model families, we relegate it to Appendix~\ref{app:activation_alignment}.
 
 \subsection{Information Gain}
 
@@ -416,7 +377,7 @@ We evaluate progressive cramming on PG19 \cite{Rae2020CompressiveTransformerPG19
 Table~\ref{tab:full_vs_progressive} compares progressive cramming (targeting 100\% reconstruction) to ``full'' cramming baselines that use fixed token budgets and may terminate below perfect accuracy.
 Because autoregressive decoding is brittle to early errors (Section~\ref{sec:prior_limitations}), we interpret this comparison primarily through the lens of \emph{perfect} reconstruction: progressive cramming trades a fixed-budget constraint for a fixed-accuracy constraint.
 In the default setting, progressive cramming underperforms full cramming in both information gain and reconstructed length.
-However, adding regularization via activation alignment and low-dimensional projection (Section~\ref{sec:activation_alignment_exp}) can recover capacity; for Llama-3.1-8B we reach $5103 \pm 748$ bits of information gain, comparable to $4865.7 \pm 546.6$ reported by \citet{kuratov2025cramming}. A detailed comparison across additional model sizes can be found in Table~\ref{tab:full_vs_progressive_appendix} (Appendix~\ref{app:1}).
+However, a low-dimensional projection (Section~\ref{sec:lowdim}) can recover much of this capacity; for Llama-3.1-8B it reaches $4814 \pm 1731$ bits of information gain, comparable to $4865.7 \pm 546.6$ reported by \citet{kuratov2025cramming}. A detailed comparison across additional model sizes can be found in Table~\ref{tab:full_vs_progressive_appendix} (Appendix~\ref{app:1}).
 
 \begin{table}[]
     \centering
@@ -432,11 +393,11 @@ However, adding regularization via activation alignment and low-dimensional proj
 
 \begin{table*}[]
     \centering
-    \caption{Progressive cramming variants and key metrics across model families. For each family we report baseline progressive cramming, low-dimensional projection only (``dim''), activation alignment only ($\alpha$, $L$), and their combination.}
-    \label{tab:all_progressive_modifications}
+    \caption{Progressive cramming variants across model families: baseline progressive cramming vs.\ low-dimensional projection only (``dim''). Activation alignment and its combination with projection are reported in Appendix~\ref{app:activation_alignment} (Table~\ref{tab:all_progressive_modifications}).}
+    \label{tab:progressive_modifications}
 
     \begin{small}
-    \input{tables/all_progressive_modifications}
+    \input{tables/progressive_modifications}
     \end{small}
 
 \end{table*}
@@ -449,12 +410,11 @@ Progressive cramming enables tracking the optimization path through embedding sp
 We record the sequence of optimized embeddings $\{\mathbf{e}^{(k)}\}_{k=1}^{n}$ and analyze its geometry.
 For each sample, we run PCA on the stage embeddings $\{\mathbf{e}^{(k)}\}_{k=1}^{n}$ across $k$ (using standard PCA mean-centering across stages) and define ``PCA 99\%'' as the minimum number of components whose cumulative explained-variance ratio reaches 99\%.
 We report this quantity averaged over samples.
-Across model families, trajectories are well-approximated by low-dimensional structure: a modest number of principal components explains 99\% of the trajectory variance, even when hundreds (or thousands) of tokens are reconstructed (Table~\ref{tab:all_progressive_modifications}).
+Across model families, trajectories are well-approximated by low-dimensional structure: a modest number of principal components explains 99\% of the trajectory variance, even when hundreds (or thousands) of tokens are reconstructed (Table~\ref{tab:progressive_modifications}).
 We emphasize that this is a property of the optimization \emph{path}, not of the underlying solution set: in Appendix~\ref{app:solution_diversity} we show that equally-good solutions reached from the same initialization by different learning rates are far apart and nearly orthogonal, so the set of valid compression embeddings is itself wide and high-dimensional, and the low-dimensional trajectory is one thin slice of it.
 We further characterize the \emph{shape} of this path (Appendix~\ref{app:trajectory_clusters}): measured in optimization \emph{steps}---an effort-based, model-agnostic unit---progressive cramming proceeds as a punctuated ``dwell-and-leap'' walk, alternating runs of cheap tokens with occasional expensive ones (positive lag-1 jump autocorrelation, $r_1 \approx 0.16$--$0.29$) at \emph{every} model scale rather than as a smooth glide.
 
-Notably, Gemma~3 achieves lower information gain at shorter reconstructed lengths than Llama and Pythia, consistent with stronger architectural or training-time constraints (e.g., logits softcapping \cite{gemma2}).
-One plausible mechanism is that logit softcapping limits the model's ability to produce extremely peaked next-token distributions. Since cramming optimization implicitly pushes the model toward high-confidence, token-specific predictions over long horizons, bounding logit magnitudes can reduce the maximum separability between the correct token and close alternatives and can damp gradients in the high-confidence regime. Both effects may make it harder to reach perfect autoregressive reconstruction with a fixed optimization budget, yielding lower information gain and earlier saturation in reconstructed length.
+Notably, Gemma~3 achieves lower information gain at shorter reconstructed lengths than Llama and Pythia, consistent with architectural or training-time constraints such as logit softcapping \cite{gemma2} (Appendix~\ref{app:gemma_softcapping}).
 
 Figure~\ref{fig:visual_abstract_optimization_trajectory_with_good_accuracy} visualizes a single trajectory projected onto the first two principal components.
 As the reconstructed prefix grows, the region of embeddings that attains near-perfect teacher-forced reconstruction contracts, suggesting that the optimization landscape becomes increasingly constrained at longer lengths.
@@ -487,7 +447,7 @@ Empirically, this can improve stability and alter the effective capacity:
     \item It can reduce the intrinsic dimensionality of trajectories (PCA 99\%) while preserving, or sometimes increasing, information gain.
 \end{itemize}
 
-Table~\ref{tab:all_progressive_modifications} compares baseline progressive cramming to a representative low-dimensional projection setting (``dim'') for each family. We can see stable metrics growth across all models families.
+Table~\ref{tab:progressive_modifications} compares baseline progressive cramming to a representative low-dimensional projection setting (``dim'') for each family. We can see stable metrics growth across all models families.
 
 
 \subsection{PCA Reconstruction}
@@ -495,7 +455,7 @@ Table~\ref{tab:all_progressive_modifications} compares baseline progressive cram
 
 We evaluate reconstruction accuracy when progressive embeddings are reconstructed from PCA components.
 Figure~\ref{fig:pca_reconstruction_accuracy} reports accuracy as a function of the number of components.
-Although Table~\ref{tab:all_progressive_modifications} suggests that for Llama-3.1-8B roughly 74 PCA components explain 99\% of trajectory variance, achieving near-perfect teacher-forced reconstruction requires substantially more components.
+Although Table~\ref{tab:progressive_modifications} suggests that for Llama-3.1-8B roughly 83 PCA components explain 99\% of trajectory variance, achieving near-perfect teacher-forced reconstruction requires substantially more components.
 We also observe the same failure mode as in the full cramming setup (Section~\ref{sec:prior_limitations}):
 errors cluster at the start of the sequence (often at the first decoded token), which then propagates and breaks subsequent autoregressive decoding.
 This behavior appears whenever reconstruction accuracy is below 100\%; with perfect reconstruction, this failure mode disappears.
@@ -506,55 +466,6 @@ This behavior appears whenever reconstruction accuracy is below 100\%; with perf
     \caption{Teacher-forced reconstruction accuracy for PCA-reconstructed compression embeddings vs. number of PCA components (Llama-3.1-8B).}
     \label{fig:pca_reconstruction_accuracy}
 \end{figure}
-
-\subsection{Activation Alignment}
-\label{sec:activation_alignment_exp}
-
-Table~\ref{tab:all_progressive_modifications} studies activation alignment (defined in Section~\ref{sec:activation_alignment}) and its interaction with low-dimensional projection.
-Alignment acts as a regularizer: it can significantly reduce trajectory length and PCA 99\% (indicating smoother, more constrained optimization), but it may trade off against raw cramming capacity depending on the model family.
-In particular, for Llama-3.1-8B, alignment increases information gain and token count relative to the baseline, whereas for SmolLM2-1.7B and Pythia-1.4B alignment alone reduces capacity but can be combined with projection to recover part of the loss.
-Across settings, we observe that alignment qualitatively changes attention behavior, often pushing attention hijacking effects toward deeper layers.
-
-
-\subsection{Attention Hijacking}
-\label{sec:attention}
-
-Perfect reconstruction can arise from qualitatively different mechanisms, ranging from faithful information encoding to brittle steering; to probe the mechanism, we measure whether the compression embedding becomes an \emph{attention sink} that captures a disproportionate fraction of attention, analogous to (and potentially competing with) the BOS token.
-We quantify attention sinks using the attention-mass metric from Section~\ref{sec:attention_mass}, comparing attention directed to position 0 in the crammed setting (compression embedding) against attention directed to position 0 in the uncompressed baseline (BOS). We refer to this phenomenon as \emph{attention hijacking} to emphasize that strong attention capture is associated with a breakdown of downstream language modeling capabilities (Section~\ref{sec:semantic_evaluation}).
-
-Table~\ref{tab:attn_hijacking} shows that attention hijacking is highly model-dependent when aggregated over layers.
-SmolLM2 and Pythia exhibit strong correlation between the layer-wise attention-mass profiles for the BOS token and the compression embedding.
-In these families, the compression embedding attracts substantial attention mass in the same layers where BOS is an attention sink; in Pythia it can match or exceed BOS attention on average.
-This suggests that the compression embedding may function as an attention sink whose attention capture coincides with degraded downstream behavior (Section~\ref{sec:semantic_evaluation}).
-
-In contrast, Llama and Gemma show much lower compression-embedding attention mass than BOS on average and weak (or negative) correlation, suggesting that hijacking concentrates in specific layers rather than uniformly matching the BOS pattern.
-
-Motivated by this similarity, we test whether including both a BOS token and a compression embedding in the prompt creates interference between two attention sinks.
-We therefore run ablations that remove the BOS token and recompute progressive cramming metrics (Table~\ref{tab:progressive_no_bos_token}).
-Removing BOS increases reconstructed length and information gain (and reduces compression-embedding attention mass) for Llama-3.1-8B, but has little effect on the other model families.
-
-\begin{table*}[]
-    \centering
-    \caption{Attention hijacking summary. ``Compression Embedding'' is attention mass to position 0 for the compression embedding in the crammed input; ``BOS Token'' is attention mass to position 0 for the uncompressed baseline; ``Diff'' is (Compression$-$BOS). ``Correlation'' is the Pearson correlation between per-layer attention-mass profiles. \bcancel{B} stands for removed BOS token for cramming compression column.}
-    \label{tab:attn_hijacking}
-    \begin{small}
-    \input{tables/attn_hijacking}
-    \end{small}
-
-\end{table*}
-
-
-\begin{table}[]
-    \centering
-    \caption{Progressive cramming with and without the BOS token. \bcancel{B} denotes runs where the BOS token is removed.}
-    \label{tab:progressive_no_bos_token}
-
-    \begin{small}
-    \input{tables/progressive_no_bos_token}
-    \end{small}
-
-\end{table}
-
 
 \subsection{Downstream Evaluation}
 \label{sec:semantic_evaluation}
@@ -588,11 +499,11 @@ Under this 4-way multiple-choice protocol, random guessing yields 25\% accuracy.
 
 \end{table*}
 
-Table~\ref{tab:semantic_evaluation} shows that prepending a crammed compression embedding consistently reduces downstream accuracy across model families, often collapsing to (or below) random guessing.
-Together with the attention analysis, these results suggest that high reconstruction performance can coincide with brittle steering (attention hijacking) rather than a transferable semantic representation.
+Table~\ref{tab:semantic_evaluation} shows that prepending a crammed compression embedding consistently reduces downstream accuracy across model families, a moderate but reliable drop that nonetheless stays above chance on these multiple-choice benchmarks.
+Together with the attention analysis, these results suggest that high reconstruction performance can coincide with brittle steering rather than a transferable semantic representation.
 This highlights a key limitation of using reconstruction accuracy alone: perfect reconstruction is insufficient, and future work must explicitly evaluate capability preservation in any downstream semantic evaluation and broader capability benchmarks overall.
 Appendix~\ref{app:imperfect_reconstruction} further confirms that this drop reflects the compression embedding itself rather than residual reconstruction errors: because HellaSwag and ARC score fixed context--continuation pairs without regenerating the prefix, restricting the evaluation to perfectly reconstructed instances leaves accuracy essentially unchanged.
-The same collapse extends beyond likelihood-based scoring to a \emph{generative} benchmark: on 5-shot MMLU (Appendix~\ref{app:mmlu}, Table~\ref{tab:rebuttle_mmlu}), compressing the full prefix drives accuracy to near zero with no valid parseable answers, while a random control embedding leaves accuracy nearly intact -- confirming that the degradation is specifically caused by the optimized compression embedding rather than by conditioning on an out-of-distribution token.
+This degradation becomes a complete collapse under a \emph{generative} benchmark: on 5-shot MMLU (Appendix~\ref{app:mmlu}, Table~\ref{tab:rebuttle_mmlu}), compressing the full prefix drives accuracy to near zero with no valid parseable answers, while a random control embedding leaves accuracy nearly intact -- confirming that the degradation is specifically caused by the optimized compression embedding rather than by conditioning on an out-of-distribution token.
 
 
 % =============================================================================
@@ -620,7 +531,8 @@ These trends are robust to the design choices detailed in the appendix: the same
 \label{sec:causal}
 % =============================================================================
 
-The attention-mass analysis in Section~\ref{sec:attention} is correlational: it shows \emph{where} the compression embedding accumulates attention, but not whether that attention is \emph{causally} responsible for the downstream degradation in Section~\ref{sec:semantic_evaluation}.
+The compression embedding becomes an attention sink, concentrating 20--60\% of attention mass in specific intermediate layers (Appendix~\ref{app:attention_concentration}).
+That analysis is correlational, however: it shows \emph{where} the compression embedding accumulates attention, not whether that attention is \emph{causally} responsible for the downstream degradation in Section~\ref{sec:semantic_evaluation}.
 To establish causality, we intervene directly on the compression embedding using \emph{attention knockout}: at selected layers we mask the pre-softmax attention logits that target the compression embedding (position $0$), completely removing its influence on the residual stream at those layers while leaving all other computation intact.
 We use three protocols on Llama-3.1-8B ($L=32$ layers):
 \begin{enumerate}
@@ -633,7 +545,7 @@ Each condition is evaluated on teacher-forced reconstruction accuracy and on dow
 \begin{figure*}[t]
     \centering
     \includegraphics[width=\textwidth]{attention_knockout_per_layer.pdf}
-    \caption{Per-layer attention knockout on Llama-3.1-8B. Masking the compression embedding at a single layer, we report downstream HellaSwag accuracy (blue) and teacher-forced reconstruction accuracy (purple); orange bars show the compression embedding's attention mass per layer (Section~\ref{sec:attention_mass}). Dashed lines mark the uncompressed baseline (Base) and the crammed prefix without intervention (Cram). Early-layer knockout sharply degrades reconstruction yet leaves downstream accuracy at or above the crammed baseline, whereas the late layers that carry the most attention mass have negligible causal effect on either metric.}
+    \caption{Per-layer attention knockout on Llama-3.1-8B. Masking the compression embedding at a single layer, we report downstream HellaSwag accuracy (blue) and teacher-forced reconstruction accuracy (purple); orange bars show the compression embedding's attention mass per layer (Appendix~\ref{app:attention_concentration}). Dashed lines mark the uncompressed baseline (Base) and the crammed prefix without intervention (Cram). Early-layer knockout sharply degrades reconstruction yet leaves downstream accuracy at or above the crammed baseline, whereas the late layers that carry the most attention mass have negligible causal effect on either metric.}
     \label{fig:knockout_per_layer}
 \end{figure*}
 
@@ -648,7 +560,7 @@ Each condition is evaluated on teacher-forced reconstruction accuracy and on dow
 Figure~\ref{fig:knockout_per_layer} shows per-layer knockout.
 Knocking out the compression embedding at the earliest layers sharply reduces teacher-forced reconstruction accuracy: these are the layers where the embedding injects the information needed to reconstruct the prefix.
 The same early-layer interventions do not harm downstream accuracy; if anything they nudge it back toward the uncompressed baseline.
-By contrast, the layers that carry the most attention mass lie late in the network (Section~\ref{sec:attention}), yet knocking them out individually changes neither reconstruction nor downstream accuracy appreciably.
+By contrast, the layers that carry the most attention mass lie late in the network (Appendix~\ref{app:attention_concentration}), yet knocking them out individually changes neither reconstruction nor downstream accuracy appreciably.
 The layers with the highest attention mass are therefore not the layers with the highest causal importance for downstream behavior.
 
 \paragraph{A forward/reverse asymmetry localizes the cause.}
@@ -657,7 +569,7 @@ Forward cumulative knockout, which masks the earliest layers first, restores dow
 Reverse cumulative knockout, which masks the latest layers first, leaves downstream accuracy near the crammed level across most of the network and recovers only once masking extends into the early layers.
 This asymmetry is the core causal claim: downstream collapse is driven by the compression embedding's interactions in the early layers, not by the late-layer attention concentration.
 The high attention mass observed in late layers is thus a \emph{symptom} of cramming rather than the \emph{cause} of capability loss; attention mass and causal importance are dissociated.
-This refines the picture of attention hijacking: the compression embedding steers the model through early-layer computations that are essential for reconstruction but disruptive to the model's normal use of the prefix.
+This refines the picture: the compression embedding steers the model through early-layer computations that are essential for reconstruction but disruptive to the model's normal use of the prefix.
 
 \paragraph{The causal picture holds across model families.}
 We replicate all three knockout protocols on Pythia-1.4B and SmolLM2-1.7B and obtain consistent results: early-layer interactions causally drive the downstream collapse, the high-attention-mass late layers are not the causally important ones, and the forward/reverse cumulative asymmetry reappears in both models.
@@ -667,7 +579,7 @@ The full per-layer and cumulative figures for both models are reported in Append
 \section{Conclusion}
 
 We introduced progressive cramming, which grows the reconstruction target token-by-token and enables controlled measurement of when embedding-based reconstruction succeeds or fails under a fixed optimization budget.
-Across model families, progressive trajectories are low-dimensional, and attention-mass analyses show that crammed embeddings can become intermediate-layer attention sinks, consistent with attention hijacking.
+Across model families, progressive trajectories are low-dimensional, and attention-mass analyses show that crammed embeddings can become intermediate-layer attention sinks (Appendix~\ref{app:attention_concentration}).
 Causal attention-knockout interventions further localize the downstream collapse to the compression embedding's interactions in the early layers, and show that the late layers carrying the most attention mass have little causal effect -- attention mass is a symptom rather than the cause of capability loss.
 Critically, downstream evaluation indicates that optimizing embeddings for reconstruction can coincide with large capability drops, even when the original prefix remains in context, so reconstruction accuracy alone is not a sufficient criterion for meaningful compression.
 

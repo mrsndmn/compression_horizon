@@ -61,17 +61,35 @@ def _full_dir(base: str) -> str:
     return os.path.join(EXP, f"sl_4096_{base}_ds_pg19_1k_limit_50_lr_0.1", "progressive_prefixes")
 
 
-def mean_compressed_tokens(path: str) -> float | None:
-    """Mean ``num_embeddings`` (achieved compressed-token count) for one eval dir."""
-    if not os.path.isdir(path):
-        return None
+def cell_value(path: str | None) -> tuple[float | None, int | None]:
+    """``(mean compressed-token count, sample count)`` for one eval dir.
+
+    Returns ``(None, None)`` when the dir is absent or extraction fails. The
+    sample count feeds the provenance stamp consumed by ``paper/lint_paper.py``.
+    """
+    if not path or not os.path.isdir(path):
+        return None, None
     try:
         _, _, stats, _ = extract_trajectory(path)
     except Exception as e:  # noqa: BLE001 - report and leave the cell empty
         print(f"  WARN: {path}: {type(e).__name__}: {e}", file=sys.stderr)
-        return None
+        return None, None
     v = stats.get("num_embeddings")
-    return v.get("mean") if isinstance(v, dict) else v
+    if isinstance(v, dict):
+        count = int(v["count"]) if v.get("count") is not None else None
+        return v.get("mean"), count
+    return v, None
+
+
+def provenance_stamp(sample_counts: set[int]) -> str:
+    """Machine-readable provenance comment consumed by ``paper/lint_paper.py``.
+
+    Mirrors ``provenance_stamp`` in scripts/paper/tables/progressive.py: records
+    the set of per-cell PG19 sample counts so the linter can confirm this
+    main-text table is built from the canonical 50-sample run.
+    """
+    value = ",".join(str(c) for c in sorted(sample_counts)) if sample_counts else "unknown"
+    return f"% paper-lint: n_samples={value}"
 
 
 def _cell(v: float | None) -> str:
@@ -89,14 +107,21 @@ def build_table() -> str:
         f" & {n_header} & \\\\",
         "\\midrule",
     ]
+    sample_counts: set[int] = set()
     for m in MODELS:
         cells = []
         for n in FIRST_N_COLUMNS:
-            cells.append(_cell(mean_compressed_tokens(_first_dir(m.ckpt_base, n)) if n in m.first_ns else None))
-        cells.append(_cell(mean_compressed_tokens(_full_dir(m.ckpt_base)) if m.has_full else None))
+            mean, count = cell_value(_first_dir(m.ckpt_base, n) if n in m.first_ns else None)
+            if count is not None:
+                sample_counts.add(count)
+            cells.append(_cell(mean))
+        mean, count = cell_value(_full_dir(m.ckpt_base) if m.has_full else None)
+        if count is not None:
+            sample_counts.add(count)
+        cells.append(_cell(mean))
         lines.append(f" {m.display} ({m.total_layers}L) & " + " & ".join(cells) + " \\\\")
     lines += ["\\bottomrule", "\\end{tabular}", ""]
-    return "\n".join(lines)
+    return provenance_stamp(sample_counts) + "\n" + "\n".join(lines)
 
 
 def main() -> int:

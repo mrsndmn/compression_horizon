@@ -263,6 +263,26 @@ TABLES: List[TableSpec] = [
         ],
     ),
     TableSpec(
+        # Main-text summary: baseline progressive cramming vs. low-dimensional projection
+        # only ("dim") for each family -- the alignment-free subset of
+        # tab:all_progressive_modifications (baseline + dim rows, dropping the activation
+        # alignment and dim+align rows). The full with-alignment table lives in the appendix.
+        name="tab:progressive_modifications",
+        checkpoints=[
+            f"{_EXP}/sl_4096_Meta-Llama-3.1-8B_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_Meta-Llama-3.1-8B_ds_pg19_1k_limit_50_lowdim_256_lowproj_lr_0.1/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5/progressive_prefixes",
+            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lowdim_256_lowproj_lr_0.5/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lowdim_256_lowproj_lr_0.1/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/sl_4096_gemma-3-4b-pt_ds_pg19_1k_limit_50_lr_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_gemma-3-4b-pt_ds_pg19_1k_limit_50_lowdim_32_lowproj_lr_0.1/progressive_prefixes",
+        ],
+    ),
+    TableSpec(
         name="tab:progressive_no_bos_token",
         checkpoints=[
             f"{_EXP}/sl_4096_Meta-Llama-3.1-8B_lr_0.1/progressive_prefixes",
@@ -637,6 +657,24 @@ def table_slug(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", slug).strip("_")
 
 
+def provenance_stamp(statistics_list: List[dict]) -> str:
+    """Machine-readable provenance comment consumed by ``paper/lint_paper.py``.
+
+    Records the set of per-checkpoint sample counts (``n_samples``) so the linter
+    can verify that main-body tables are built from the canonical 50-sample PG19
+    run rather than silently mixing 10- and 50-sample experiments.
+    """
+    counts = sorted(
+        {
+            int(stats["num_embeddings"]["count"])
+            for stats in statistics_list
+            if isinstance(stats.get("num_embeddings"), dict) and stats["num_embeddings"].get("count") is not None
+        }
+    )
+    value = ",".join(str(c) for c in counts) if counts else "unknown"
+    return f"% paper-lint: n_samples={value}"
+
+
 def render_table(
     spec: TableSpec,
     *,
@@ -713,6 +751,7 @@ def render_table(
         filename = (save_name or table_slug(spec.name)) + ".tex"
         save_path = os.path.join(save_dir, filename)
         with open(save_path, "w") as f:
+            f.write(provenance_stamp(statistics_list) + "\n")
             f.write(tex)
             if not tex.endswith("\n"):
                 f.write("\n")
