@@ -303,6 +303,15 @@ def main() -> None:
         "from token --zoom-from to token --zoom-to (overrides --zoom-seconds).",
     )
     ap.add_argument(
+        "--zoom-out-seconds",
+        "--zoom_out_seconds",
+        dest="zoom_out_seconds",
+        type=float,
+        default=0.0,
+        help="If >0 (and zoom is enabled), after the end-hold pause the camera eases back out "
+        "to the full view over this many seconds.",
+    )
+    ap.add_argument(
         "--no-progress",
         dest="progress",
         action="store_false",
@@ -521,6 +530,12 @@ def main() -> None:
     else:
         reveal_counts = np.clip(np.linspace(1, n_traj, anim_frames).round().astype(int), 1, n_traj)
     reveal_counts = np.concatenate([reveal_counts, np.full(hold_frames, n_traj, dtype=int)])
+    # End zoom-out: after the reveal + end-hold pause, ease the camera back to the full view
+    # (+ a short settle hold). The trajectory stays fully revealed throughout.
+    zoom_out_frames = max(int(round(args.fps * args.zoom_out_seconds)), 0) if zoom_enabled else 0
+    zoom_out_settle = max(int(round(args.fps * 0.5)), 1) if zoom_out_frames > 0 else 0
+    if zoom_out_frames > 0:
+        reveal_counts = np.concatenate([reveal_counts, np.full(zoom_out_frames + zoom_out_settle, n_traj, dtype=int)])
     total_frames = int(reveal_counts.shape[0])
 
     # Per-point trail opacity: scale (log) with the optimizer steps each token took to
@@ -597,6 +612,10 @@ def main() -> None:
     else:
         f_zoom_start = total_frames
         zoom_span = 1
+    # Zoom-out window begins right after the reveal + end-hold pause.
+    zoom_out_enabled = zoom_out_frames > 0
+    f_zoomout_start = anim_frames + hold_frames
+    zoom_out_span = max(zoom_out_frames, 1)
 
     def init():
         ax.set_xlim(full_rect[0], full_rect[1])
@@ -614,8 +633,12 @@ def main() -> None:
         k = int(reveal_counts[f])
         h = k - 1
         if zoom_enabled:
-            z = _smoothstep((f - f_zoom_start) / float(zoom_span))
-            cx0, cx1, cy0, cy1 = _lerp_rect(full_rect, zoom_rect, z)
+            if zoom_out_enabled and f >= f_zoomout_start:
+                zo = _smoothstep((f - f_zoomout_start) / float(zoom_out_span))
+                cx0, cx1, cy0, cy1 = _lerp_rect(zoom_rect, full_rect, zo)
+            else:
+                z = _smoothstep((f - f_zoom_start) / float(zoom_span))
+                cx0, cx1, cy0, cy1 = _lerp_rect(full_rect, zoom_rect, z)
             ax.set_xlim(cx0, cx1)
             ax.set_ylim(cy0, cy1)
         path_line.set_data(coords_xy[:k, 0], coords_xy[:k, 1])
