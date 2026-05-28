@@ -45,9 +45,9 @@ SCALE_ROWS: List[Tuple[str, str]] = [
 # Learning-rate sweep (SmolLM2-1.7B), all 50-sample runs, apples-to-apples across LR. lr=0.1 reuses
 # the scale-trend 50-sample run; lr=0.5 / lr=1.0 are produced by the same launcher above.
 LR_ROWS: List[Tuple[str, str]] = [
-    ("SmolLM2-1.7B {\\small lr=0.1}", "sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1"),
-    ("SmolLM2-1.7B {\\small lr=0.5}", "sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.5"),
-    ("SmolLM2-1.7B {\\small lr=1.0}", "sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_1.0"),
+    ("{\\scriptsize SLM2-1.7B lr=0.1}", "sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.1"),
+    ("{\\scriptsize SLM2-1.7B lr=0.5}", "sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_0.5"),
+    ("{\\scriptsize SLM2-1.7B lr=1.0}", "sl_4096_SmolLM2-1.7B_ds_pg19_1k_limit_50_lr_1.0"),
 ]
 
 
@@ -120,7 +120,7 @@ def format_table(rows_spec: List[Tuple[str, str]], tablefmt: str = "latex") -> s
         "\\toprule",
         " &  &  & \\multicolumn{3}{c}{Euclidean-based} & \\multicolumn{3}{c}{Step-based} \\\\",
         "\\cmidrule(lr){4-6} \\cmidrule(lr){7-9}",
-        "Model & Stages & PCA 99\\% & Gap-ratio & $r_1$ {\\small (shuffle)} & Dwelling \\% "
+        "Model & {\\small Stages} & {\\footnotesize PCA99\\%} & Gap-ratio & $r_1$ {\\small (shuffle)} & Dwelling \\% "
         "& Gap-ratio & $r_1$ {\\small (shuffle)} & Dwelling \\% \\\\",
         "\\midrule",
     ]

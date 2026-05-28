@@ -136,9 +136,16 @@ SAMPLE_COUNT_ALLOWLIST = {
     # Benchmark table: its "samples" are HellaSwag/ARC-Easy instances, not PG19
     # cramming samples, so the 50-sample rule does not apply.
     "semantic_evaluation": "benchmark instances (HellaSwag/ARC), not PG19 samples",
+    # Hand-authored benchmark table (tables/manual/): token-normalized HellaSwag/
+    # ARC accuracy under different scoring strategies, not PG19 cramming samples.
+    "semantic_benchmarks_token": "benchmark instances (HellaSwag/ARC), not PG19 samples",
     # TODO: remove once the 50-sample full-cramming re-run lands. The "Full"
     # baseline currently exists only at limit_10, so this table is 10-sample.
     "full_vs_progressive": "pending 50-sample full-cramming re-run",
+    # Hand-authored compact summary (tables/manual/) of the Llama
+    # reconstruction-failure runs in tab:compression_reconstruction_summary;
+    # not the 50-sample PG19 cramming protocol.
+    "compression_reconstruction_main": "hand-authored summary of Llama reconstruction runs, not PG19 cramming samples",
 }
 INPUT_TABLE_RE = re.compile(r"\\input\s*\{tables/([^}]+)\}")
 SAMPLE_STAMP_RE = re.compile(r"^%\s*paper-lint:\s*n_samples=(\S+)\s*$", re.MULTILINE)

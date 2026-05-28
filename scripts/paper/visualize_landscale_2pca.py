@@ -377,6 +377,15 @@ def main() -> None:
         choices=["bfloat16", "float16", "float32"],
         help="Model dtype (GPU: bfloat16/float16 recommended; CPU: float32 recommended)",
     )
+    parser.add_argument(
+        "--save-npz-only",
+        "--save_npz_only",
+        dest="save_npz_only",
+        action="store_true",
+        help="Multi-frame only: write just the dense NPZ, skipping the per-frame PNG renders and "
+        "the GIF (and the imageio import). Use for cluster bundle jobs whose output is merged/animated "
+        "downstream -- avoids wasted rendering and an imageio dependency.",
+    )
     args = parser.parse_args()
 
     out_dir = args.output_dir or _infer_output_dir(args.dataset_path)
@@ -588,7 +597,8 @@ def main() -> None:
         return
 
     # Multi-frame GIF
-    import imageio.v2 as imageio
+    if not args.save_npz_only:
+        import imageio.v2 as imageio
 
     n_traj = int(coords.shape[0])
     if args.anchor_indices is not None:
@@ -661,6 +671,8 @@ def main() -> None:
             grids_x_per_frame.append(np.stack(grids_x_this, axis=0))
             grids_y_per_frame.append(np.stack(grids_y_this, axis=0))
 
+        if args.save_npz_only:
+            continue
         if len(pair_indices) == 1:
             (i0, j0) = pair_indices[0]
             vx = float(pca.explained_variance_ratio_[i0]) if i0 < len(pca.explained_variance_ratio_) else float("nan")
@@ -688,13 +700,14 @@ def main() -> None:
             )
         frames.append(frame)
 
-    if len(pair_indices) == 1:
-        (i0, j0) = pair_indices[0]
-        gif_path = os.path.join(out_dir, f"landscape_accuracy_pc{i0+1}_pc{j0+1}.gif")
-    else:
-        gif_path = os.path.join(out_dir, "landscape_accuracy_pca_pairs.gif")
-    imageio.mimsave(gif_path, frames, duration=1000, loop=0)
-    print(f"Saved GIF: {gif_path}")
+    if not args.save_npz_only:
+        if len(pair_indices) == 1:
+            (i0, j0) = pair_indices[0]
+            gif_path = os.path.join(out_dir, f"landscape_accuracy_pc{i0+1}_pc{j0+1}.gif")
+        else:
+            gif_path = os.path.join(out_dir, "landscape_accuracy_pca_pairs.gif")
+        imageio.mimsave(gif_path, frames, duration=1000, loop=0)
+        print(f"Saved GIF: {gif_path}")
 
     # Save NPZ (multi-frame)
     acc_stack = np.stack([np.stack(acc_stack_by_pair[p], axis=0) for p in pair_indices], axis=1)

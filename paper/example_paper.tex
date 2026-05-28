@@ -58,12 +58,12 @@
 
 % Todonotes is useful during development; simply uncomment the next line
 %    and comment out the line below the next line to turn off comments
-%\usepackage[disable,textsize=tiny]{todonotes}
-\usepackage[textsize=tiny]{todonotes}
+\usepackage[disable,textsize=tiny]{todonotes}
+%\usepackage[textsize=tiny]{todonotes}
 
 % The \icmltitle you define below is probably too long as a header.
 % Therefore, a short form for the running title is supplied here:
-\icmltitlerunning{Progressive Cramming}
+\icmltitlerunning{Progressive Cramming: Reliable Token Compression and What It Reveals}
 
 % \usepackage[margin=0.75in]{geometry}
 \usepackage{tikz}
@@ -98,7 +98,7 @@
 
   \begin{icmlauthorlist}
     \icmlauthor{Dmitrii Tarasov}{fusionbrain,hse}
-    \icmlauthor{Timofey Lashukov}{hse}
+    \icmlauthor{Timofei Lashukov}{hse}
     \icmlauthor{Elizaveta Goncharova}{fusionbrain,hse}
     \icmlauthor{Andrey Kuznetsov}{fusionbrain,innopolice}
   \end{icmlauthorlist}
@@ -132,14 +132,12 @@
 % \printAffiliationsAndNotice{\icmlEqualContribution}
 
 \begin{abstract}
-    Token cramming compresses sequences into learned embeddings with near-perfect reconstruction, but prior work used fixed token budgets and 99\% accuracy thresholds, obscuring whether residual errors reflect optimization failures or fundamental limits.
-    We introduce progressive cramming, which grows the target prefix token-by-token and stops only when reconstruction is no longer achievable within a fixed optimization budget.
-    Using progressive trajectories, we find that optimization paths occupy surprisingly low-dimensional structure in the embedding space.
-    Attention analysis shows that compression embeddings often become attention sinks in specific intermediate layers, which correlates with both optimization difficulty and downstream degradation.
-    On likelihood-based multiple-choice evaluation, prepending a crammed embedding causes a moderate but consistent accuracy drop, even with the original prefix in context; under generative evaluation, where the model must use the compressed prefix, capability collapses almost entirely.
-    These results suggest that perfect reconstruction can arise from brittle steering rather than a transferable semantic representation.
-    Our results position progressive cramming as a tool for studying compression limits, while showing that perfect reconstruction is insufficient for meaningful compression.
-    Code and the progressive-cramming compression-embedding optimization trajectories are publicly available at \url{https://github.com/FusionBrainLab/progressive_cramming}.
+    Token cramming compresses sequences into learned embeddings with near-perfect reconstruction, but fixed token budgets and 99\% accuracy thresholds leave it unclear whether residual errors reflect optimization failures or fundamental limits.
+    We introduce progressive cramming, which grows the target prefix token-by-token, stopping only when reconstruction is no longer achievable within a fixed optimization budget.
+    Progressive trajectories occupy low-dimensional structure in embedding space.
+    Prepending a crammed embedding causes a moderate but consistent accuracy drop on multiple-choice benchmarks even with the original prefix in context, and collapses capability almost entirely under generative evaluation.
+    Causal attention-knockout interventions trace this degradation to the embedding's interactions in the model's early layers.
+    These results position progressive cramming as a tool for studying compression limits and show that perfect reconstruction---achievable through brittle steering rather than transferable semantics---is insufficient for meaningful compression.
 \end{abstract}
 
 
@@ -150,11 +148,6 @@
     \label{fig:visual_abstract}
 \end{figure}
 
-
-
-% TODO выкидываем это в апендикс или основной текст?
-% НЕ Уточнили границы крамминга
-% А научились точно вовремя останавливать крамминг с идеальной точностью. А 1% ошибок - это очень плохо.
 
 
 \section{Introduction}
@@ -178,10 +171,10 @@ This achieves reliable 100\% accuracy and enables precise measurement of where c
 
 % PARAGRAPH 4: What we find - the mechanism
 With these tools, we investigate the cramming mechanism.
-Analysis of optimization trajectories shows they occupy surprisingly low-dimensional manifolds: 30-100 PCA components explain 99\% of variance in 2048-4096 dimensional embedding spaces.
+Analysis of optimization trajectories shows they occupy low-dimensional manifolds: 30-100 PCA components explain 99\% of variance in 2048-4096 dimensional embedding spaces.
 More critically, attention-pattern analysis shows that the compression embedding becomes a strong attention sink, capturing 20--60\% of attention mass in intermediate layers.
 This concentration coincides with a breakdown of downstream language-modeling capabilities rather than benign attention focusing; our causal analysis (Section~\ref{sec:causal}) further shows it is a \emph{symptom} of that breakdown rather than its cause.
-This concentration is invariant to sequence length -- the same layers are dominated whether cramming 32 or 512 tokens -- consistent with compression engaging relatively fixed circuits rather than scaling information density.
+This concentration persists across sequence lengths -- it appears whether cramming 32 or 512 tokens -- consistent with compression engaging relatively fixed circuits rather than scaling information density.
 
 % PARAGRAPH 5: What this means - not semantic encoding
 This mechanism has consequences.
@@ -199,7 +192,9 @@ Our main contributions are as follows:
     \item We introduce progressive cramming, which grows the target prefix token-by-token and targets 100\% reconstruction, enabling a sharp success/failure boundary beyond fixed-budget, 99\% protocols.
     \item We show that progressive optimization trajectories $\{\mathbf{e}^{(k)}\}$ are low-dimensional: across model families, 30--100 PCA components explain 99\% of per-sample trajectory variance in 2048--4096 dimensional embedding spaces.
     \item We demonstrate that optimizing for reconstruction does not imply preserved downstream utility: on likelihood-based multiple-choice evaluation (HellaSwag, ARC-Easy), prepending a crammed compression embedding causes a moderate but consistent accuracy drop across model families even when the original prefix remains in context, and under generative evaluation it collapses capability almost entirely.
-    \item Using \emph{attention knockout} on Llama-3.1-8B, we causally localize this degradation to the compression embedding's interactions in the \emph{early} layers: masking them restores downstream capability, whereas the late layers that carry the most attention mass have little causal effect. The embedding's attention concentration (often 20--60\% of attention mass in intermediate layers, with strong model-family dependence) is therefore a \emph{symptom} of cramming rather than the cause of capability loss.
+    \item Using \emph{attention knockout} on Llama-3.1-8B, we causally localize this degradation to the compression embedding's interactions in the \emph{early} layers: masking them restores downstream capability, whereas the late layers that carry the most attention mass have little causal effect. The embedding's attention concentration is therefore a \emph{symptom} of cramming rather than the cause of capability loss.
+    \item We show that cramming capacity is bounded by the frozen reconstructor: truncating pretrained models to their first $N$ layers (then repairing the cut with a short finetune) reveals that compression capacity rises monotonically with both retained depth and model width, and the two compound---an 8-of-36-layer Qwen3-8B out-crams the full 36-layer Qwen3-4B.
+    \item We publicly release our code and the full set of progressive-cramming optimization trajectories at \url{https://github.com/FusionBrainLab/progressive_cramming}.
 \end{itemize}
 
 
@@ -214,7 +209,7 @@ Our main contributions are as follows:
 
 Our work is built upon token cramming \cite{kuratov2025cramming}, where per-sample optimization compresses up to 1{,}568 tokens into a single Llama-3.1-8B input embedding ($\sim$1500$\times$ compression), far beyond typical encoder-based lossless ratios ($\le 10\times$). Crucially, they show that capacity is better characterized by cross-entropy reduction than raw token count, suggesting the model leverages internal knowledge to complement stored information.
 
-Extending this line of inquiry, \citet{mezentsev2025exploring} show that frozen LLMs can generate hundreds of accurate tokens non-autoregressively from just two learned ``proto-token'' embeddings, and that valid compression representations form connected local regions in embedding space.
+Extending this line of inquiry, \citet{mezentsev2025exploring} show that frozen LLMs can generate hundreds of accurate tokens non-autoregressively from just two learned ``proto-token'' embeddings, and that valid compression embeddings form connected local regions in embedding space.
 
 
 \subsection{Context Compression and Distillation}
@@ -235,10 +230,7 @@ The optimization of continuous embeddings as model inputs originated in paramete
 
 \citet{lester-etal-2021-prompt-tuning} propose prompt tuning, a simplified approach that learns soft prompts only at the input layer rather than at every transformer layer. They demonstrate that prompt tuning becomes increasingly competitive with full model tuning as model scale increases, with billion-parameter models closing the gap entirely. This finding suggests that larger models develop embedding spaces with sufficient structure to support rich task-specific conditioning through input manipulation alone.
 
-These methods establish that frozen language models can be effectively steered through learned embeddings without modifying model parameters. Token cramming can be viewed as an extreme case of this paradigm: rather than encoding task-specific instructions, the learned embedding must encode the complete information content of an arbitrary token sequence. Our progressive cramming methodology bridges these perspectives by studying how compression tokens interact with the model's attention and activation patterns as the encoding task becomes increasingly demanding.
-
-% \paragraph{Mechanistic Interpretability.}
-% {\color{red} TODO? Logit lens, activation patching, attention analysis. Methods we use for understanding hijacking.}
+These methods establish that frozen language models can be effectively steered through learned embeddings without modifying model parameters. Token cramming can be viewed as an extreme case of this paradigm: rather than encoding task-specific instructions, the learned embedding must encode the complete information content of an arbitrary token sequence. Our progressive cramming methodology bridges these perspectives by studying how compression embeddings interact with the model's attention and activation patterns as the encoding task becomes increasingly demanding.
 
 
 % =============================================================================
@@ -272,26 +264,41 @@ teacher forcing), often in conjunction with a fixed token budget.
 Our results indicate that this evaluation protocol substantially underestimates
 critical failure modes that emerge during autoregressive generation.
 
+\begin{table}[t]
+    \centering
+    \caption{Reconstruction brittleness on PG19. Despite high teacher-forcing
+    convergence (TF conv.), greedy decoding from the compression embedding
+    collapses (Greedy ${\approx}\,0$) because the residual ${\sim}1\%$ error is
+    concentrated at the first two token positions (mismatch rate at indices
+    0/1). Full per-variant breakdown in
+    Table~\ref{tab:compression_reconstruction_summary} (Appendix~\ref{app:I}).}
+    \label{tab:compression_reconstruction_main}
+
+    \begin{small}
+    \input{tables/manual/compression_reconstruction_main}
+    \end{small}
+
+\end{table}
+
 \paragraph{The ``last 1\%'' problem.}
 While a 99\% reconstruction accuracy suggests near-perfect training performance,
 the remaining errors are not uniformly distributed nor benign.
-As shown in Table~\ref{tab:compression_reconstruction_summary}, under teacher
-forcing -- where each position is scored against the ground-truth prefix --
-reconstruction mismatches are concentrated at the earliest token positions
-(indices 0--1) and taper off within the first few positions.
-Even when mean teacher-forcing convergence exceeds 98--99\%, the probability of an
-incorrect prediction at the first or second token is high across model sizes and
-training variants, frequently approaching 100\% in the default setup.
+As shown in Table~\ref{tab:compression_reconstruction_main}, reconstruction
+mismatches are almost entirely concentrated at the earliest token positions,
+specifically at indices 0 and 1.
+Even when mean teacher-forcing convergence is high (95--99\%), the probability of an
+incorrect prediction at the first or second token during inference approaches
+100\% across most model sizes and training variants.
 
 \paragraph{Early-token errors induce autoregressive collapse.}
-These early errors have a disproportionate impact under greedy autoregressive
-decoding. Once the process deviates at one of the first tokens, every subsequent
-token is generated from an already-incorrect prefix, leading to rapid and
-irreversible divergence. Table~\ref{tab:compression_reconstruction_summary} makes
-the contrast explicit: whereas the teacher-forced mismatch decays after the first
-positions, the greedy mismatch stays near 100\% across essentially the entire
-sequence, and mean greedy convergence collapses to near zero (below 4\%) whenever
-compression training fails to achieve perfect reconstruction.
+Errors at the earliest positions have a disproportionate impact under greedy
+decoding.
+Once the autoregressive process deviates at the first or second token, all
+subsequent tokens are generated conditioned on an incorrect prefix, leading to
+rapid and irreversible divergence.
+Consistently across all evaluated models, we observe that mean greedy convergence
+collapses to near zero (at most ${\sim}2\%$) whenever compression training fails to
+achieve perfect reconstruction.
 In practice, a single early mismatch nullifies the utility of the remaining
 correctly reconstructed tokens, despite high aggregate training accuracy.
 
@@ -300,7 +307,7 @@ Finally, evaluation under a fixed token budget further masks this brittleness.
 Methods with similar final convergence values may exhibit qualitatively different
 failure modes, depending on whether reconstruction errors occur early or late in
 the sequence.
-As demonstrated in Table~\ref{tab:compression_reconstruction_summary}, high average
+As demonstrated in Table~\ref{tab:compression_reconstruction_main}, high average
 token-level accuracy does not guarantee usable autoregressive behavior.
 Instead, perfect reconstruction of the earliest tokens emerges as a necessary
 condition for reliable decoding from compressed representations.
@@ -336,7 +343,7 @@ We define the (stage-wise) trajectory length as the sum of Euclidean distances b
 \begin{figure}[t]
     \centering
     \input{figure_progressive_cramming.tikz}
-    \caption{Progressive cramming adds target tokens sequentially. At stage $k$, we optimize the compression representation to achieve 100\% reconstruction of the prefix $(x_1,\ldots,x_k)$, then extend to $k{+}1$ and warm-start from the previous solution.}
+    \caption{Progressive cramming adds target tokens sequentially. At stage $k$, we optimize the compression embedding to achieve 100\% reconstruction of the prefix $(x_1,\ldots,x_k)$, then extend to $k{+}1$ and warm-start from the previous solution.}
     \label{fig:progressive}
 \end{figure}
 
@@ -374,10 +381,11 @@ Let $H_{LM}$ be the sum of per-token cross-entropies for the original token sequ
 % =============================================================================
 
 We evaluate progressive cramming on PG19 \cite{Rae2020CompressiveTransformerPG19} across four model families: Pythia \cite{biderman2023pythia}, Llama~3 \cite{dubey2024llama3}, SmolLM2 \cite{allal2025smollm2}, and Gemma~3 \cite{gemma3}.
+To confirm that our findings are not specific to a single corpus, we replicate the main results on a second dataset (Fanfics, following \citet{kuratov2025cramming}) in Appendix~\ref{app:fanfics}, where the same patterns hold---low-dimensional projection increases both compressed-token count and information gain, and compression trajectories remain low-dimensional.
 
 Table~\ref{tab:full_vs_progressive} compares progressive cramming (targeting 100\% reconstruction) to ``full'' cramming baselines that use fixed token budgets and may terminate below perfect accuracy.
 Because autoregressive decoding is brittle to early errors (Section~\ref{sec:prior_limitations}), we interpret this comparison primarily through the lens of \emph{perfect} reconstruction: progressive cramming trades a fixed-budget constraint for a fixed-accuracy constraint.
-In the default setting, progressive cramming underperforms full cramming in both information gain and reconstructed length.
+In the default setting, progressive cramming underperforms full cramming in both information gain and reconstructed length for most models (e.g., Llama-3.1-8B), though Pythia-1.4B is an exception, surpassing the fixed-budget full baseline on both metrics.
 However, a low-dimensional projection (Section~\ref{sec:lowdim}) can recover much of this capacity; for Llama-3.1-8B it reaches $4814 \pm 1731$ bits of information gain, comparable to $4865.7 \pm 546.6$ reported by \citet{kuratov2025cramming}. A detailed comparison across additional model sizes can be found in Table~\ref{tab:full_vs_progressive_appendix} (Appendix~\ref{app:1}).
 
 \begin{table}[]
@@ -468,8 +476,10 @@ This behavior appears whenever reconstruction accuracy is below 100\%; with perf
     \label{fig:pca_reconstruction_accuracy}
 \end{figure}
 
-\subsection{Downstream Evaluation}
+% =============================================================================
+\section{Downstream Evaluation}
 \label{sec:semantic_evaluation}
+% =============================================================================
 
 We test whether cramming preserves the \emph{useful} information in a prefix by evaluating standard multiple-choice benchmarks (HellaSwag and ARC) under likelihood-based scoring.
 These benchmarks use relatively short contexts, so they isolate capability failures that occur even when the task does not require long-range context retention.
@@ -504,28 +514,8 @@ Table~\ref{tab:semantic_evaluation} shows that prepending a crammed compression 
 Together with the attention analysis, these results suggest that high reconstruction performance can coincide with brittle steering rather than a transferable semantic representation.
 This highlights a key limitation of using reconstruction accuracy alone: perfect reconstruction is insufficient, and future work must explicitly evaluate capability preservation in any downstream semantic evaluation and broader capability benchmarks overall.
 Appendix~\ref{app:imperfect_reconstruction} further confirms that this drop reflects the compression embedding itself rather than residual reconstruction errors: because HellaSwag and ARC score fixed context--continuation pairs without regenerating the prefix, restricting the evaluation to perfectly reconstructed instances leaves accuracy essentially unchanged.
+Varying which token logits enter the likelihood score localizes \emph{where} this information is lost---scoring the full context, only the candidate ending, or the embedding alone---yet the compressed conditions remain well below baseline under every strategy (Appendix~\ref{app:scoring_strategies}).
 This degradation becomes a complete collapse under a \emph{generative} benchmark: on 5-shot MMLU (Appendix~\ref{app:mmlu}, Table~\ref{tab:rebuttle_mmlu}), compressing the full prefix drives accuracy to near zero with no valid parseable answers, while a random control embedding leaves accuracy nearly intact -- confirming that the degradation is specifically caused by the optimized compression embedding rather than by conditioning on an out-of-distribution token.
-
-
-% =============================================================================
-\section{Compression Capacity Scales with Depth and Model Size}
-\label{sec:depth_size}
-% =============================================================================
-
-How much a single embedding can cram is not fixed: it is bounded by the capacity of the frozen model that must reconstruct from it. We probe that bound directly by truncating pretrained models to their first $N$ decoder layers, repairing the cut with a short causal-LM finetune on fineweb-edu, and running the standard progressive-cramming evaluation (PG19, $50$ samples, $\mathrm{lr}=0.1$) on each truncated checkpoint. Sweeping $N \in \{1,2,4,8\}$ and the full model across five families that span $1.7$--$8$B parameters and $24$--$36$ layers (Table~\ref{tab:depth_size_pivot}) separates two axes of capacity: network \emph{depth} (within a family) and model \emph{size} (across families at a matched truncated depth).
-
-Both axes drive compression monotonically, and they compound. \textbf{Depth:} within every family the number of perfectly crammed tokens rises with retained depth---roughly doubling per layer-doubling (e.g.\ Qwen3-8B: $119 \to 180 \to 304 \to 625$ at first-$1$/$2$/$4$/$8$). \textbf{Size:} at any matched truncated depth the larger model crams strictly more (Qwen3-8B $>$ Qwen3-4B $>$ SmolLM3-3B at every $N$). The two effects reinforce one another: with enough width a shallow truncation already recovers most of the full-model capacity---the $8$-of-$36$-layer Qwen3-8B and Qwen3-4B reach ${\approx}81\%$ of their untruncated references, and the $8$-layer Qwen3-8B exceeds the \emph{full} $36$-layer Qwen3-4B. Capacity is thus jointly governed by depth and width---intuitively, depth unpacks the crammed code while width stores it---so a deficit in one can be partly offset by a surplus in the other.
-
-These trends are robust to the design choices detailed in the appendix: the same monotone-in-depth behavior holds for alternative truncation schemes (keeping the first \emph{and} last layers, or only the last layers; Appendix~\ref{app:layer_ablation}), when only width is varied at a fixed depth within one family (Appendix~\ref{app:width_ablation}), and when each truncated model is recovered with a learned compression head instead of a plain finetune (Appendix~\ref{app:ch_qformer_layer_ablation}).
-
-\begin{table}[t]
-    \centering
-    \caption{Compression capacity (mean perfectly crammed tokens over $50$ PG19 samples) vs.\ model and retained depth. Columns give the number of first decoder layers kept (then finetuned); ``Full'' is the untruncated model; each model name carries its total decoder-layer count. ``--'' marks configurations we did not run. Compression rises with both retained depth (left to right) and model size (top to bottom). The full per-metric breakdown (information gain, trajectory length, PCA 99\%) and the alternative truncation/recovery schemes are in Table~\ref{tab:layer_ablation} (Appendix~\ref{app:layer_ablation}).}
-    \label{tab:depth_size_pivot}
-    \begin{small}
-    \input{tables/depth_size_pivot}
-    \end{small}
-\end{table}
 
 % =============================================================================
 \section{Causal Analysis: Attention Mass vs. Causal Importance}
@@ -577,38 +567,40 @@ We replicate all three knockout protocols on Pythia-1.4B and SmolLM2-1.7B and ob
 The full per-layer and cumulative figures for both models are reported in Appendix~\ref{app:knockout_models}.
 
 
+% =============================================================================
+\section{Compression Capacity Scales with Depth and Model Size}
+\label{sec:depth_size}
+% =============================================================================
+
+How much a single embedding can cram is not fixed: it is bounded by the capacity of the frozen model that must reconstruct from it. We probe that bound directly by truncating pretrained models to their first $N$ decoder layers, repairing the cut with a short causal-LM finetune on fineweb-edu, and running the standard progressive-cramming evaluation (PG19, $50$ samples, $\mathrm{lr}=0.1$) on each truncated checkpoint. Sweeping $N \in \{1,2,4,8\}$ and the full model across five families that span $1.7$--$8$B parameters and $24$--$36$ layers (Table~\ref{tab:depth_size_pivot}) separates two axes of capacity: network \emph{depth} (within a family) and model \emph{size} (across families at a matched truncated depth). The Qwen3 (4B, 8B) and SmolLM3-3B families appear only in this capacity experiment; SmolLM2-1.7B and Llama-3.1-8B are shared with our main evaluation (Section~\ref{sec:experiments}).
+
+Both axes drive compression monotonically, and they compound. \textbf{Depth:} within every family the number of perfectly crammed tokens rises with retained depth---roughly doubling per layer-doubling (e.g.\ Qwen3-8B: $119 \to 180 \to 304 \to 625$ at first-$1$/$2$/$4$/$8$). \textbf{Size:} at any matched truncated depth the larger model crams strictly more (Qwen3-8B $>$ Qwen3-4B $>$ SmolLM3-3B at every $N$). The two effects reinforce one another: with enough width a shallow truncation already recovers most of the full-model capacity---the $8$-of-$36$-layer Qwen3-8B and Qwen3-4B reach ${\approx}81$--$82\%$ of their untruncated references, and the $8$-layer Qwen3-8B exceeds the \emph{full} $36$-layer Qwen3-4B. Capacity is thus jointly governed by depth and width---intuitively, depth unpacks the crammed code while width stores it---so a deficit in one can be partly offset by a surplus in the other.
+
+These trends are robust to the design choices detailed in the appendix: the same monotone-in-depth behavior holds for alternative truncation schemes (keeping the first \emph{and} last layers, or only the last layers; Appendix~\ref{app:layer_ablation}), when only width is varied at a fixed depth within one family (Appendix~\ref{app:width_ablation}), and when each truncated model is recovered with a learned compression head instead of a plain finetune (Appendix~\ref{app:ch_qformer_layer_ablation}).
+
+\begin{table}[t]
+    \centering
+    \caption{Compression capacity (mean perfectly crammed tokens over $50$ PG19 samples) vs.\ model and retained depth. Columns give the number of first decoder layers kept (then finetuned); ``Full'' is the untruncated model; each model name carries its total decoder-layer count. ``--'' marks configurations we did not run. Compression rises with both retained depth (left to right) and model size (top to bottom). The full per-metric breakdown (information gain, trajectory length, PCA 99\%) and the alternative truncation/recovery schemes are in Table~\ref{tab:layer_ablation} (Appendix~\ref{app:layer_ablation}).}
+    \label{tab:depth_size_pivot}
+    \begin{small}
+    \input{tables/depth_size_pivot}
+    \end{small}
+\end{table}
+
+
 \section{Conclusion}
 
 We introduced progressive cramming, which grows the reconstruction target token-by-token and enables controlled measurement of when embedding-based reconstruction succeeds or fails under a fixed optimization budget.
-Across model families, progressive trajectories are low-dimensional, and attention-mass analyses show that crammed embeddings can become intermediate-layer attention sinks (Appendix~\ref{app:attention_concentration}).
-Causal attention-knockout interventions further localize the downstream collapse to the compression embedding's interactions in the early layers, and show that the late layers carrying the most attention mass have little causal effect -- attention mass is a symptom rather than the cause of capability loss.
+Across model families, progressive trajectories are low-dimensional.
+This low dimensionality is a property of the warm-started optimization \emph{path} rather than of an intrinsically small solution set: embeddings optimized independently for the same prefix end up far apart and nearly orthogonal (Appendix~\ref{app:solution_diversity}).
+Causal attention-knockout interventions localize the downstream collapse to the compression embedding's interactions in the early layers, and show that the late layers carrying the most attention mass have little causal effect -- attention mass is a symptom rather than the cause of capability loss.
+Separately, we find that how much a single embedding can store is bounded by the frozen reconstructor itself: compression capacity rises monotonically with both retained model depth and width.
+Because the two axes partly substitute for one another, it is the reconstructor's architecture---not parameter count alone---that sets the compression ceiling, so compressibility can be improved by reshaping the model and not only by scaling it.
 Critically, downstream evaluation indicates that optimizing embeddings for reconstruction can coincide with large capability drops, even when the original prefix remains in context, so reconstruction accuracy alone is not a sufficient criterion for meaningful compression.
 
 Our study remains limited in scope: we use a small number of PG19 samples. Our causal interventions cover three model families---Llama-3.1-8B in the main text, with consistent results for Pythia-1.4B and SmolLM2-1.7B in Appendix~\ref{app:knockout_models}---but a single evaluation dataset.
+Encouragingly, our core compression findings already replicate on a second corpus: progressive cramming on Fanfics reproduces the same information-gain and low-dimensional-projection trends across four model families (Appendix~\ref{app:fanfics}).
 Future work should extend these interventions to larger and more diverse models and develop a \emph{fast} compressor that produces semantically meaningful compression embeddings.
-
-
-% ---------------------------------------------------------------------------
-% TODO / notes (kept for future revisions; all commented intentionally)
-% ---------------------------------------------------------------------------
-% {\color{red} how much bos token is similar to bos token?}  -- won't fix
-% {\color{red} looks like attention sliv (sink?)}
-% {\color{red} run more samples experiments to validate mainpaper}
-% {\color{red} my own optimizer that explores more dimensions? if we found bad local minima, we can explore more dimensions?}
-% TODO а сколько реально нужно компонент, чтобы достичь идеальной точности для генеративной реконструкции?
-% {\color{red} TODO - how and why exactly softcapping?}
-% {\color{red} TODO - shared subspaces?}
-% вообще занятно, конечно, можно ради интересна замерить бенч с добавленным рандомным токеном перед префиксом, или эмбеддом усредненным по всему словарю
-% {\color{red} TODO - does filtering only perfectly-compressed prefixes for sem evaluation - what acccuracy would they have?}
-% {\color{red} TODO - ranged loss weight increase for tokens?}
-% {\color{red} TODO visualize Optimization Landscape.}
-% \begin{itemize}
-%     \item \todo{Models tested (only decoder-only? specific families?)}
-%     \item \todo{Sequence types (only English text? specific domains?)}
-%     \item \todo{Computational cost of progressive approach}
-%     \item \todo{PCA analysis lacks strong null hypothesis comparison}
-% \end{itemize}
-% ===========
 
 \section*{Impact Statement}
 
