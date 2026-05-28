@@ -7,6 +7,8 @@ already coincide with the principal axes.
 
 Per sample we measure:
   * pca99            -- minimum #PCs for 99% of trajectory variance (the paper's metric).
+  * iid_null         -- PCA-99% of random walks with the sample's jump magnitudes randomly permuted
+                        onto isotropic directions.
   * f@pca99          -- fraction of trajectory variance captured by the span of the pca99
                         LARGEST-magnitude jump vectors. PCA is optimal, so f@pca99 <= 0.99 always;
                         f@pca99 close to 0.99 means the big jumps' directions ARE the principal axes.
@@ -101,24 +103,27 @@ def mag_concentration(jumps: np.ndarray, frac: float = 0.99) -> int:
     return int(np.searchsorted(np.cumsum(a2) / a2.sum(), frac) + 1)
 
 
-def pca99_iid_null(mags: np.ndarray, dim: int, rng: np.random.Generator, n_draws: int = 1) -> float:
-    """PCA-99% of an i.i.d. random-walk with the SAME jump magnitudes but RANDOM isotropic directions.
+def pca99_iid_null(mags: np.ndarray, dim: int, rng: np.random.Generator, n_draws: int = 5) -> tuple[float, float]:
+    """PCA-99% of random walks with the same magnitudes assigned to random isotropic directions.
 
     Isolates the generic cumulative-sum (Karhunen-Loeve) contribution to low-dimensionality: if the
     real PCA-99% matches this null, the low-dim is just 'positions are running sums', not directional
-    structure in the real jumps; if real << null, the real jumps are directionally correlated.
+    structure in the real jumps; if real differs from the null, the real trajectory has extra
+    directional structure. Magnitude order is shuffled so this destroys both temporal order and
+    orientation while preserving the jump-size distribution exactly.
     """
     vals = []
     for _ in range(n_draws):
+        mags_null = rng.permutation(mags)
         dirs = rng.standard_normal((mags.size, dim))
         dirs /= np.linalg.norm(dirs, axis=1, keepdims=True)
-        steps = dirs * mags[:, None]
+        steps = dirs * mags_null[:, None]
         P = np.vstack([np.zeros((1, dim)), np.cumsum(steps, axis=0)])
         vals.append(pca99_fast(P))
-    return float(np.mean(vals))
+    return float(np.mean(vals)), float(np.std(vals, ddof=1)) if len(vals) > 1 else 0.0
 
 
-def analyze_run(label: str, run_dir: str, seed: int = 0) -> dict:
+def analyze_run(label: str, run_dir: str, seed: int = 0, null_draws: int = 5) -> dict:
     idx_map = sample_index_map(run_dir)
     emb_ds = load_from_disk(run_dir).select_columns(["embedding"]).with_format("numpy")
     rng = np.random.default_rng(seed)
@@ -131,12 +136,14 @@ def analyze_run(label: str, run_dir: str, seed: int = 0) -> dict:
         Pc = P - P.mean(axis=0, keepdims=True)
         jumps = np.diff(P, axis=0)
         fracs, m99 = jump_subspace_capture(Pc, jumps, {pca99}, PROJ_CAP)
+        null_mean, null_std = pca99_iid_null(np.linalg.norm(jumps, axis=1), P.shape[1], rng, n_draws=null_draws)
         rows.append(
             {
                 "sid": sid,
                 "n_jumps": int(jumps.shape[0]),
                 "pca99": pca99,
-                "pca99_iidnull": pca99_iid_null(np.linalg.norm(jumps, axis=1), P.shape[1], rng),
+                "pca99_iidnull": null_mean,
+                "pca99_iidnull_std": null_std,
                 "f_at_pca99": fracs.get(pca99, float("nan")),
                 "m99_jumps": m99,
                 "mag99": mag_concentration(jumps),
@@ -145,18 +152,21 @@ def analyze_run(label: str, run_dir: str, seed: int = 0) -> dict:
         del P, Pc, jumps
     pca = np.array([r["pca99"] for r in rows], float)
     null = np.array([r["pca99_iidnull"] for r in rows], float)
+    null_std = np.array([r["pca99_iidnull_std"] for r in rows], float)
     f = np.array([r["f_at_pca99"] for r in rows], float)
     m99 = np.array([r["m99_jumps"] for r in rows], float)
     nj = np.array([r["n_jumps"] for r in rows], float)
     mag99 = np.array([r["mag99"] for r in rows], float)
+    mean_m99 = float(np.nanmean(m99)) if np.isfinite(m99).any() else float("nan")
     return {
         "label": label,
         "n_samples": len(rows),
         "mean_n_jumps": float(nj.mean()),
         "mean_pca99": float(pca.mean()),
         "mean_pca99_iidnull": float(null.mean()),
+        "mean_pca99_iidnull_within_sample_std": float(null_std.mean()),
         "mean_f_at_pca99": float(np.nanmean(f)),
-        "mean_m99_jumps": float(np.nanmean(m99)),
+        "mean_m99_jumps": mean_m99,
         "mean_mag99": float(mag99.mean()),
         "rho_pca99_m99": float(spearmanr(pca, m99, nan_policy="omit").statistic),
         "rho_pca99_njumps": float(spearmanr(pca, nj).statistic),
@@ -166,16 +176,20 @@ def analyze_run(label: str, run_dir: str, seed: int = 0) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--runs", nargs="*", default=None, help="subset of labels (default: all)")
+    ap.add_argument("--null-draws", type=int, default=5, help="random-walk null draws per sample (default: 5)")
     args = ap.parse_args()
     runs = [r for r in RUNS if args.runs is None or r[0] in args.runs]
-    hdr = f"{'run':9s} {'N':>3s} {'jumps':>6s} {'pca99':>6s} {'iid_null':>8s} " f"{'f@pca99':>8s} {'m99_jmp':>8s} {'mag99':>6s}"
+    hdr = (
+        f"{'run':9s} {'N':>3s} {'jumps':>6s} {'pca99':>6s} {'iid_null':>8s} {'null_sd':>7s} "
+        f"{'f@pca99':>8s} {'m99_jmp':>8s} {'mag99':>6s}"
+    )
     print(hdr)
     for label, name in runs:
-        s = analyze_run(label, f"{_EXP}/{name}/progressive_prefixes")
+        s = analyze_run(label, f"{_EXP}/{name}/progressive_prefixes", null_draws=args.null_draws)
         print(
             f"{s['label']:9s} {s['n_samples']:3d} {s['mean_n_jumps']:6.0f} {s['mean_pca99']:6.1f} "
-            f"{s['mean_pca99_iidnull']:8.1f} {s['mean_f_at_pca99']:8.3f} {s['mean_m99_jumps']:8.1f} "
-            f"{s['mean_mag99']:6.1f}"
+            f"{s['mean_pca99_iidnull']:8.1f} {s['mean_pca99_iidnull_within_sample_std']:7.1f} "
+            f"{s['mean_f_at_pca99']:8.3f} {s['mean_m99_jumps']:8.1f} {s['mean_mag99']:6.1f}"
         )
 
 
