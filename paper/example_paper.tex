@@ -365,6 +365,7 @@ Let $H_{LM}$ be the sum of per-token cross-entropies for the original token sequ
 % =============================================================================
 
 We evaluate progressive cramming on PG19 \cite{Rae2020CompressiveTransformerPG19} across four model families: Pythia \cite{biderman2023pythia}, Llama~3 \cite{dubey2024llama3}, SmolLM2 \cite{allal2025smollm2}, and Gemma~3 \cite{gemma3}.
+To confirm that our findings are not specific to a single corpus, we replicate the main results on a second dataset (Fanfics, following \citet{kuratov2025cramming}) in Appendix~\ref{app:fanfics}, where the same patterns hold---low-dimensional projection increases both compressed-token count and information gain, and compression trajectories remain low-dimensional.
 
 Table~\ref{tab:full_vs_progressive} compares progressive cramming (targeting 100\% reconstruction) to ``full'' cramming baselines that use fixed token budgets and may terminate below perfect accuracy.
 Because autoregressive decoding is brittle to early errors (Section~\ref{sec:prior_limitations}), we interpret this comparison primarily through the lens of \emph{perfect} reconstruction: progressive cramming trades a fixed-budget constraint for a fixed-accuracy constraint.

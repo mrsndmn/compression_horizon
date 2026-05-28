@@ -9,7 +9,7 @@
 
 \section{Hyperparameters}
 
-We used 50 PG19 samples for most experiments in the main paper body from \texttt{LarryLovestein/pg19_1k} that were repoduced by the recipie from \cite{kuratov2025cramming}. While some results in appendix were reported only for 10 PG19 samlpes from that dataset.
+We used 50 PG19 samples for most experiments in the main paper body from \texttt{LarryLovestein/pg19\_1k} that were repoduced by the recipie from \cite{kuratov2025cramming}. While some results in appendix were reported only for 10 PG19 samlpes from that dataset.
 Across all settings, the base language model was frozen; only the compression-embedding parameters were optimized (either the compression embeddings, or the low-dimensional embedding together with its projection).
 We optimized with AdamW. For each model, we swept the learning rate over \(\{0.01, 0.1, 0.5, 1.0\}\); the resulting metrics are summarized in Table~\ref{tab:all_learning_rates}. For the low-dimensional embedding and projection variant, we used a learning rate of 0.01.
 We ran up to 10{,}000 optimization steps per sample in all experiments; for progressive runs, we additionally capped the optimization of each newly added token at 1{,}000 steps.
@@ -411,6 +411,23 @@ These results on a generative benchmark with longer context reinforce the conclu
 \begin{small}
 \input{tables/manual/rebuttle_mmlu}
 \end{small}
+\end{table*}
+
+\section{Generalization to a Second Dataset (Fanfics)}
+\label{app:fanfics}
+
+The experiments in the main text evaluate compression on PG-19. To verify that our findings are not specific to a single corpus, we reproduce the Fanfics data-preparation pipeline of \citet{kuratov2025cramming} (the \texttt{LarryLovestein/fanfics\_1k} Hugging Face dataset) and rerun progressive cramming on $50$ samples across four model families (Table~\ref{tab:rebuttle_fanfics}). For each family we report baseline progressive cramming, low-dimensional projection only (``dim''), activation alignment only ($\alpha$, $L$), and their combination.
+
+The key findings are consistent with those observed on PG-19. Information gain follows the same patterns across configurations: low-dimensional projection substantially increases both the number of compressed tokens and information gain. The low-dimensional structure of compression trajectories also generalizes to Fanfics data: while the PCA-99\% values are somewhat larger than those observed on PG-19---likely reflecting the greater distributional diversity of fan-fiction text---they remain at least an order of magnitude below the embedding dimensionality.
+
+\begin{table*}[t]
+    \centering
+    \caption{Progressive cramming variants and key metrics across model families on \textbf{50 samples} of the \textbf{Fanfics} dataset following \citet{kuratov2025cramming} (\texttt{LarryLovestein/fanfics\_1k}). For each family we report baseline progressive cramming, low-dimensional projection only (``dim''), activation alignment only ($\alpha$, $L$), and their combination.}
+    \label{tab:rebuttle_fanfics}
+    \begin{small}
+    \input{tables/manual/rebuttle_fanfics}
+    \end{small}
+\vskip -0.1in
 \end{table*}
 
 \section{Transformer-Depth Ablation}
