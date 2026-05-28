@@ -28,9 +28,8 @@ from typing import List, Tuple
 
 from tabulate import tabulate
 
-from compression_horizon.utils import hlines_to_booktabs
-
 _ANALYSIS = "artifacts/analysis/trajectory_clusters_135m"
+_STEP_CACHE = "artifacts/paper/trajectory_steps"
 
 # Model-scale trend (all at lr=0.1). Every row uses a 50-sample (limit_50) PG19 run so the table is
 # apples-to-apples; the 135M/360M 50-sample runs are produced by
@@ -63,36 +62,71 @@ def load_aggregate(run_name: str) -> dict:
     return json.loads(path.read_text())["aggregate"]
 
 
+def load_step_aggregate(run_name: str) -> dict:
+    """Load the step-based jump cache written by trajectory_steps.py --compute."""
+    p = Path(_STEP_CACHE) / f"{run_name}.json"
+    if not p.exists():
+        raise SystemExit(
+            f"missing step cache: {p}\n"
+            "Build it once:  PYTHONPATH=./src:. python scripts/paper/tables/trajectory_steps.py --compute"
+        )
+    return json.loads(p.read_text())
+
+
 def _sgn(x: float) -> str:
     """Signed 2-decimal format, collapsing -0.00 to +0.00."""
     return f"{0.0 if abs(x) < 0.005 else x:+.2f}"
 
 
-def _row(display: str, agg: dict, latex: bool) -> list:
+def _euclid_cells(agg: dict, latex: bool) -> list:
     gap = (
         f"{agg['gap_ratio_real_mean']:.1f} {{\\small ({agg['gap_ratio_null_mean']:.1f})}}"
         if latex
         else f"{agg['gap_ratio_real_mean']:.1f} ({agg['gap_ratio_null_mean']:.1f})"
     )
-    r_acf, s_acf = _sgn(agg["jump_autocorr_real_mean"]), _sgn(agg["jump_autocorr_shuffle_mean"])
-    acf = f"{r_acf} {{\\small ({s_acf})}}" if latex else f"{r_acf} ({s_acf})"
+    r, s = _sgn(agg["jump_autocorr_real_mean"]), _sgn(agg["jump_autocorr_shuffle_mean"])
+    acf = f"{r} {{\\small ({s})}}" if latex else f"{r} ({s})"
     dwell = f"{agg['fraction_dwelling_basins'] * 100:.0f}\\%" if latex else f"{agg['fraction_dwelling_basins'] * 100:.0f}%"
-    return [display, f"{agg['pca99_mean']:.0f}", gap, acf, dwell]
+    return [gap, acf, dwell]
+
+
+def _step_cells(st: dict, latex: bool) -> list:
+    r, s = _sgn(st["autocorr_real_mean"]), _sgn(st["autocorr_shuffle_mean"])
+    acf = f"{r} {{\\small ({s})}}" if latex else f"{r} ({s})"
+    dwell = f"{st['fraction_dwelling'] * 100:.0f}\\%" if latex else f"{st['fraction_dwelling'] * 100:.0f}%"
+    return [f"{st['gap_ratio_mean']:.1f}", acf, dwell]
 
 
 def format_table(rows_spec: List[Tuple[str, str]], tablefmt: str = "latex") -> str:
+    """Merged Euclidean- and step-based trajectory-shape table with grouped column headings.
+
+    Reads both the Euclidean-jump cache (``analyze_trajectory_clusters.py``) and the step-jump cache
+    (``trajectory_steps.py --compute``) for each run; the two metric families share ``Stages`` and
+    ``PCA 99\\%`` and each contribute a (gap-ratio, jump-autocorrelation, dwelling-%) block.
+    """
     latex = tablefmt == "latex"
-    rows = [_row(disp, load_aggregate(run), latex) for disp, run in rows_spec]
-    headers = [
-        "Model",
-        "PCA 99\\%" if latex else "PCA99",
-        "Gap-ratio {\\small (null)}" if latex else "Gap-ratio (null)",
-        "Jump acf $r_1$ {\\small (shuffle)}" if latex else "Jump acf r1 (shuffle)",
-        "Dwelling \\%" if latex else "Dwelling %",
+    body = []
+    for disp, run in rows_spec:
+        e = load_aggregate(run)
+        s = load_step_aggregate(run)
+        body.append(
+            [disp, f"{s['mean_stages']:.0f}", f"{e['pca99_mean']:.0f}", *_euclid_cells(e, latex), *_step_cells(s, latex)]
+        )
+    if not latex:
+        headers = ["Model", "Stages", "PCA99", "E gap", "E r1(shuf)", "E dwell", "S gap", "S r1(shuf)", "S dwell"]
+        return tabulate(body, headers=headers, tablefmt=tablefmt or "github", disable_numparse=True)
+    lines = [
+        "\\begin{tabular}{" + "l" * 9 + "}",
+        "\\toprule",
+        " &  &  & \\multicolumn{3}{c}{Euclidean-based} & \\multicolumn{3}{c}{Step-based} \\\\",
+        "\\cmidrule(lr){4-6} \\cmidrule(lr){7-9}",
+        "Model & Stages & PCA 99\\% & Gap-ratio & $r_1$ {\\small (shuffle)} & Dwelling \\% "
+        "& Gap-ratio & $r_1$ {\\small (shuffle)} & Dwelling \\% \\\\",
+        "\\midrule",
     ]
-    fmt = "latex_raw" if latex else (tablefmt or "github")
-    out = tabulate(rows, headers=headers, tablefmt=fmt, colalign=["left"] * len(headers))
-    return hlines_to_booktabs(out) if latex else out
+    lines += [" & ".join(row) + " \\\\" for row in body]
+    lines += ["\\bottomrule", "\\end{tabular}"]
+    return "\n".join(lines)
 
 
 def make_figure(out_path: Path) -> None:

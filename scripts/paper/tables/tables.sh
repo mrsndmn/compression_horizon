@@ -51,11 +51,11 @@ done
 # trajectory datasets) before this will reflect new runs.
 "$PY" scripts/paper/tables/solution_diversity.py --save
 
-# --- Trajectory cluster-structure: dwelling basins vs heavy-tailed wandering --
-# tab:trajectory_cluster_structure (+ _lr).
-# Renders from the per-run summary.json caches written by
-# scripts/analyze_trajectory_clusters.py; regenerate those once per run (CPU only;
-# reads the saved trajectories) before this will reflect new runs.
+# --- Trajectory shape: Euclidean- and step-based jumps (merged tables) -------
+# tab:trajectory_cluster_structure (+ _lr) place the two jump definitions side-by-side per row.
+# Renders from two cache sets; regenerate each once per run (CPU only) before this reflects new runs:
+#   Euclidean jumps:  scripts/analyze_trajectory_clusters.py --run_dir <run>  (writes summary.json)
+#   Step jumps:       scripts/paper/tables/trajectory_steps.py --compute      (writes trajectory_steps/<run>.json)
 "$PY" scripts/paper/tables/trajectory_clusters.py --save
 
 # --- Full vs. progressive cramming -------------------------------------------
