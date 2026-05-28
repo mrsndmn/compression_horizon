@@ -175,11 +175,36 @@ GEMMA_3_4B_EXPERIMENTS = [
     },
 ]
 
+# Full-depth Qwen3 reference rows for the width/size sweep (baseline variant only --
+# byte-identical config to the other full-depth reference rows, so the full-model row is
+# comparable to the truncated first-N Qwen3 rows). No low-dim / hybrid variants requested.
+QWEN3_EXPERIMENTS = [
+    {
+        "model_checkpoint": "Qwen/Qwen3-4B",
+        "learning_rate": 0.1,
+        "loss_type": "cross_entropy",
+        "num_alignment_layers": 1,
+        "hybrid_alpha": None,
+        "low_dim_projection": False,
+        "low_dim_size": None,
+    },
+    {
+        "model_checkpoint": "Qwen/Qwen3-8B",
+        "learning_rate": 0.1,
+        "loss_type": "cross_entropy",
+        "num_alignment_layers": 1,
+        "hybrid_alpha": None,
+        "low_dim_projection": False,
+        "low_dim_size": None,
+    },
+]
+
 EXPERIMENTS = [
     *LLAMA_31_8B_EXPERIMENTS,
     *PYTHIA_14B_EXPERIMENTS,
     *SMOLLM2_17B_EXPERIMENTS,
     *GEMMA_3_4B_EXPERIMENTS,
+    *QWEN3_EXPERIMENTS,
 ]
 
 

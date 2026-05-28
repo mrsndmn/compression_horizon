@@ -1,0 +1,23 @@
+\begin{tabular}{lllll}
+\toprule
+ Model                                         & Compressed Tokens         & Information Gain         & Trajectory Length       & PCA 99\%                   \\
+\midrule
+ SmolLM2-1.7B first+last 2 layers              & 76.9 {\small $\pm$ 39.3}  & 2082 {\small $\pm$ 1285} & 1060 {\small $\pm$ 345} & 23.12 {\small $\pm$ 5.14} \\
+ SmolLM2-1.7B first+last 2 layers (finetuned)  & 233.8 {\small $\pm$ 26}   & 1261 {\small $\pm$ 98}   & 1964 {\small $\pm$ 190} & 35.62 {\small $\pm$ 1.47} \\
+ SmolLM2-1.7B first+last 4 layers              & 270.9 {\small $\pm$ 50.4} & 5198 {\small $\pm$ 857}  & 1665 {\small $\pm$ 253} & 32.48 {\small $\pm$ 1.99} \\
+ SmolLM2-1.7B first+last 4 layers (finetuned)  & 453.3 {\small $\pm$ 60.5} & 2344 {\small $\pm$ 125}  & 2255 {\small $\pm$ 182} & 37.18 {\small $\pm$ 1.81} \\
+ SmolLM2-1.7B first+last 8 layers              & 240.8 {\small $\pm$ 54.7} & 5585 {\small $\pm$ 1998} & 1036 {\small $\pm$ 234} & 27.78 {\small $\pm$ 3.37} \\
+ SmolLM2-1.7B first+last 8 layers (finetuned)  & 428.6 {\small $\pm$ 67.2} & 2029 {\small $\pm$ 194}  & 1414 {\small $\pm$ 209} & 30.92 {\small $\pm$ 2.89} \\
+ SmolLM2-1.7B first+last 16 layers             & 272.5 {\small $\pm$ 38.3} & 1544 {\small $\pm$ 223}  & 1083 {\small $\pm$ 120} & 34.48 {\small $\pm$ 3.09} \\
+ SmolLM2-1.7B first+last 16 layers (finetuned) & 335.3 {\small $\pm$ 60.2} & 1407 {\small $\pm$ 198}  & 1030 {\small $\pm$ 164} & 29.42 {\small $\pm$ 3.23} \\
+ \midrule
+ SmolLM2-1.7B last-only 1 layer                & 88.8 {\small $\pm$ 10.9}  & 551 {\small $\pm$ 51}    & 1412 {\small $\pm$ 167} & 24.02 {\small $\pm$ 1.81} \\
+ SmolLM2-1.7B last-only 2 layers               & 176 {\small $\pm$ 22.9}   & 1025 {\small $\pm$ 103}  & 1801 {\small $\pm$ 224} & 28.54 {\small $\pm$ 2.27} \\
+ SmolLM2-1.7B last-only 4 layers               & 211.7 {\small $\pm$ 33.6} & 1202 {\small $\pm$ 130}  & 1556 {\small $\pm$ 178} & 29.42 {\small $\pm$ 2.38} \\
+ SmolLM2-1.7B last-only 8 layers               & 351.5 {\small $\pm$ 42.8} & 1798 {\small $\pm$ 145}  & 1437 {\small $\pm$ 124} & 28.16 {\small $\pm$ 1.65} \\
+ \midrule
+ Llama-3.1-8B last-only 1 layer                & 56.3 {\small $\pm$ 8.3}   & 347 {\small $\pm$ 40}    & 1353 {\small $\pm$ 171} & 18.64 {\small $\pm$ 1.68} \\
+ Llama-3.1-8B last-only 2 layers               & 116.9 {\small $\pm$ 18.8} & 630 {\small $\pm$ 62}    & 2305 {\small $\pm$ 242} & 27.94 {\small $\pm$ 1.87} \\
+ Llama-3.1-8B last-only 4 layers               & 330.3 {\small $\pm$ 44.6} & 1661 {\small $\pm$ 153}  & 3384 {\small $\pm$ 253} & 38.02 {\small $\pm$ 1.76} \\
+\bottomrule
+\end{tabular}

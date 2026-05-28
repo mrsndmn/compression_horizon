@@ -323,23 +323,28 @@ These results on a generative benchmark with longer context reinforce the conclu
 \section{Transformer-Depth Ablation}
 \label{app:layer_ablation}
 
-To probe how progressive-cramming capacity depends on model depth, we ablate the number of transformer layers in SmolLM2-1.7B. Starting from the pretrained 24-layer model, we keep only the first $N$ and the last $N$ decoder layers - discarding the middle block - for $N \in \{1, 2, 4, 8\}$, yielding models with $2N \in \{2, 4, 8, 16\}$ layers. Each retained layer keeps its original pretrained weights, the input embedding and (tied) output projection are preserved.
-
-Because the input/output vocabulary mapping and every optimization hyperparameter are held fixed, this ablation isolates the contribution of network \emph{depth} to compression capacity. Table~\ref{tab:layer_ablation} reports, for each depth, the achieved compressed-token count, information gain, trajectory length, and the number of principal components explaining 99\% of trajectory variance (PCA 99\%).
-
-\textbf{Truncated checkpoints (no finetuning).} The full 24-layer model compresses 335 tokens on average, with an information gain of 1208. Cutting the model down to 4, 8, or 16 layers lowers the compressed token count to 240 - 270. Information gain, on the other hand, goes up a lot and does not follow a clear trend with depth: it is 1500 at 16 layers but 5198 and 5585 at 4 and 8 layers. Only the 2-layer checkpoint drops sharply, keeping just 76 compressed tokens on average. The main point is that even after we remove most of the layers, cramming still works: every checkpoint with 4 or more layers keeps up to 81\% of the full model's compressed token count.
-
-\textbf{Finetuned checkpoints.} To make the comparison fairer, we finetune each truncated checkpoint on FineWeb-Edu at sequence length of $1024$ tokens for $5k$ training steps with global batch size of about $256k$ tokens and measure again. Finetuning always raises the compressed-token count, but the gain stops growing quickly: the 4-layer model reaches 390 tokens, and adding more layers barely changes this. The 2-layer model is again the weakest, compressing only 218 tokens.
-
-\textbf{Depth and cramming capacity.} Together, these results show that adding more layers does not help the model compress more. Past 4 layers, the compressed token count stays about the same at every depth, even though information gain changes.
-
+The main text (Section~\ref{sec:depth_size}, Table~\ref{tab:depth_size_pivot}) summarises the headline depth--size result---compression capacity rises with both retained depth and model size---as a compact pivot of compressed-token counts. Table~\ref{tab:layer_ablation} here gives the full per-metric breakdown of that sweep (the \emph{first-only} scheme: keep the first $N$ decoder layers, finetune to repair the cut, then measure compression, across five model families ordered by size). The rest of this appendix covers how a checkpoint is truncated, why the recovery finetune matters, and two alternative truncation schemes that confirm the same monotone-in-depth trend.
 
 \begin{table*}[t]
     \centering
-    \caption{Transformer-depth ablation on SmolLM2-1.7B. The model is truncated to its first $N$ and last $N$ decoder layers ($2N$ layers total); the full 24-layer model is the reference. Each truncated depth is shown as-is and after causal-LM finetuning on fineweb-edu (``(finetuned)''). ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
+    \caption{Compression capacity vs.\ network depth and model size (full breakdown of the main-text pivot, Table~\ref{tab:depth_size_pivot}). Each pretrained model (name annotated with its total decoder-layer count) is truncated to its first $N$ decoder layers, recovered by a short causal-LM finetune on fineweb-edu, and evaluated with progressive cramming (PG19, $50$ samples, sequence length $4096$, $\mathrm{lr}=0.1$, random per-sample initialization); ``full'' is the untruncated model. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance. Compression rises monotonically with both retained depth (within each family) and model size (across families at matched depth).}
     \label{tab:layer_ablation}
     \begin{small}
     \input{tables/layer_ablation}
+    \end{small}
+\vskip -0.1in
+\end{table*}
+
+\textbf{Truncation and recovery.} For a target of $N$ retained layers we keep the chosen decoder layers, preserve the input embedding and output projection, renumber the layer indices, and update \texttt{num\_hidden\_layers} so each truncated model is a self-contained checkpoint. Truncation leaves the retained layers stitched across a gap they were never trained to bridge, so a truncated checkpoint is a degraded---but not retrained---language model. To separate ``capacity lost to fewer layers'' from ``capacity lost to the un-adapted stitch,'' we \emph{finetune} each truncated checkpoint with a standard next-token objective (fineweb-edu, $5\mathrm{k}$ steps at sequence length $1024$, effective batch ${\approx}256\mathrm{k}$ tokens per step, AdamW, cosine-with-min-lr schedule, peak learning rate $10^{-3}$, $500$ warmup steps, bf16) before measuring compression---the same recipe as the model-width ablation (Appendix~\ref{app:width_ablation}). The first-only rows of Table~\ref{tab:layer_ablation} are all recovered this way; the larger Llama-3.1-8B instead uses a gentler $15\mathrm{k}$-step / $3\times10^{-4}$ / $1000$-warmup finetune, because at the common $10^{-3}$ rate its truncations are prone to a transient warmup loss spike that leaves some checkpoints in a degraded basin. Recovery matters: for SmolLM2-1.7B at $\{2,4,8,16\}$ retained layers (first+last scheme) finetuning lifts the compressed-token count from $76.9$/$270.9$/$240.8$/$272.5$ (as-is) to $233.8$/$453.3$/$428.6$/$335.3$, recovering---and at $4$ layers exceeding---the full $24$-layer model ($335.1$).
+
+\textbf{Alternative truncation schemes.} The main-text table keeps the \emph{first} $N$ layers; two alternatives confirm the depth trend is not an artifact of \emph{which} layers are kept. Keeping the first $N$ \emph{and} last $N$ layers (first+last), or only the last $N$ layers (last-only), both leave compression rising monotonically with retained depth: SmolLM2-1.7B last-only gives $88.8$/$176.0$/$211.7$/$351.5$ at $1$/$2$/$4$/$8$ layers, and Llama-3.1-8B last-only gives $56.3$/$116.9$/$330.3$ at $1$/$2$/$4$. Table~\ref{tab:layer_ablation_schemes} reports these alternative-scheme rows, together with the un-finetuned first+last checkpoints used for the recovery comparison above.
+
+\begin{table*}[t]
+    \centering
+    \caption{Detailed transformer-depth cuts supporting the depth--size table (Table~\ref{tab:layer_ablation}). \emph{First+last}: SmolLM2-1.7B with the first $N$ and last $N$ decoder layers ($2N$ total), shown as-is and after causal-LM finetuning. \emph{Last-only}: SmolLM2-1.7B and Llama-3.1-8B with only the last $N$ layers (finetuned). Full-depth references are in Table~\ref{tab:layer_ablation}. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
+    \label{tab:layer_ablation_schemes}
+    \begin{small}
+    \input{tables/layer_ablation_schemes}
     \end{small}
 \vskip -0.1in
 \end{table*}
@@ -383,6 +388,25 @@ Concretely, the mean number of perfectly reconstructed (compressed) tokens rises
     \label{tab:width_ablation}
     \begin{small}
     \input{tables/width_ablation}
+    \end{small}
+\vskip -0.1in
+\end{table*}
+
+\section{Compression-Head Depth Ablation}
+\label{app:ch_qformer_layer_ablation}
+
+The depth ablation (Appendix~\ref{app:layer_ablation}) recovers each truncated checkpoint with a causal-LM finetune and then runs progressive cramming from a random per-sample initialization. Here we repeat the identical depth sweep but recover each checkpoint with a learned \emph{compression head} and seed progressive cramming from it (\texttt{compression\_head\_forward} initialization), as in the Q-Former recovery route of the width ablation (Appendix~\ref{app:width_ablation}). Starting from SmolLM2-1.7B we again keep only the first $N$ and last $N$ decoder layers for $N \in \{1, 2, 4, 8\}$ ($2N \in \{2, 4, 8, 16\}$ layers) plus the full 24-layer model, and for each depth we train a small Q-Former compression head (one query, three layers, eight heads) jointly with the unfrozen backbone on fineweb-edu for $5\mathrm{k}$ optimizer steps at sequence length $1024$ with an effective batch of ${\approx}256\mathrm{k}$ tokens per step (AdamW, cosine-with-min-lr schedule, peak learning rate $10^{-3}$, $500$ warmup steps, bf16; 8$\times$A100). At full depth we additionally train a simpler MLP head (a Linear--GELU--Linear network on the final prefix hidden state) as a head-architecture reference. Every progressive-cramming run then uses the same PG19 sample set, learning rate ($0.1$), and optimization budget as our main SmolLM2-1.7B run, so the only varying factors are network depth and head architecture.
+
+Table~\ref{tab:ch_qformer_layer_ablation} reports, for each depth, the achieved compressed-token count, information gain, trajectory length, and the number of principal components explaining 99\% of trajectory variance (PCA 99\%).
+% trend numbers taken from tables/ch_qformer_layer_ablation.tex
+Concretely, the mean number of perfectly reconstructed (compressed) tokens is $196$, $369.6$, $355.9$, $276.7$, and $207.3$ for the 2-, 4-, 8-, 16-, and 24-layer Q-Former variants, respectively---peaking at $4$ layers and then \emph{decreasing} as depth grows, so the full-depth model compresses fewer tokens than every shallower truncation except the 2-layer one. This inverts the trend of the causal-LM depth ablation (Appendix~\ref{app:layer_ablation}), whose compression capacity instead rises toward full depth, and the Q-Former's information gain and trajectory length likewise peak at intermediate depth. At full depth the simpler MLP head ($237.5$) modestly exceeds the Q-Former head ($207.3$), indicating that the extra capacity of the Q-Former is most useful when the backbone is shallow.
+
+\begin{table*}[t]
+    \centering
+    \caption{Compression-head depth ablation on SmolLM2-1.7B. The model is truncated to its first $N$ and last $N$ decoder layers ($2N$ layers total); each depth is recovered by training a Q-Former compression head and is evaluated with \texttt{compression\_head\_forward} initialization, with the simpler MLP head shown at full depth as a head-architecture reference. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
+    \label{tab:ch_qformer_layer_ablation}
+    \begin{small}
+    \input{tables/ch_qformer_layer_ablation}
     \end{small}
 \vskip -0.1in
 \end{table*}
