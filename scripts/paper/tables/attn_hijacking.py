@@ -463,6 +463,7 @@ def format_attention_mass_table(
     statistics: List[Dict[str, Any]],
     midrule_indicies: Optional[List[int]] = None,
     tablefmt: str = "grid",
+    first_col_label: str = "Compression Embedding (%)",
 ) -> str:
     """Build the attention mass statistics table as a string."""
     if len(checkpoint_names) == 0 or len(statistics) == 0:
@@ -500,7 +501,7 @@ def format_attention_mass_table(
 
     headers = [
         "Model",
-        "Compression Token (%)",
+        first_col_label,
         "BOS Token Original (%)",
         "Diff (%)",
         "Correlation",
@@ -528,9 +529,10 @@ def print_attention_mass_table(
     statistics: List[Dict[str, Any]],
     midrule_indicies: Optional[List[int]] = None,
     tablefmt: str = "grid",
+    first_col_label: str = "Compression Embedding (%)",
 ):
     """Print attention mass statistics table using tabulate."""
-    result = format_attention_mass_table(checkpoint_names, statistics, midrule_indicies, tablefmt)
+    result = format_attention_mass_table(checkpoint_names, statistics, midrule_indicies, tablefmt, first_col_label)
     if not result:
         return
     print("\n" + "=" * 80)
@@ -638,6 +640,12 @@ def main():
         default="attn_hijacking",
         help="Output slug (without extension) used together with --save-dir.",
     )
+    parser.add_argument(
+        "--first-col-label",
+        type=str,
+        default="Compression Embedding (%)",
+        help="Header label for the first data column (attention mass of the learned embedding).",
+    )
 
     args = parser.parse_args()
 
@@ -738,6 +746,7 @@ def main():
         statistics_list,
         midrule_indicies=args.midrule_indicies,
         tablefmt=args.tablefmt,
+        first_col_label=args.first_col_label,
     )
 
     if args.save_dir is not None:
@@ -746,6 +755,7 @@ def main():
             statistics_list,
             midrule_indicies=args.midrule_indicies,
             tablefmt=args.tablefmt,
+            first_col_label=args.first_col_label,
         )
         if rendered:
             out_dir = Path(args.save_dir)

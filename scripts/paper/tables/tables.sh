@@ -108,4 +108,5 @@ done
     artifacts/experiments_prefix_tuning/pt_sl_1024_SmolLM2-1.7B/prefix_tuning_prefixes \
     artifacts/experiments_prefix_tuning/pt_sl_1024_Qwen3-4B/prefix_tuning_prefixes \
   --compute --tablefmt latex \
+  --first-col-label "Prefix Token (%)" \
   --save-dir paper/tables --save-name prefix_tuning_attention_hijacking
