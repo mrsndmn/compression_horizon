@@ -209,7 +209,7 @@ Our main contributions are as follows:
 
 Our work is built upon token cramming \cite{kuratov2025cramming}, where per-sample optimization compresses up to 1{,}568 tokens into a single Llama-3.1-8B input embedding ($\sim$1500$\times$ compression), far beyond typical encoder-based lossless ratios ($\le 10\times$). Crucially, they show that capacity is better characterized by cross-entropy reduction than raw token count, suggesting the model leverages internal knowledge to complement stored information.
 
-Extending this line of inquiry, \citet{mezentsev2025exploring} show that frozen LLMs can generate hundreds of accurate tokens non-autoregressively from just two learned ``proto-token'' embeddings, and that valid compression representations form connected local regions in embedding space.
+Extending this line of inquiry, \citet{mezentsev2025exploring} show that frozen LLMs can generate hundreds of accurate tokens non-autoregressively from just two learned ``proto-token'' embeddings, and that valid compression embeddings form connected local regions in embedding space.
 
 
 \subsection{Context Compression and Distillation}
@@ -230,7 +230,7 @@ The optimization of continuous embeddings as model inputs originated in paramete
 
 \citet{lester-etal-2021-prompt-tuning} propose prompt tuning, a simplified approach that learns soft prompts only at the input layer rather than at every transformer layer. They demonstrate that prompt tuning becomes increasingly competitive with full model tuning as model scale increases, with billion-parameter models closing the gap entirely. This finding suggests that larger models develop embedding spaces with sufficient structure to support rich task-specific conditioning through input manipulation alone.
 
-These methods establish that frozen language models can be effectively steered through learned embeddings without modifying model parameters. Token cramming can be viewed as an extreme case of this paradigm: rather than encoding task-specific instructions, the learned embedding must encode the complete information content of an arbitrary token sequence. Our progressive cramming methodology bridges these perspectives by studying how compression tokens interact with the model's attention and activation patterns as the encoding task becomes increasingly demanding.
+These methods establish that frozen language models can be effectively steered through learned embeddings without modifying model parameters. Token cramming can be viewed as an extreme case of this paradigm: rather than encoding task-specific instructions, the learned embedding must encode the complete information content of an arbitrary token sequence. Our progressive cramming methodology bridges these perspectives by studying how compression embeddings interact with the model's attention and activation patterns as the encoding task becomes increasingly demanding.
 
 
 % =============================================================================
@@ -327,7 +327,7 @@ We define the (stage-wise) trajectory length as the sum of Euclidean distances b
 \begin{figure}[t]
     \centering
     \input{figure_progressive_cramming.tikz}
-    \caption{Progressive cramming adds target tokens sequentially. At stage $k$, we optimize the compression representation to achieve 100\% reconstruction of the prefix $(x_1,\ldots,x_k)$, then extend to $k{+}1$ and warm-start from the previous solution.}
+    \caption{Progressive cramming adds target tokens sequentially. At stage $k$, we optimize the compression embedding to achieve 100\% reconstruction of the prefix $(x_1,\ldots,x_k)$, then extend to $k{+}1$ and warm-start from the previous solution.}
     \label{fig:progressive}
 \end{figure}
 
