@@ -9,7 +9,7 @@
 
 \section{Hyperparameters}
 
-We used 50 or 10 samples from PG19 for most experiments.
+We used 50 PG19 samples for most experiments in the main paper body from \texttt{LarryLovestein/pg19_1k} that were repoduced by the recipie from \cite{kuratov2025cramming}. While some results in appendix were reported only for 10 PG19 samlpes from that dataset.
 Across all settings, the base language model was frozen; only the compression-embedding parameters were optimized (either the compression embeddings, or the low-dimensional embedding together with its projection).
 We optimized with AdamW. For each model, we swept the learning rate over \(\{0.01, 0.1, 0.5, 1.0\}\); the resulting metrics are summarized in Table~\ref{tab:all_learning_rates}. For the low-dimensional embedding and projection variant, we used a learning rate of 0.01.
 We ran up to 10{,}000 optimization steps per sample in all experiments; for progressive runs, we additionally capped the optimization of each newly added token at 1{,}000 steps.
