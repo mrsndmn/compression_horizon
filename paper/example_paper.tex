@@ -134,7 +134,7 @@
 \begin{abstract}
     Token cramming compresses sequences into learned embeddings with near-perfect reconstruction, but fixed token budgets and 99\% accuracy thresholds leave it unclear whether residual errors reflect optimization failures or fundamental limits.
     We introduce progressive cramming, which grows the target prefix token-by-token, stopping only when reconstruction is no longer achievable within a fixed optimization budget.
-    Progressive trajectories occupy surprisingly low-dimensional structure in embedding space.
+    Progressive trajectories occupy low-dimensional structure in embedding space.
     Prepending a crammed embedding causes a moderate but consistent accuracy drop on multiple-choice benchmarks even with the original prefix in context, and collapses capability almost entirely under generative evaluation.
     Causal attention-knockout interventions trace this degradation to the embedding's interactions in the model's early layers.
     These results position progressive cramming as a tool for studying compression limits and show that perfect reconstruction---achievable through brittle steering rather than transferable semantics---is insufficient for meaningful compression.
@@ -171,7 +171,7 @@ This achieves reliable 100\% accuracy and enables precise measurement of where c
 
 % PARAGRAPH 4: What we find - the mechanism
 With these tools, we investigate the cramming mechanism.
-Analysis of optimization trajectories shows they occupy surprisingly low-dimensional manifolds: 30-100 PCA components explain 99\% of variance in 2048-4096 dimensional embedding spaces.
+Analysis of optimization trajectories shows they occupy low-dimensional manifolds: 30-100 PCA components explain 99\% of variance in 2048-4096 dimensional embedding spaces.
 More critically, attention-pattern analysis shows that the compression embedding becomes a strong attention sink, capturing 20--60\% of attention mass in intermediate layers.
 This concentration coincides with a breakdown of downstream language-modeling capabilities rather than benign attention focusing; our causal analysis (Section~\ref{sec:causal}) further shows it is a \emph{symptom} of that breakdown rather than its cause.
 This concentration is invariant to sequence length -- the same layers are dominated whether cramming 32 or 512 tokens -- consistent with compression engaging relatively fixed circuits rather than scaling information density.
