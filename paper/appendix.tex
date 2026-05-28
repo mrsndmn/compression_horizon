@@ -374,16 +374,12 @@ next-token surprisal of the token being added. With the default single-token sch
 each stage grows the target prefix by exactly one token and re-optimizes the compression embedding
 (warm-started from the previous, already-converged stage) until it reconstructs the prefix. The
 optimizer steps the stage at prefix length $n$ spends to absorb that one new token is therefore the
-marginal cramming cost of token $n$, which we denote $\Delta\text{steps}(n)$.\footnote{We read this
-cost directly from the saved trajectories. Across runs the logged \texttt{steps\_taken} field uses
-two conventions---a running cumulative count or a per-stage count---so we auto-detect which (a
-cumulative sequence is non-decreasing within a sample, a per-stage one decreases about half the time)
-and take $\Delta\text{steps}(n) = \texttt{steps}(n) - \texttt{steps}(n{-}1)$ or $\texttt{steps}(n)$
-accordingly.} We compare it against the base model's per-token surprisal
+marginal cramming cost of token $n$, which we denote $\Delta\text{steps}(n)$.
+We compare it against the base model's per-token surprisal
 $s(n) = -\log_2 p(x_n \mid x_{<n})$ in bits, i.e.\ the per-token quantity whose running sum is the
 description length $\mathrm{DL}(n)=\sum_{i\le n} s_i$; its total $\mathrm{DL}(N)$ is exactly the
 base-model cross-entropy term $H_{LM}$ of the information-gain metric. We compute $s(n)$ with one
-frozen forward pass per sample using the same tokenization as training.
+frozen forward pass per sample.
 
 We test the \emph{marginal} relationship and not the cumulative one on purpose. Cumulative steps and
 $\mathrm{DL}(n)$ both increase monotonically with $n$, so their correlation is near $1$ trivially---a
@@ -406,19 +402,16 @@ controlling for position: the partial correlation $\rho \mid n$ equals or exceed
 in all four cases ($0.49$--$0.66$). The marginal cramming cost of a token is thus governed by how
 much new information that token carries under the base model, not by where it sits in the sequence.
 
-This carries three implications for how we understand progressive cramming. First, the procedure's
-cost is \emph{information-theoretic}: predictable continuations are nearly free, while the optimizer's
-effort concentrates on high-surprisal tokens, so the cumulative steps to a given prefix track its
-description length $\mathrm{DL}(n)$ rather than its raw length. This is the per-token mechanism behind
-the aggregate picture in Appendix~\ref{app:added_tokens_ablation}, where coarsening the schedule
-($\Delta > 1$) reshapes and shortens the optimization trajectory while leaving the achieved prefix
-length essentially unchanged---the same total information must be absorbed however it is grouped.
-Second, the effect is a property of the cramming procedure interacting with a language model's
-predictive distribution, not of any one architecture: it reproduces across four families and an order
-of magnitude of scale. Third, it is practically useful: because $s(n)$ comes from a single frozen
-forward pass, the difficult regions of a document---and, by accumulating bits up to the embedding's
-capacity, the approximate compression horizon---can be estimated \emph{before} running the expensive
-inner optimization, which could guide step-budget allocation or early stopping.
+This carries two implications. First, the procedure's cost is \emph{information-theoretic}:
+predictable continuations are nearly free, while the optimizer's effort concentrates on high-surprisal
+tokens, so the cumulative steps to a given prefix track its description length $\mathrm{DL}(n)$ rather
+than its raw length. This is the per-token mechanism behind the aggregate picture in
+Appendix~\ref{app:added_tokens_ablation}, where coarsening the schedule ($\Delta > 1$) reshapes and
+shortens the optimization trajectory while leaving the achieved prefix length essentially
+unchanged---the same total information must be absorbed however it is grouped. Second, the relationship
+is practically useful: because $s(n)$ comes from a single frozen forward pass, the relatively
+difficult regions of a document can be anticipated \emph{before} running the expensive inner
+optimization, which could guide step-budget allocation or early stopping.
 
 Two caveats bound the claim. The correlation is moderate rather than deterministic ($\rho \approx 0.5$):
 surprisal explains a large share of the rank ordering of difficulty, but optimization-landscape
