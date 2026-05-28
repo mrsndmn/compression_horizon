@@ -31,8 +31,13 @@ class BaseTrainer:
         train_dataset=None,
         eval_dataset=None,
         data_collator=None,
+        model_reconstructor=None,
     ) -> None:
         self.model = model
+        # Optional second model used by the compression-head / progressive trainers when
+        # --separate_reconstructor_model is set (or a dual checkpoint is loaded). None means the
+        # second forward reuses `self.model` (legacy single-model path).
+        self.model_reconstructor = model_reconstructor
         self.processing_class = processing_class
         self.args = args
         self.train_dataset = train_dataset
@@ -75,8 +80,13 @@ class BaseTrainer:
         num_compression_tokens: int,
         compression_hidden_states: tuple[torch.Tensor, ...] | None = None,
         target_hidden_states: tuple[torch.Tensor, ...] | None = None,
+        prefix_len: int = 0,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Compute CE + (optionally) activation-alignment loss from already-computed logits."""
+        """Compute CE + (optionally) activation-alignment loss from already-computed logits.
+
+        ``prefix_len`` skips the uncompressed prefix positions so loss is computed only over the
+        continuation (the tokens that follow the prefix); 0 leaves behaviour unchanged.
+        """
         loss, alignment_loss = compute_hybrid_cross_entropy_and_alignment_loss(
             logits=logits,
             input_ids=input_ids,
@@ -88,6 +98,7 @@ class BaseTrainer:
             inverted_alignment=self.args.inverted_alignment,
             loss_type=self.args.loss_type.lower(),
             hybrid_alpha=self.args.hybrid_alpha,
+            prefix_len=prefix_len,
         )
         return loss, alignment_loss
 
@@ -98,13 +109,15 @@ class BaseTrainer:
         input_ids: torch.Tensor,  # [batch, sequence]
         attention_mask: torch.Tensor,  # [batch, sequence]
         num_compression_tokens: int,
+        prefix_len: int = 0,
     ) -> torch.Tensor:
-        """Per-sample token-level argmax match rate in [0, 1]."""
+        """Per-sample token-level argmax match rate in [0, 1] (over the post-prefix continuation)."""
         return token_argmax_match_rate_with_prefix(
             logits,
             input_ids,
             attention_mask,
             num_compression_tokens,
+            prefix_len=prefix_len,
         )
 
     @torch.no_grad()
@@ -212,12 +225,19 @@ class BaseTrainer:
         input_ids: torch.Tensor,  # [batch, sequence]
         token_embeddings: torch.Tensor,  # [batch, sequence, hidden]
         attention_mask: torch.Tensor,  # [batch, sequence]
-        united_token_embeddings: torch.Tensor,  # [batch, compression + sequence, hidden]
-        united_attention_mask: torch.Tensor,  # [batch, compression + sequence]
+        united_token_embeddings: torch.Tensor,  # [batch, compression + prefix + sequence, hidden]
+        united_attention_mask: torch.Tensor,  # [batch, compression + prefix + sequence]
         num_compression_tokens: int,
         target_hidden_states: tuple[torch.Tensor, ...] | None = None,
+        prefix_len: int = 0,
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor, list[str] | None, list[str] | None]:
-        """Forward + loss + convergence + diagnostics, returning a 5-tuple."""
+        """Forward + loss + convergence + diagnostics, returning a 5-tuple.
+
+        ``prefix_len`` is the number of uncompressed prefix tokens inserted between the compression
+        tokens and the continuation in ``united_token_embeddings``; loss and convergence are then
+        computed only over the continuation. ``input_ids``/``attention_mask``/``token_embeddings``
+        describe the continuation only.
+        """
         # Compute vanilla model hidden states if alignment is required
         loss_type = self.args.loss_type.lower()
         if loss_type != "cross_entropy" and target_hidden_states is None:
@@ -228,6 +248,8 @@ class BaseTrainer:
         if loss_type != "cross_entropy":
             forward_extra_kwargs["output_hidden_states"] = True
         if self.args.fix_position_ids:
+            if prefix_len > 0:
+                raise NotImplementedError("fix_position_ids is not supported together with progressive_prefix_len > 0.")
             position_ids = torch.arange(
                 -num_compression_tokens,
                 token_embeddings.size(1),
@@ -250,8 +272,11 @@ class BaseTrainer:
             num_compression_tokens,
             compression_hidden_states=outputs.hidden_states,
             target_hidden_states=target_hidden_states,
+            prefix_len=prefix_len,
         )
-        convergence_per_sample = self.compute_convergence(outputs.logits, input_ids, attention_mask, num_compression_tokens)
+        convergence_per_sample = self.compute_convergence(
+            outputs.logits, input_ids, attention_mask, num_compression_tokens, prefix_len=prefix_len
+        )
         generated_text, ground_truth_text = self.generate_diagnostics(
             model, input_ids, united_token_embeddings, num_compression_tokens
         )

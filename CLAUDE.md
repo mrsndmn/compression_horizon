@@ -1,5 +1,18 @@
 # Project conventions
 
+## Building the paper
+
+Build the compiled PDF with **`make paper`** (runs `paper/lint_paper.py` first via
+`paper-check`, then `latexmk -pdf` from inside `paper/`). Output lands at
+`paper/build/example_paper.pdf`. Related targets: `make paper-check` (lint only),
+`make paper-clean`, and `make tables` (regenerate tables from artifacts).
+
+Figures are resolved by `latexmk` via `paper/.latexmkrc`, which puts `./figures//`
+(recursive) on `TEXINPUTS`, so `\includegraphics` uses **bare filenames** and every
+figure filename under `paper/figures/` must be unique (avoid same-named files in
+subdirs — recursive search makes them ambiguous). `lint_paper.py` also fails on any
+unreferenced file under `figures/`.
+
 ## ⚠️ Generated paper tables — DO NOT hand-edit
 
 The `.tex` files in `paper/tables/` are **generated** by `scripts/paper/tables/`

@@ -1,26 +1,29 @@
 """Watcher: launch progressive-cramming evaluation for each compression-head checkpoint
 as soon as that head's training job finishes (independently, in any completion order).
 
-For every experiment in ``run_jobs_compression_head.EXPERIMENTS`` it polls one of four states:
+For every experiment in the selected launcher's ``EXPERIMENTS`` (``--launcher``, default
+``run_jobs_compression_head``; use ``run_jobs_compression_head_width`` for the width ablation,
+including its dual-model ``_dualmodel`` arms) it polls one of four states:
   * ``ch_running``    -- the training job is pending/running (logs live TB step/ETA).
   * ``ch_ready``      -- the checkpoint is saved (config.json + .safetensors) -> submit its eval now.
   * ``eval_submitted``-- the progressive-eval job is queued/running (or its output dir exists).
   * ``ch_failed``     -- the training job reached a terminal status without producing a checkpoint.
 
-Submission reuses ``run_jobs_compression_head.py --stage eval`` (idempotent: it skips heads that are
-not ready, evals already queued, and existing output dirs), so the watcher is safe to re-run and
-resilient to a missed/failed submission. It exits once every experiment is ``eval_submitted`` or
-``ch_failed``.
+Submission reuses ``<launcher>.py --stage eval`` (idempotent: it skips heads that are not ready,
+evals already queued, and existing output dirs), so the watcher is safe to re-run and resilient to a
+missed/failed submission. It exits once every experiment is ``eval_submitted`` or ``ch_failed``.
 
 Usage:
     python scripts/jobs/watch_compression_head_eval.py --plan          # print states, don't wait
     python scripts/jobs/watch_compression_head_eval.py --poll 180      # watch + submit evals
+    python scripts/jobs/watch_compression_head_eval.py --launcher run_jobs_compression_head_width
 """
 
 from __future__ import annotations
 
 import argparse
 import glob
+import importlib
 import json
 import os
 import subprocess
@@ -30,7 +33,7 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import run_jobs_compression_head as J  # noqa: E402
+import run_jobs_compression_head as J  # noqa: E402  (default launcher; overridden by _configure)
 
 PROJ = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 MLS_BIN = os.environ.get("MLS_BIN", "/home/jovyan/.mlspace/envs/compression_horizon/bin/mls")
@@ -44,6 +47,25 @@ WATCH_LOG = os.path.join(STATE_DIR, "watch.log")
 CH_TRAIN_MAX_STEPS = J.LIMIT_DATASET_ITEMS * J.MAX_SEQ_LEN * J.NUM_TRAIN_EPOCHS // J.TARGET_GLOBAL_TOKENS
 
 FINAL_FAILED = {"failed", "stopped", "deleted", "terminated", "error", "cancelled", "canceled", "killed", "aborted"}
+
+
+def _configure(launcher_module: str) -> None:
+    """Point the watcher at ``launcher_module`` (its ``EXPERIMENTS`` + rendering + ``--stage eval``).
+
+    Reassigns the module globals the helpers read so a non-default launcher (e.g. the width ablation)
+    is watched with its own experiment matrix and a separate state/log dir. The ETA step count reuses
+    the canonical training constants from ``run_jobs_compression_head`` (shared by every launcher).
+    """
+    global J, LAUNCHER, STATE_DIR, LOG_DIR, WATCH_LOG, CH_TRAIN_MAX_STEPS
+    J = importlib.import_module(launcher_module)
+    LAUNCHER = os.path.join(PROJ, "scripts", "jobs", f"{launcher_module}.py")
+    state_name = "compression_head_eval" if launcher_module == "run_jobs_compression_head" else f"ch_eval__{launcher_module}"
+    STATE_DIR = os.path.join(PROJ, ".omc", "ablation_watch", state_name)
+    LOG_DIR = os.path.join(STATE_DIR, "logs")
+    WATCH_LOG = os.path.join(STATE_DIR, "watch.log")
+    const_keys = ("LIMIT_DATASET_ITEMS", "MAX_SEQ_LEN", "NUM_TRAIN_EPOCHS", "TARGET_GLOBAL_TOKENS")
+    src = J if all(hasattr(J, k) for k in const_keys) else importlib.import_module("run_jobs_compression_head")
+    CH_TRAIN_MAX_STEPS = src.LIMIT_DATASET_ITEMS * src.MAX_SEQ_LEN * src.NUM_TRAIN_EPOCHS // src.TARGET_GLOBAL_TOKENS
 
 
 def log(msg: str) -> None:
@@ -169,7 +191,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--poll", type=int, default=180, help="Seconds between polls (default 180).")
     parser.add_argument("--plan", action="store_true", help="Print current states once and exit.")
+    parser.add_argument(
+        "--launcher",
+        default="run_jobs_compression_head",
+        help="Launcher module whose EXPERIMENTS to watch (default run_jobs_compression_head; "
+        "use run_jobs_compression_head_width for the width ablation incl. dual-model arms).",
+    )
     args = parser.parse_args()
+
+    _configure(args.launcher)
 
     if args.plan:
         states = classify(mls_list())

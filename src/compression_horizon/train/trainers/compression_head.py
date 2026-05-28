@@ -91,6 +91,13 @@ class CompressionHeadTrainer(BaseTrainer):
     def _train_compression_head(self) -> str:
         args = self.args
         model = self.model
+        # Optional reconstructor copy (no compression-head adapter), provided when
+        # --separate_reconstructor_model is set. First forward stays on `model`
+        # (the compressor); second forward switches to `model_reconstructor`.
+        model_reconstructor = getattr(self, "model_reconstructor", None)
+        dual_mode = model_reconstructor is not None
+        if dual_mode:
+            print("[two-model] dual-model training enabled (compressor + reconstructor)")
 
         grad_accum = args.gradient_accumulation_steps
         assert grad_accum >= 1
@@ -115,11 +122,19 @@ class CompressionHeadTrainer(BaseTrainer):
                 torch.cuda.synchronize()
 
         if args.compression_head_freeze_base_model:
-            freeze_model_parameters(model)
-            for p in getattr(model, "compression_head", nn.Module()).parameters():
-                p.requires_grad = True
+            if dual_mode:
+                print(
+                    "[two-model] WARNING: --compression_head_freeze_base_model is ignored in "
+                    "dual-model training (both compressor and reconstructor stay fully trainable)."
+                )
+            else:
+                freeze_model_parameters(model)
+                for p in getattr(model, "compression_head", nn.Module()).parameters():
+                    p.requires_grad = True
 
         model.train()
+        if dual_mode:
+            model_reconstructor.train()
 
         train_loader = DataLoader(
             self.train_dataset,
@@ -142,33 +157,52 @@ class CompressionHeadTrainer(BaseTrainer):
             total_update_steps = int(math.ceil(micro_steps_total / grad_accum))
 
         params = [p for p in model.parameters() if p.requires_grad]
+        if dual_mode:
+            params += [p for p in model_reconstructor.parameters() if p.requires_grad]
 
         print("total_update_steps", total_update_steps)
         optimizer, scheduler = self._build_optimizer_and_scheduler(
             params, num_training_steps=total_update_steps, num_processes=accelerator.num_processes
         )
 
-        model, optimizer, train_loader, scheduler = accelerator.prepare(model, optimizer, train_loader, scheduler)
+        if dual_mode:
+            model, model_reconstructor, optimizer, train_loader, scheduler = accelerator.prepare(
+                model, model_reconstructor, optimizer, train_loader, scheduler
+            )
+        else:
+            model, optimizer, train_loader, scheduler = accelerator.prepare(model, optimizer, train_loader, scheduler)
         print("train_loader after prepare", len(train_loader))
 
         unwrapped_model = accelerator.unwrap_model(model)
+        unwrapped_recon = accelerator.unwrap_model(model_reconstructor) if dual_mode else unwrapped_model
         params = [p for p in model.parameters() if p.requires_grad]
+        if dual_mode:
+            params += [p for p in model_reconstructor.parameters() if p.requires_grad]
 
-        if hasattr(unwrapped_model, "config") and unwrapped_model.config is not None:
-            unwrapped_model.config.use_cache = False
+        for m in (unwrapped_model, unwrapped_recon if dual_mode else None):
+            if m is None:
+                continue
+            if hasattr(m, "config") and m.config is not None:
+                m.config.use_cache = False
         if hasattr(model, "config") and model.config is not None:
             model.config.use_cache = False
+        if dual_mode and hasattr(model_reconstructor, "config") and model_reconstructor.config is not None:
+            model_reconstructor.config.use_cache = False
 
-        if getattr(args, "gradient_checkpointing", False):
-            if hasattr(unwrapped_model, "gradient_checkpointing_enable"):
-                unwrapped_model.gradient_checkpointing_enable()
-            elif hasattr(model, "gradient_checkpointing_enable"):
-                model.gradient_checkpointing_enable()
-        else:
-            if hasattr(unwrapped_model, "gradient_checkpointing_disable"):
-                unwrapped_model.gradient_checkpointing_disable()
-            elif hasattr(model, "gradient_checkpointing_disable"):
-                model.gradient_checkpointing_disable()
+        def _gc_apply(m, enable: bool) -> None:
+            if m is None:
+                return
+            if enable:
+                if hasattr(m, "gradient_checkpointing_enable"):
+                    m.gradient_checkpointing_enable()
+            else:
+                if hasattr(m, "gradient_checkpointing_disable"):
+                    m.gradient_checkpointing_disable()
+
+        gc_on = bool(getattr(args, "gradient_checkpointing", False))
+        _gc_apply(unwrapped_model, gc_on)
+        if dual_mode:
+            _gc_apply(unwrapped_recon, gc_on)
 
         update_step = 0
         micro_step = 0
@@ -226,7 +260,11 @@ class CompressionHeadTrainer(BaseTrainer):
 
                     if base_loss is None:
                         raise RuntimeError("Model did not return loss (labels missing?)")
-                    if torch.isnan(base_loss) or torch.isinf(base_loss):
+                    # base_loss only enters the objective when beta != 0 (see loss assembly below);
+                    # otherwise it is a logged-only diagnostic. An unweighted base_loss going NaN/Inf
+                    # (e.g. an untrained truncated LM head overflowing in bf16) must not abort an
+                    # otherwise-healthy run, so only treat it as fatal when it actually contributes.
+                    if args.compression_head_distill_beta != 0 and (torch.isnan(base_loss) or torch.isinf(base_loss)):
                         print(f"DEBUG: NaN/Inf detected in base_loss at step {update_step}, " f"micro_step {micro_step}")
                         raise RuntimeError(f"NaN/Inf in base_loss: {base_loss.item()}")
 
@@ -241,7 +279,9 @@ class CompressionHeadTrainer(BaseTrainer):
 
                     t0 = time.perf_counter()
                     with accelerator.autocast():
-                        token_embeddings = unwrapped_model.get_input_embeddings()(input_ids)
+                        # Embed lookup must come from whichever model will decode the prefix
+                        # (the reconstructor in dual mode, otherwise the single model).
+                        token_embeddings = unwrapped_recon.get_input_embeddings()(input_ids)
                     _sync()
                     embed_s = time.perf_counter() - t0
 
@@ -255,9 +295,10 @@ class CompressionHeadTrainer(BaseTrainer):
                     )
                     build_s = time.perf_counter() - t0
 
+                    decode_model = model_reconstructor if dual_mode else model
                     t0 = time.perf_counter()
                     with accelerator.autocast():
-                        out2 = model(
+                        out2 = decode_model(
                             inputs_embeds=inputs_embeds_new,
                             attention_mask=attention_mask_new,
                             labels=labels_new,
@@ -275,7 +316,11 @@ class CompressionHeadTrainer(BaseTrainer):
 
                     alpha = args.compression_head_distill_alpha
                     beta = args.compression_head_distill_beta
-                    loss = base_loss * beta + after_loss * alpha
+                    # Only fold base_loss in when weighted: with beta == 0, `base_loss * beta` would be
+                    # nan when base_loss is nan (IEEE nan*0 == nan) and needlessly poison the objective.
+                    loss = after_loss * alpha
+                    if beta != 0:
+                        loss = loss + base_loss * beta
 
                     if torch.isnan(loss) or torch.isinf(loss):
                         raise RuntimeError(f"NaN/Inf in total loss: {loss.item()}")
@@ -283,7 +328,10 @@ class CompressionHeadTrainer(BaseTrainer):
                     opt_s = 0.0
                     did_step = False
                     t0 = time.perf_counter()
-                    with accelerator.accumulate(model):
+                    accumulate_ctx = (
+                        accelerator.accumulate(model, model_reconstructor) if dual_mode else accelerator.accumulate(model)
+                    )
+                    with accumulate_ctx:
                         accelerator.backward(loss / grad_accum)
                         _sync()
                         bwd_s = time.perf_counter() - t0
@@ -380,9 +428,22 @@ class CompressionHeadTrainer(BaseTrainer):
             os.makedirs(args.output_dir, exist_ok=True)
             if not hasattr(unwrapped_model, "save_pretrained"):
                 raise RuntimeError("Expected a Hugging Face PreTrainedModel with save_pretrained().")
-            unwrapped_model.save_pretrained(args.output_dir)
-            if self.processing_class is not None and hasattr(self.processing_class, "save_pretrained"):
-                self.processing_class.save_pretrained(args.output_dir)
+            if dual_mode:
+                compressor_dir = os.path.join(args.output_dir, "compressor")
+                reconstructor_dir = os.path.join(args.output_dir, "reconstructor")
+                os.makedirs(compressor_dir, exist_ok=True)
+                os.makedirs(reconstructor_dir, exist_ok=True)
+                unwrapped_model.save_pretrained(compressor_dir)
+                if hasattr(unwrapped_recon, "save_pretrained"):
+                    unwrapped_recon.save_pretrained(reconstructor_dir)
+                if self.processing_class is not None and hasattr(self.processing_class, "save_pretrained"):
+                    # Tokenizer shared between the two; save inside the compressor dir
+                    # so downstream tooling that points at <output_dir>/compressor finds it.
+                    self.processing_class.save_pretrained(compressor_dir)
+            else:
+                unwrapped_model.save_pretrained(args.output_dir)
+                if self.processing_class is not None and hasattr(self.processing_class, "save_pretrained"):
+                    self.processing_class.save_pretrained(args.output_dir)
 
             try:
                 args_dict = getattr(args, "to_dict", lambda: {})()
