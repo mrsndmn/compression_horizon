@@ -395,6 +395,23 @@ The near-identical token-normalized accuracies for SmolLM2-1.7B (Table~\ref{tab:
 \end{small}
 \end{table}
 
+\subsection{Likelihood-Scoring Strategies}
+\label{app:scoring_strategies}
+
+We further localize the degradation reported in Section~\ref{sec:semantic_evaluation} by varying which token logits enter the likelihood score on SmolLM2-1.7B, over perfectly reconstructed instances (Table~\ref{tab:semantic_benchmarks_token}).
+Replacing the prefix with its compression embedding while scoring the full context plus the candidate ending drops HellaSwag from $52.4\%$ to $36.5\%$ and ARC-Challenge from $36.7\%$ to $28.6\%$.
+Scoring only the answer-ending tokens -- which do not require reading the compressed prefix -- recovers part of the gap (HellaSwag $40.7\%$), and replacing the context entirely with the embedding (``compression only'') is worst ($34.6\%$ / $22.9\%$).
+Across every scoring strategy the compressed conditions remain well below baseline, reinforcing that faithful reconstruction does not translate into usable downstream semantics.
+
+\begin{table}[t]
+    \centering
+    \caption{Token-normalized accuracy (\%) on HellaSwag, ARC-Easy (ARC-E), and ARC-Challenge (ARC-C) for SmolLM2-1.7B under different likelihood-scoring strategies, over perfectly reconstructed instances. \emph{Baseline} uses the original prefix; \emph{Compression} replaces the prefix with its crammed embedding; \emph{compression only} drops the prefix and keeps only the embedding. ``context $+$ ending'' scores all tokens, while ``ending only'' scores just the candidate-continuation tokens.}
+    \label{tab:semantic_benchmarks_token}
+    \begin{small}
+    \input{tables/manual/semantic_benchmarks_token}
+    \end{small}
+\end{table}
+
 \section{Generative Benchmark Evaluation (5-shot MMLU)}
 \label{app:mmlu}
 
