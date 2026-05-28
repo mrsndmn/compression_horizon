@@ -20,6 +20,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FFMpegWriter, FuncAnimation, PillowWriter
+from matplotlib.patches import Rectangle
+from matplotlib.patheffects import withStroke
 
 # Reuse the polished region-rendering helpers from the static-figure script.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -282,6 +284,12 @@ def main() -> None:
         default=1.5,
         help="Duration (s) of the smooth camera zoom transition.",
     )
+    ap.add_argument(
+        "--no-progress",
+        dest="progress",
+        action="store_false",
+        help="Hide the top progress bar (converged tokens, colored by per-token optimizer-step cost).",
+    )
     ap.add_argument("--no-mp4", dest="no_mp4", action="store_true", help="Skip MP4 output.")
     ap.add_argument("--no-gif", dest="no_gif", action="store_true", help="Skip GIF output.")
     args = ap.parse_args()
@@ -318,7 +326,6 @@ def main() -> None:
 
     sampled_indices = npz["sampled_indices"].astype(np.int64).reshape(-1)
     anchor_xy_all = _ensure_2d(npz["anchor_coords"].astype(np.float32))[:, :2]
-    stage_seq_len = npz["stage_seq_len"].astype(np.int64).reshape(-1) if "stage_seq_len" in npz else None
 
     acc = npz["accuracy"]  # [F,P,H,W]
     grid_x_all = npz["grid_x"]
@@ -471,7 +478,7 @@ def main() -> None:
     (path_line,) = ax.plot([], [], color="black", alpha=0.30, linewidth=1.6, zorder=1.9)
     trail = ax.scatter([], [], s=16, linewidths=0, zorder=2)
     head = ax.scatter([], [], s=300, marker="*", c="red", edgecolors="black", linewidths=1.0, zorder=8)
-    title = ax.set_title("", pad=16)
+    title = fig.text(0.5, 0.965, "", ha="center", va="center", fontsize=24)
 
     # Frame schedule: reveal across `seconds`, then hold.
     anim_frames = max(int(round(args.fps * args.seconds)), 2)
@@ -502,6 +509,53 @@ def main() -> None:
     trail_rgba = np.zeros((n_traj, 4), dtype=np.float64)
     trail_rgba[:, 3] = np.clip(pt_alpha, 0.0, 1.0)  # black points, per-token alpha
 
+    # Top progress bar: converged-token count, with the bar itself colored by each token's
+    # optimizer-step cost (easy=light, hard=red). Because the reveal is paced in real time by
+    # `reveal_counts`, the fill races across the cheap early tokens and crawls through the
+    # expensive later ones -- making "fast early, slow late" convergence visible at a glance.
+    show_progress = bool(args.progress)
+    cover = cursor = pbar_text = None
+    if show_progress:
+        fig.subplots_adjust(top=0.87)  # title sits at the very top; bar goes just beneath it
+        if steps_per_point is not None:
+            rib = np.log(np.clip(steps_per_point.astype(np.float64), 1.0, None))
+            rmin, rmax = float(rib.min()), float(rib.max())
+            rib_norm = (rib - rmin) / (rmax - rmin) if rmax > rmin else np.full(n_traj, 0.5)
+        else:
+            rib_norm = np.full(n_traj, 0.5)
+        pbar_ax = fig.add_axes((0.12, 0.905, 0.76, 0.030))
+        pbar_ax.set_xlim(0.0, float(n_traj))
+        pbar_ax.set_ylim(0.0, 1.0)
+        pbar_ax.set_xticks([])
+        pbar_ax.set_yticks([])
+        pbar_ax.imshow(
+            rib_norm[None, :],
+            aspect="auto",
+            extent=(0.0, float(n_traj), 0.0, 1.0),
+            cmap="YlOrRd",
+            vmin=0.0,
+            vmax=1.0,
+            origin="lower",
+            zorder=1,
+        )
+        cover = Rectangle((0.0, 0.0), float(n_traj), 1.0, facecolor="0.92", edgecolor="none", zorder=2)
+        pbar_ax.add_patch(cover)
+        pbar_ax.add_patch(Rectangle((0.0, 0.0), float(n_traj), 1.0, fill=False, edgecolor="0.4", lw=1.2, zorder=3))
+        cursor = pbar_ax.axvline(0.0, color="black", lw=1.4, zorder=4)
+        pbar_text = pbar_ax.text(
+            0.5,
+            0.5,
+            "",
+            transform=pbar_ax.transAxes,
+            ha="center",
+            va="center",
+            fontsize=15,
+            fontweight="bold",
+            color="white",
+            zorder=5,
+            path_effects=[withStroke(linewidth=2.6, foreground="black")],
+        )
+
     # Smooth camera-zoom schedule: start easing when the cursor reaches token zoom_start.
     heads = reveal_counts - 1
     if zoom_enabled:
@@ -518,6 +572,10 @@ def main() -> None:
         path_line.set_data([], [])
         trail.set_offsets(np.empty((0, 2)))
         head.set_offsets(np.empty((0, 2)))
+        if show_progress:
+            cover.set_bounds(0.0, 0.0, float(n_traj), 1.0)
+            cursor.set_xdata([0.0, 0.0])
+            pbar_text.set_text("")
         return [path_line, trail, head, title]
 
     def update(f):
@@ -532,20 +590,20 @@ def main() -> None:
         trail.set_offsets(coords_xy[:k])
         trail.set_facecolors(trail_rgba[:k])
         head.set_offsets(coords_xy[h : h + 1])
+        if show_progress:
+            cover.set_bounds(float(k), 0.0, float(max(n_traj - k, 0)), 1.0)
+            cursor.set_xdata([float(k), float(k)])
+            pbar_text.set_text(f"{k:,} / {n_traj:,} tokens converged  ({k / float(n_traj):.0%})")
         for a, r in enumerate(regions):
             show = bool(args.regions_upfront) or (h >= r["reach"])
             if region_artists[a] is not None:
                 region_artists[a].set_visible(show)
             marker_artists[a].set_visible(show)
             label_artists[a].set_visible(show)
-        if stage_seq_len is not None and 0 <= h < stage_seq_len.shape[0]:
-            plen = int(stage_seq_len[h])
-        else:
-            plen = h + 1
         if steps_per_point is not None and 0 <= h < steps_per_point.shape[0]:
-            title.set_text(f"Llama-3.1-8B  ·  prefix {plen} tokens  ·  {int(steps_per_point[h])} optimizer steps")
+            title.set_text(f"Llama-3.1-8B  ·  {int(steps_per_point[h])} optimizer steps")
         else:
-            title.set_text(f"Llama-3.1-8B  ·  prefix length: {plen} tokens   (PC1+PC2 = {ev_cum_2:.1%})")
+            title.set_text(f"Llama-3.1-8B   (PC1+PC2 = {ev_cum_2:.1%})")
         return [path_line, trail, head, title] + list(marker_artists) + list(label_artists)
 
     anim = FuncAnimation(
