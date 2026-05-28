@@ -413,12 +413,10 @@ is practically useful: because $s(n)$ comes from a single frozen forward pass, t
 difficult regions of a document can be anticipated \emph{before} running the expensive inner
 optimization, which could guide step-budget allocation or early stopping.
 
-Two caveats bound the claim. The correlation is moderate rather than deterministic ($\rho \approx 0.5$):
+One caveat bounds the claim. The correlation is moderate rather than deterministic ($\rho \approx 0.5$):
 surprisal explains a large share of the rank ordering of difficulty, but optimization-landscape
 effects, interactions between co-compressed tokens, and repeated structure contribute the remainder
-(Gemma-3-4B is the weakest and most variable across samples). And the per-token step budget right-
-censors the very hardest tokens at the cap, which attenuates the measured association---so the values
-in Table~\ref{tab:surprisal_steps_correlation} are if anything a lower bound on the true relationship.
+(Gemma-3-4B is the weakest and most variable across samples).
 
 \begin{table*}[t]
     \centering
