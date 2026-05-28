@@ -11,6 +11,12 @@ from compression_horizon.analysis.convergence import (
     ConvergenceTracker,
     ProgressiveSampleStateMachine,
 )
+from compression_horizon.analysis.dimensionality import (
+    estimate_twonn,
+    plane_grid,
+    project_2d,
+    reconstruct_from_plane,
+)
 from compression_horizon.analysis.downstream_eval import (
     PPL_VARIANT_KEYS,
     aggregate_variant_accuracy,
@@ -56,4 +62,8 @@ __all__ = [
     "project_top_k",
     "summarize_pca_curve",
     "cumulative_variance_ratio",
+    "estimate_twonn",
+    "project_2d",
+    "plane_grid",
+    "reconstruct_from_plane",
 ]

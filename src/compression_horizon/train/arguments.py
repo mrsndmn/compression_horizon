@@ -137,6 +137,25 @@ class MyTrainingArguments(TrainingArguments):
         default=False,
         metadata={"help": "Direction of taking layers: True = depth-to-shallow, False = shallow-to-depth."},
     )
+    leading_token_loss_weight: float = field(
+        default=1.0,
+        metadata={
+            "help": (
+                "Loss weight applied to the first leading_token_loss_count positions of the target "
+                "sequence in the next-token CE loss. Use 3.0 with count=2 to reproduce the '2 leading' "
+                "Table 18 setup. Default 1.0 = uniform weighting."
+            )
+        },
+    )
+    leading_token_loss_count: int = field(
+        default=0,
+        metadata={
+            "help": (
+                "Number of leading target-sequence positions to upweight in the CE loss "
+                "(see leading_token_loss_weight). 0 disables upweighting."
+            )
+        },
+    )
 
     # --- Low-dimensional projection ------------------
     low_dim_train: bool = field(default=False, metadata={"help": "Run the LowDim full-cramming trainer."})
@@ -229,6 +248,16 @@ class MyTrainingArguments(TrainingArguments):
     max_optimization_steps_per_sample: int = field(
         default=1_000,
         metadata={"help": "Max optimization steps for training a single sample."},
+    )
+    full_cramming_convergence_threshold: float = field(
+        default=1.0,
+        metadata={
+            "help": (
+                "Teacher-forcing accuracy threshold for early stopping in FullCrammingTrainer. "
+                "Default 1.0 = stop only at exact reconstruction; set to 0.99 to reproduce the "
+                "reference paper's 99% protocol (Table 18 ablation)."
+            )
+        },
     )
     max_optimization_steps_per_token: int = field(
         default=1_000,

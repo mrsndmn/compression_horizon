@@ -98,6 +98,8 @@ class BaseTrainer:
             inverted_alignment=self.args.inverted_alignment,
             loss_type=self.args.loss_type.lower(),
             hybrid_alpha=self.args.hybrid_alpha,
+            leading_token_loss_weight=self.args.leading_token_loss_weight,
+            leading_token_loss_count=self.args.leading_token_loss_count,
             prefix_len=prefix_len,
         )
         return loss, alignment_loss
