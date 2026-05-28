@@ -123,6 +123,32 @@ def _lerp_rect(a: Tuple[float, float, float, float], b: Tuple[float, float, floa
     return tuple(float(ai + (bi - ai) * t) for ai, bi in zip(a, b))
 
 
+def _respace_by_steps(coords_xy: np.ndarray, steps: np.ndarray) -> np.ndarray:
+    """Step-warped trajectory layout: keep each PCA hop's DIRECTION but set its on-screen
+    length proportional to the optimizer steps that converged the landing token.
+
+    Hard (many-step) tokens spread far apart; trivial tokens bunch up. This is NOT a PCA
+    projection -- the accuracy field (defined on the PCA grid) no longer aligns and should
+    not be drawn in this view. The hop scale is chosen so the median hop length matches the
+    median PCA jump, keeping the overall extent familiar.
+    """
+    P = coords_xy.astype(np.float64)
+    if P.shape[0] < 2:
+        return coords_xy
+    delta = np.diff(P, axis=0)  # [N-1, 2] PCA jump vectors
+    norm = np.linalg.norm(delta, axis=1, keepdims=True)
+    unit = np.divide(delta, norm, out=np.zeros_like(delta), where=norm > 1e-12)
+    seg_len = np.clip(steps[1:].astype(np.float64), 0.0, None)  # steps for the landing token
+    pos_steps = seg_len[seg_len > 0]
+    pos_jumps = norm[norm > 1e-12]
+    scale = float(np.median(pos_jumps)) / float(np.median(pos_steps)) if pos_steps.size and pos_jumps.size else 1.0
+    seg = unit * (seg_len[:, None] * scale)
+    out = np.empty_like(P)
+    out[0] = P[0]
+    out[1:] = P[0] + np.cumsum(seg, axis=0)
+    return out.astype(np.float32)
+
+
 def _load_steps_per_point(npz: Dict, n_expected: int):
     """Per-stage optimizer ``steps_taken`` aligned with the trajectory ``coords`` order.
 
@@ -312,6 +338,26 @@ def main() -> None:
         "to the full view over this many seconds.",
     )
     ap.add_argument(
+        "--normalize-by-steps",
+        "--normalize_by_steps",
+        dest="normalize_by_steps",
+        action="store_true",
+        help="Step-warped view: re-space the trajectory so each hop's length is proportional to "
+        "the optimizer steps that converged the landing token (PCA jump DIRECTION preserved). "
+        "Drops the PCA accuracy-field overlay (it no longer aligns). Default off (= PCA view).",
+    )
+    ap.add_argument(
+        "--zoom-out-start",
+        "--zoom_out_start",
+        dest="zoom_out_start_k",
+        type=int,
+        default=0,
+        help="If >0, START the camera zoomed in on tokens [0:K] (the small early hops) and do ONE "
+        "smooth eased zoom-OUT to the full view as the cursor advances (timing via --zoom-from/"
+        "--zoom-to or --zoom-seconds). Mutually exclusive with --zoom-start. Pairs with "
+        "--normalize-by-steps for the step-warped view.",
+    )
+    ap.add_argument(
         "--no-progress",
         dest="progress",
         action="store_false",
@@ -343,15 +389,31 @@ def main() -> None:
     coords_xy = coords[:, :2]
     n_traj = int(coords_xy.shape[0])
 
+    # Per-token optimizer steps (used for pacing, opacity, the progress bar, and the
+    # optional step-warped layout). Loaded once here so the transform can use it too.
+    steps_per_point = _load_steps_per_point(npz, n_traj)
+    normalize_by_steps = bool(args.normalize_by_steps)
+    if normalize_by_steps:
+        if steps_per_point is None:
+            raise SystemExit("--normalize-by-steps needs per-token 'steps_taken' but none could be loaded.")
+        coords_xy = _respace_by_steps(coords_xy, steps_per_point)
+
     zoom_start = int(args.zoom_start)
     if zoom_start < 0 or zoom_start >= n_traj:
         raise ValueError(f"--zoom-start out of range: {zoom_start} (valid: 0..{n_traj - 1})")
     zoom_enabled = zoom_start > 0
-    # Schedule tokens: the camera begins moving at zoom_from and (optionally) finishes at zoom_to,
-    # independent of which region (tokens [zoom_start:]) it frames.
+    # Zoom-OUT-from-start: begin framing tokens [0:K] and ease out to the full view.
+    zoom_out_start_k = int(args.zoom_out_start_k)
+    if zoom_out_start_k < 0 or zoom_out_start_k >= n_traj:
+        raise ValueError(f"--zoom-out-start out of range: {zoom_out_start_k} (valid: 0..{n_traj - 1})")
+    zoomout_start_enabled = zoom_out_start_k > 0
+    if zoomout_start_enabled and zoom_enabled:
+        raise ValueError("--zoom-out-start and --zoom-start are mutually exclusive (zoom OUT from start vs zoom IN to end).")
+    # Schedule tokens: the camera moves between zoom_from and (optionally) zoom_to. For zoom-in this
+    # is tied to --zoom-start's region; for zoom-out-start it defaults to begin at token 0.
     zoom_from = int(args.zoom_from) if int(args.zoom_from) >= 0 else zoom_start
     zoom_to = int(args.zoom_to)
-    if zoom_enabled and not (0 <= zoom_from < n_traj):
+    if (zoom_enabled or zoomout_start_enabled) and not (0 <= zoom_from < n_traj):
         raise ValueError(f"--zoom-from out of range: {zoom_from} (valid: 0..{n_traj - 1})")
     if zoom_to >= 0 and not (zoom_from < zoom_to < n_traj):
         raise ValueError(f"--zoom-to must satisfy zoom_from({zoom_from}) < zoom_to < {n_traj}; got {zoom_to}")
@@ -361,6 +423,10 @@ def main() -> None:
 
     sampled_indices = npz["sampled_indices"].astype(np.int64).reshape(-1)
     anchor_xy_all = _ensure_2d(npz["anchor_coords"].astype(np.float32))[:, :2]
+    if normalize_by_steps:
+        # Anchors are trajectory points; place them at their step-warped positions so the
+        # markers sit on the transformed path.
+        anchor_xy_all = coords_xy[np.clip(sampled_indices, 0, n_traj - 1)].astype(np.float32)
 
     acc = npz["accuracy"]  # [F,P,H,W]
     grid_x_all = npz["grid_x"]
@@ -390,6 +456,13 @@ def main() -> None:
             mask_bounds = None
         regions.append({"rgba": rgba, "extent": extent, "reach": int(sampled_indices[a]), "mask_bounds": mask_bounds})
     a_min, a_max = float(np.nanmin(areas)), float(np.nanmax(areas))
+
+    if normalize_by_steps:
+        # The accuracy field lives on the PCA grid and can't be re-spaced; drop it so it is
+        # neither drawn nor used to frame the camera. Anchor markers/labels remain.
+        for r in regions:
+            r["rgba"] = None
+            r["mask_bounds"] = None
 
     # Static camera limits: full trajectory + anchors + the near-ideal (masked) regions
     # only -- NOT the full accuracy grid, which is far larger than the >thr area.
@@ -447,6 +520,37 @@ def main() -> None:
             cam_aspect,
         )
 
+    # Zoom-OUT-from-start origin: frame the first K tokens (the small early hops) + any anchors in
+    # [0:K], fit to the full view's aspect so the eased start_rect -> full_rect move doesn't distort.
+    start_rect = full_rect
+    if zoomout_start_enabled:
+        k0 = zoom_out_start_k
+        sx0 = [float(coords_xy[:k0, 0].min())]
+        sx1 = [float(coords_xy[:k0, 0].max())]
+        sy0 = [float(coords_xy[:k0, 1].min())]
+        sy1 = [float(coords_xy[:k0, 1].max())]
+        for a, r in enumerate(regions):
+            if int(sampled_indices[a]) >= k0:
+                continue
+            sx0.append(float(anchor_xy_all[a, 0]))
+            sx1.append(float(anchor_xy_all[a, 0]))
+            sy0.append(float(anchor_xy_all[a, 1]))
+            sy1.append(float(anchor_xy_all[a, 1]))
+            mb = r["mask_bounds"]
+            if mb is not None:
+                sx0.append(mb[0])
+                sx1.append(mb[1])
+                sy0.append(mb[2])
+                sy1.append(mb[3])
+        sx_min, sx_max = min(sx0), max(sx1)
+        sy_min, sy_max = min(sy0), max(sy1)
+        sdx = max(sx_max - sx_min, 1e-6)
+        sdy = max(sy_max - sy_min, 1e-6)
+        start_rect = _fit_to_aspect(
+            (sx_min - pad_x * sdx, sx_max + pad_x * sdx, sy_min - pad_bot * sdy, sy_max + pad_top * sdy),
+            cam_aspect,
+        )
+
     # Styling (talk: large fonts).
     if sns is not None:
         sns.set_theme(style="whitegrid")
@@ -463,9 +567,15 @@ def main() -> None:
     fig, ax = plt.subplots(1, 1, figsize=(12.0, 9.0))
     ax.set_xlim(full_rect[0], full_rect[1])
     ax.set_ylim(full_rect[2], full_rect[3])
-    ax.set_xlabel(f"PC1  ({float(explained[0]):.1%})")
-    ax.set_ylabel(f"PC2  ({float(explained[1]):.1%})")
-    ax.set_aspect("equal", adjustable="box")
+    if normalize_by_steps:
+        ax.set_xlabel("PC1 direction · step-warped")
+        ax.set_ylabel("PC2 direction · step-warped")
+    else:
+        ax.set_xlabel(f"PC1  ({float(explained[0]):.1%})")
+        ax.set_ylabel(f"PC2  ({float(explained[1]):.1%})")
+    # PCA view keeps true geometry (equal). The step-warped view is tall and not a metric
+    # space, so let it fill the (landscape) figure like the PCA videos instead of letterboxing.
+    ax.set_aspect("auto" if normalize_by_steps else "equal", adjustable="box")
     ax.grid(True, alpha=0.15)
 
     # Region imshow artists (toggle visibility), anchor markers + labels.
@@ -521,7 +631,6 @@ def main() -> None:
     # Pace the reveal so each token's on-screen dwell is proportional to the optimizer
     # steps it took to converge: walk a cumulative "optimizer-step time" axis at constant
     # real-time speed, so hard-to-cram tokens (many steps) linger and easy ones flash by.
-    steps_per_point = _load_steps_per_point(npz, n_traj)
     if args.pace == "steps" and steps_per_point is not None:
         w = np.clip(steps_per_point.astype(np.float64), 1.0, None)
         cum = np.cumsum(w)
@@ -598,9 +707,10 @@ def main() -> None:
         )
 
     # Smooth camera-zoom schedule: start easing when the cursor reaches token zoom_from, and
-    # either run for zoom_seconds or finish exactly when the cursor reaches token zoom_to.
+    # either run for zoom_seconds or finish exactly when the cursor reaches token zoom_to. Shared by
+    # zoom-IN (full -> zoom_rect) and zoom-OUT-from-start (start_rect -> full).
     heads = reveal_counts - 1
-    if zoom_enabled:
+    if zoom_enabled or zoomout_start_enabled:
         reached = np.where(heads >= zoom_from)[0]
         f_zoom_start = int(reached[0]) if reached.size else total_frames
         if zoom_to >= 0:
@@ -617,9 +727,11 @@ def main() -> None:
     f_zoomout_start = anim_frames + hold_frames
     zoom_out_span = max(zoom_out_frames, 1)
 
+    init_rect = start_rect if zoomout_start_enabled else full_rect
+
     def init():
-        ax.set_xlim(full_rect[0], full_rect[1])
-        ax.set_ylim(full_rect[2], full_rect[3])
+        ax.set_xlim(init_rect[0], init_rect[1])
+        ax.set_ylim(init_rect[2], init_rect[3])
         path_line.set_data([], [])
         trail.set_offsets(np.empty((0, 2)))
         head.set_offsets(np.empty((0, 2)))
@@ -632,7 +744,13 @@ def main() -> None:
     def update(f):
         k = int(reveal_counts[f])
         h = k - 1
-        if zoom_enabled:
+        if zoomout_start_enabled:
+            # One smooth eased zoom-OUT: start_rect (tokens [0:K]) -> full view.
+            z = _smoothstep((f - f_zoom_start) / float(zoom_span))
+            cx0, cx1, cy0, cy1 = _lerp_rect(start_rect, full_rect, z)
+            ax.set_xlim(cx0, cx1)
+            ax.set_ylim(cy0, cy1)
+        elif zoom_enabled:
             if zoom_out_enabled and f >= f_zoomout_start:
                 zo = _smoothstep((f - f_zoomout_start) / float(zoom_out_span))
                 cx0, cx1, cy0, cy1 = _lerp_rect(zoom_rect, full_rect, zo)
@@ -667,7 +785,11 @@ def main() -> None:
 
     out_base = args.output
     if out_base is None:
-        name = "visual_abstract_trajectory" + (f"_zoom{zoom_start}" if zoom_enabled else "")
+        name = (
+            "visual_abstract_trajectory"
+            + ("_stepspace" if normalize_by_steps else "")
+            + (f"_zoom{zoom_start}" if zoom_enabled else "")
+        )
         out_base = os.path.join(os.path.dirname(args.npz_path), name)
     os.makedirs(os.path.dirname(out_base) or ".", exist_ok=True)
 
