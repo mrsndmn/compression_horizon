@@ -264,10 +264,26 @@ teacher forcing), often in conjunction with a fixed token budget.
 Our results indicate that this evaluation protocol substantially underestimates
 critical failure modes that emerge during autoregressive generation.
 
+\begin{table}[t]
+    \centering
+    \caption{Reconstruction brittleness on PG19. Despite high teacher-forcing
+    convergence (TF conv.), greedy decoding from the compression embedding
+    collapses (Greedy ${\approx}\,0$) because the residual ${\sim}1\%$ error is
+    concentrated at the first two token positions (mismatch rate at indices
+    0/1). Full per-variant breakdown in
+    Table~\ref{tab:compression_reconstruction_summary} (Appendix~\ref{app:I}).}
+    \label{tab:compression_reconstruction_main}
+
+    \begin{small}
+    \input{tables/manual/compression_reconstruction_main}
+    \end{small}
+
+\end{table}
+
 \paragraph{The ``last 1\%'' problem.}
 While a 99\% reconstruction accuracy suggests near-perfect training performance,
 the remaining errors are not uniformly distributed nor benign.
-As shown in Table~\ref{tab:compression_reconstruction_summary}, reconstruction
+As shown in Table~\ref{tab:compression_reconstruction_main}, reconstruction
 mismatches are almost entirely concentrated at the earliest token positions,
 specifically at indices 0 and 1.
 Even when mean teacher-forcing convergence is high (95--99\%), the probability of an
@@ -291,7 +307,7 @@ Finally, evaluation under a fixed token budget further masks this brittleness.
 Methods with similar final convergence values may exhibit qualitatively different
 failure modes, depending on whether reconstruction errors occur early or late in
 the sequence.
-As demonstrated in Table~\ref{tab:compression_reconstruction_summary}, high average
+As demonstrated in Table~\ref{tab:compression_reconstruction_main}, high average
 token-level accuracy does not guarantee usable autoregressive behavior.
 Instead, perfect reconstruction of the earliest tokens emerges as a necessary
 condition for reliable decoding from compressed representations.
@@ -498,8 +514,8 @@ Table~\ref{tab:semantic_evaluation} shows that prepending a crammed compression 
 Together with the attention analysis, these results suggest that high reconstruction performance can coincide with brittle steering rather than a transferable semantic representation.
 This highlights a key limitation of using reconstruction accuracy alone: perfect reconstruction is insufficient, and future work must explicitly evaluate capability preservation in any downstream semantic evaluation and broader capability benchmarks overall.
 Appendix~\ref{app:imperfect_reconstruction} further confirms that this drop reflects the compression embedding itself rather than residual reconstruction errors: because HellaSwag and ARC score fixed context--continuation pairs without regenerating the prefix, restricting the evaluation to perfectly reconstructed instances leaves accuracy essentially unchanged.
+Varying which token logits enter the likelihood score localizes \emph{where} this information is lost---scoring the full context, only the candidate ending, or the embedding alone---yet the compressed conditions remain well below baseline under every strategy (Appendix~\ref{app:scoring_strategies}).
 This degradation becomes a complete collapse under a \emph{generative} benchmark: on 5-shot MMLU (Appendix~\ref{app:mmlu}, Table~\ref{tab:rebuttle_mmlu}), compressing the full prefix drives accuracy to near zero with no valid parseable answers, while a random control embedding leaves accuracy nearly intact -- confirming that the degradation is specifically caused by the optimized compression embedding rather than by conditioning on an out-of-distribution token.
-
 
 % =============================================================================
 \section{Causal Analysis: Attention Mass vs. Causal Importance}
@@ -576,11 +592,14 @@ These trends are robust to the design choices detailed in the appendix: the same
 
 We introduced progressive cramming, which grows the reconstruction target token-by-token and enables controlled measurement of when embedding-based reconstruction succeeds or fails under a fixed optimization budget.
 Across model families, progressive trajectories are low-dimensional.
+This low dimensionality is a property of the warm-started optimization \emph{path} rather than of an intrinsically small solution set: embeddings optimized independently for the same prefix end up far apart and nearly orthogonal (Appendix~\ref{app:solution_diversity}).
 Causal attention-knockout interventions localize the downstream collapse to the compression embedding's interactions in the early layers, and show that the late layers carrying the most attention mass have little causal effect -- attention mass is a symptom rather than the cause of capability loss.
 Separately, we find that how much a single embedding can store is bounded by the frozen reconstructor itself: compression capacity rises monotonically with both retained model depth and width.
+Because the two axes partly substitute for one another, it is the reconstructor's architecture---not parameter count alone---that sets the compression ceiling, so compressibility can be improved by reshaping the model and not only by scaling it.
 Critically, downstream evaluation indicates that optimizing embeddings for reconstruction can coincide with large capability drops, even when the original prefix remains in context, so reconstruction accuracy alone is not a sufficient criterion for meaningful compression.
 
 Our study remains limited in scope: we use a small number of PG19 samples. Our causal interventions cover three model families---Llama-3.1-8B in the main text, with consistent results for Pythia-1.4B and SmolLM2-1.7B in Appendix~\ref{app:knockout_models}---but a single evaluation dataset.
+Encouragingly, our core compression findings already replicate on a second corpus: progressive cramming on Fanfics reproduces the same information-gain and low-dimensional-projection trends across four model families (Appendix~\ref{app:fanfics}).
 Future work should extend these interventions to larger and more diverse models and develop a \emph{fast} compressor that produces semantically meaningful compression embeddings.
 
 \section*{Impact Statement}

@@ -7,7 +7,10 @@
 \appendix
 % \onecolumn
 
-\section{Hyperparameters}
+\section{Experimental Details}
+\label{app:part_setup}
+
+\subsection{Hyperparameters}
 
 We used 50 PG19 samples for most experiments in the main paper body from \texttt{LarryLovestein/pg19\_1k} that were repoduced by the recipie from \cite{kuratov2025cramming}. While some results in appendix were reported only for 10 PG19 samlpes from that dataset.
 Across all settings, the base language model was frozen; only the compression-embedding parameters were optimized (either the compression embeddings, or the low-dimensional embedding together with its projection).
@@ -15,12 +18,15 @@ We optimized with AdamW. For each model, we swept the learning rate over \(\{0.0
 We ran up to 10{,}000 optimization steps per sample in all experiments; for progressive runs, we additionally capped the optimization of each newly added token at 1{,}000 steps.
 We used 100 warmup steps for all models.
 
-\section{Compute}
+\subsection{Compute}
 
 Each experiment ran on a single NVIDIA A100 80GB GPU, with up to 16 GPUs used in parallel across experiments. Training time depends on the sequence length and loss type, ranging from a few minutes (short sequences, small models) to approximately 24 hours (long sequences, large models). The total compute used for this research (including debugging and unsuccessful experiments) is approximately 2800 GPU-hours.
 
 
-\section{Full cramming vs progressive.}
+\section{Progressive Cramming: Variants and Regularizers}
+\label{app:part_method}
+
+\subsection{Full cramming vs progressive.}
 \label{app:1}
 
 In Table~\ref{tab:full_vs_progressive_appendix} we present results from Section~\ref{sec:experiments} for full and progressive cramming comparison for different model sizes of Llama and Pythia families.
@@ -47,7 +53,7 @@ In Table~\ref{tab:full_vs_progressive_appendix} we present results from Section~
   \vskip -0.1in
 \end{table*}
 
-\section{Progressive across models scales}
+\subsection{Progressive across models scales}
 
 Table~\ref{tab:progressive_for_model_scales} shows that larger models tend to use more trajectory directions (higher PCA 99\%).
 
@@ -64,174 +70,7 @@ Table~\ref{tab:progressive_for_model_scales} shows that larger models tend to us
 
 \end{table*}
 
-\section{On Gemma's Lower Information Gain}
-\label{app:gemma_softcapping}
-
-Gemma~3 reaches lower information gain at shorter reconstructed lengths than Llama and Pythia. One candidate explanation is logit softcapping \cite{gemma2}, which bounds logit magnitudes and limits how peaked the model's next-token distributions can become: because cramming drives the model toward high-confidence, token-specific predictions over long horizons, capped logits would reduce the separability between the correct token and its close alternatives and damp gradients in the high-confidence regime. This is consistent with Gemma's lower information gain and earlier saturation, but we do not isolate softcapping from other architectural and training-time differences, and leave confirming the mechanism to future work.
-
-
-\section{Attention Concentration}
-\label{app:attention_concentration}
-
-To probe the mechanism behind perfect reconstruction, we measure whether the compression embedding becomes an \emph{attention sink} that captures a disproportionate fraction of attention, analogous to (and potentially competing with) the BOS token.
-We quantify how much attention mass other positions allocate to the first position (position $0$), which corresponds to the compression embedding in crammed inputs or the BOS token in the uncompressed baseline.
-Let $\mathbf{A}_l \in [0,1]^{S \times S}$ denote the attention matrix at layer $l$ after averaging over heads.
-For a given prefix length $s \le S$, we define the attention mass on position $0$ as
-%
-\begin{equation}
-    m_l(s) = \frac{1}{s-1} \sum_{q=1}^{s-1} \mathbf{A}_l(q, 0)
-\end{equation}
-%
-which excludes self-attention ($q=0$) and averages over query positions.
-We report $100 \cdot m_l(s)$ as a percentage, and average over a set of target prefix lengths $\mathcal{S}$:
-%
-\begin{equation}
-    \bar{m}_l = \frac{1}{|\mathcal{S}|} \sum_{s \in \mathcal{S}} m_l(s)
-\end{equation}
-
-Table~\ref{tab:attn_hijacking} shows that this attention concentration is highly model-dependent when aggregated over layers.
-SmolLM2 and Pythia exhibit strong correlation between the layer-wise attention-mass profiles for the BOS token and the compression embedding; in these families the compression embedding attracts substantial attention mass in the same layers where BOS is an attention sink, and in Pythia it can match or exceed BOS attention on average.
-In contrast, Llama and Gemma show much lower compression-embedding attention mass than BOS on average and weak (or negative) correlation, suggesting that the concentration is confined to specific layers rather than uniformly matching the BOS pattern.
-
-Motivated by this similarity, we test whether including both a BOS token and a compression embedding in the prompt creates interference between two attention sinks.
-We therefore run ablations that remove the BOS token and recompute progressive cramming metrics (Table~\ref{tab:progressive_no_bos_token}).
-Removing BOS increases reconstructed length and information gain (and reduces compression-embedding attention mass) for Llama-3.1-8B, but has little effect on the other model families.
-
-This attention concentration is correlational: the causal analysis in Section~\ref{sec:causal} shows it is a \emph{symptom} of cramming rather than the cause of downstream degradation.
-
-\begin{table*}[]
-    \centering
-    \caption{Attention-concentration summary. ``Compression Embedding'' is attention mass to position 0 for the compression embedding in the crammed input; ``BOS Token'' is attention mass to position 0 for the uncompressed baseline; ``Diff'' is (Compression$-$BOS). ``Correlation'' is the Pearson correlation between per-layer attention-mass profiles. \bcancel{B} stands for removed BOS token for cramming compression column.}
-    \label{tab:attn_hijacking}
-    \begin{small}
-    \input{tables/attn_hijacking}
-    \end{small}
-\end{table*}
-
-\begin{table}[]
-    \centering
-    \caption{Progressive cramming with and without the BOS token. \bcancel{B} denotes runs where the BOS token is removed.}
-    \label{tab:progressive_no_bos_token}
-    \begin{small}
-    \input{tables/progressive_no_bos_token}
-    \end{small}
-\end{table}
-
-
-\section{Prefix tuning}
-
-Prefix tuning introduces a separate trainable prefix embedding at each transformer layer, avoiding the per-layer forward-pass bottleneck of soft-prompt setups such as full or progressive cramming. The trade-off is parameter cost: it requires $L$ times more trainable embeddings, where $L$ is the number of hidden layers in the LLM.
-
-To separate ``cramming'' from general soft-prompt steering, we evaluate prefix tuning baselines.
-Table~\ref{tab:prefix_tuning_attention_hijacking} reports the same attention-mass metric for prefix tokens.
-Compared to cramming, prefix tuning typically attracts less attention mass than BOS and shows weaker or more variable correlation patterns, indicating that this attention concentration is not an inevitable consequence of prepending learned embeddings but depends on the optimization objective.
-
-We also evaluated compression limits under prefix tuning. Table~\ref{tab:prefix_tuning_accuracy} shows that, for Llama~3 models at 3B and 8B, we cannot reach the cramming limits; however, in the prefix-tuning setup these models can still compress up to 8k tokens with perfect reconstruction accuracy, while 16k tokens results in out-of-memory (OOM) failures. For the 1B Llama~3 model, the limit is about 4096 tokens, which is roughly \(10\times\) higher than with progressive cramming. This gain comes at a higher parameter cost: prefix tuning requires \(L\)-times more trainable embeddings (one per layer), i.e., \(16\times\) more parameters for a 16-layer model.
-For Pythia, the prefix-tuning setup increases the compression limit by about \(20\times\) for Pythia-410M and by about \(8\times\) for Pythia-1.4B relative to progressive cramming.
-
-
-\begin{table*}[tb]
-    \centering
-    \caption{Prefix-tuning attention mass, computed with the same metric as Table~\ref{tab:attn_hijacking} but for learned prefix tokens instead of the compression embedding.}
-    \label{tab:prefix_tuning_attention_hijacking}
-    \begin{small}
-    \input{tables/prefix_tuning_attention_hijacking}
-    \end{small}
-\vskip -0.1in
-\end{table*}
-
-
-\begin{table}[tb]
-    \centering
-    \caption{Prefix-tuning reconstruction accuracy compared to progressive cramming. ``Tokens'' denotes the number of learned prefix tokens (or reconstructed tokens for progressive cramming).}
-    \label{tab:prefix_tuning_accuracy}
-    \begin{small}
-    \input{tables/prefix_tuning_accuracy}
-    \end{small}
-\vskip -0.1in
-\end{table}
-
-
-
-
-
-\section{Dataset Modifications}
-
-To probe sensitivity to surface form, we create controlled variants of PG19 samples and compare their progressive trajectories (Figure~\ref{fig:trajectories_text_modifications}).
-Each variant shares an identical 64-token prefix and modifies the suffix in one of three ways: random word permutation, greedy decoding from Llama-3.1-8B (``Sampled''), or lowercasing.
-Trajectories coincide during the shared prefix and diverge immediately after the edit point, indicating that the optimization path is highly sensitive to token-level details.
-Notably, lowercasing (which should preserve high-level semantics) induces a markedly different trajectory, suggesting that progressive cramming is driven by tokenization- and distribution-level properties rather than semantic equivalence.
-
-
-
-\begin{figure*}[tb]
-    \centering
-    \centerline{\includegraphics[width=\linewidth]{Llama3.1-8B-text-modifications_lr-0p1.pdf}}
-    \caption{Progressive trajectories projected onto PCA components (Llama-3.1-8B, one PG19 sample). All variants share the same 64-token prefix; the suffix is either original (Base), randomly permuted (Random), greedily sampled continuation (Sampled), or lowercased (Lowercased). Circles mark the start and squares mark the end. Axis titles report the signed explained-variance fraction.}
-    \label{fig:trajectories_text_modifications}
-\end{figure*}
-
-
-
-% \begin{table}[]
-%     \centering
-%     \caption{Progressive cramming on modified PG19 samples (Llama-3.1-8B). All variants share a 64-token prefix and differ only in the suffix (Base/Random/Sampled/Lowercased). {\color{red} TODO recompute via \texttt{scripts/paper/text\_modifications\_table.py}.}}
-%     \label{tab:text_modifications}
-
-% \begin{tabular}{llll}
-% \hline
-%  Experiment   & Tokens                  & Info Gain                & PCA 99\%              \\
-% \hline
-%  Base         & 1048 {\small $\pm$ 404} & 3169 {\small $\pm$ 1212} & 74 {\small $\pm$ 8}  \\
-%  Random       & 1 {\small $\pm$ 0}      & 0 {\small $\pm$ 0}       & nan                  \\
-%  Sampled      & 2048 {\small $\pm$ 0}   & 432 {\small $\pm$ 141}   & 60 {\small $\pm$ 28} \\
-%  Lowercased   & 1 {\small $\pm$ 0}      & 0 {\small $\pm$ 0}       & nan                  \\
-% \hline
-% \end{tabular}
-% \end{table}
-
-\section{Attention Knockout Across Model Families}
-\label{app:knockout_models}
-
-To test whether the causal picture in Section~\ref{sec:causal} is specific to Llama-3.1-8B, we repeat the identical attention-knockout protocols on two further model families: Pythia-1.4B (GPT-NeoX, $L=24$ layers) and SmolLM2-1.7B ($L=24$ layers). All settings match the main text (HellaSwag, $512$ samples, a single compression embedding, $1000$ optimization steps, per-model compression learning rate). The results are consistent with Llama-3.1-8B (Figures~\ref{fig:knockout_pythia} and~\ref{fig:knockout_smollm2}): early-layer knockout sharply degrades teacher-forced reconstruction while leaving downstream accuracy at or above the crammed baseline; the late layers that carry the most attention mass have negligible causal effect on either metric; and the forward/reverse cumulative protocols exhibit the same asymmetry that localizes the downstream collapse to the early layers.
-
-\begin{figure*}[tb]
-    \centering
-    \begin{subfigure}{\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{attention_knockout_per_layer_pythia-1p4b.pdf}
-        \caption{Per-layer knockout.}
-    \end{subfigure}
-    \\[0.6em]
-    \begin{subfigure}{\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{attention_knockout_cumulative_pythia-1p4b.pdf}
-        \caption{Cumulative knockout (left: forward, masking layers $0$ through $k$; right: reverse, masking layers $k$ through $L-1$).}
-    \end{subfigure}
-    \caption{Attention knockout on Pythia-1.4B ($L=24$), using the protocols of Figures~\ref{fig:knockout_per_layer} and~\ref{fig:knockout_cumulative}. The early-layer reconstruction collapse, the dissociation between attention mass and causal importance, and the forward/reverse asymmetry all reproduce the Llama-3.1-8B findings.}
-    \label{fig:knockout_pythia}
-\end{figure*}
-
-\begin{figure*}[tb]
-    \centering
-    \begin{subfigure}{\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{attention_knockout_per_layer_smollm2-1p7b.pdf}
-        \caption{Per-layer knockout.}
-    \end{subfigure}
-    \\[0.6em]
-    \begin{subfigure}{\textwidth}
-        \centering
-        \includegraphics[width=\textwidth]{attention_knockout_cumulative_smollm2-1p7b.pdf}
-        \caption{Cumulative knockout (left: forward, masking layers $0$ through $k$; right: reverse, masking layers $k$ through $L-1$).}
-    \end{subfigure}
-    \caption{Attention knockout on SmolLM2-1.7B ($L=24$), using the protocols of Figures~\ref{fig:knockout_per_layer} and~\ref{fig:knockout_cumulative}. The findings are consistent with Llama-3.1-8B: early-layer interactions causally drive the downstream collapse, while the high-attention-mass late layers do not.}
-    \label{fig:knockout_smollm2}
-\end{figure*}
-
-
-
-\section{Tokens-Per-Stage Ablation}
+\subsection{Tokens-Per-Stage Ablation}
 \label{app:added_tokens_ablation}
 
 Progressive cramming grows the target prefix one token at a time: each time the current stage converges (its compression embedding perfectly reconstructs the prefix), the procedure appends a single token to the prefix and re-optimizes. Here we ablate this growth granularity on SmolLM2-1.7B by varying the \emph{progressive step} $\Delta$---the number of target tokens appended to the prefix each time a stage converges, and which the compression embedding must then jointly reconstruct---over $\Delta \in \{1, 2, 4, 8, 16, 32, 64, 128\}$. The default $\Delta = 1$ (grow one token at a time) is the reference; for $\Delta > 1$ we also start the schedule at a prefix length of $\Delta$ so the prefix is always a multiple of $\Delta$. Every other factor is held fixed at the main run's configuration (cross-entropy reconstruction, single-layer activation alignment, no low-dimensional projection, the same PG19 sample set, learning rate $0.1$, and optimization budget).
@@ -258,25 +97,29 @@ All three adaptive arms reach the horizon in far fewer cumulative steps than the
 \end{table*}
 
 
-\section{Finetuning Sequence-Length Ablation}
-\label{app:finetune_seqlen_ablation}
+\subsection{Fixed-Prefix Progressive Cramming Ablation}
+\label{app:prefix_ablation}
 
-The causal-LM recovery route (Appendix~\ref{app:width_ablation}) finetunes each truncated checkpoint at sequence length $1024$. Here we ask whether that finetuning sequence length affects the compression measured afterward. Starting from the same SmolLM2-1.7B first-4 + last-4 checkpoint, we re-finetune it with everything held fixed except the training sequence length---$512$, $1024$ (the baseline), and $2048$---and, at the off-baseline lengths, also vary the peak learning rate ($\tfrac12\times$ and $1\times$ at $512$; $1\times$ and $2\times$ at $2048$) to check that any seq-length effect is not merely an LR artifact. To keep memory and the effective batch comparable, we hold the per-device token footprint and the $256$-sequence global batch constant across variants (per-device batch $=8192 / \text{seq\_len}$). Every finetuned checkpoint is then evaluated with the identical baseline progressive-cramming procedure (random per-sample initialization, PG19, $\mathrm{lr}=0.1$), exactly as the causal-LM rows of Table~\ref{tab:width_ablation}.
+Our main progressive-cramming setup asks a single compression embedding to reconstruct a sequence from scratch, with no other context. Here we ask how the task changes when the model is additionally given a fixed, \emph{uncompressed} prefix that it can attend to but never has to compress. Concretely, we tokenize each document as $[\,p_1 \dots p_P \mid c_1 \dots c_L\,]$ and feed the model $[\,\texttt{[mem]}\ p_1 \dots p_P\ c_1 \dots c_L\,]$: the $P$ prefix tokens $p_{1:P}$ are real token embeddings the model reads as ordinary context, the learnable \texttt{[mem]} token sits ahead of them, and the loss, convergence check, and information gain are computed only over the continuation $c_{1:L}$ that follows the prefix. The prefix is never folded into \texttt{[mem]}. Progressive cramming then grows the continuation $c_{1:L}$ token-by-token exactly as in the prefix-free setting, so ``Compressed Tokens'' counts only the crammed continuation, excluding the visible prefix. We sweep the prefix length $P \in \{128, 256, 512, 1024\}$ on SmolLM2-1.7B, with the no-prefix run ($P=0$) as the reference.
 
-Table~\ref{tab:finetune_seqlen_ablation} shows that the finetuning sequence length has no meaningful effect on compression. The mean number of perfectly reconstructed tokens is $414.1$ and $404.5$ at seq $512$ ($\mathrm{lr}\,5\times10^{-4}$ / $10^{-3}$), $428.6$ at the seq-$1024$ baseline, and $434.4$ and $390.7$ at seq $2048$ ($\mathrm{lr}\,10^{-3}$ / $2\times10^{-3}$)---every variant lands within ${\approx}38$ tokens of the baseline, well inside the per-run standard deviation (${\approx}60$--$77$). If anything the learning rate matters slightly more than the sequence length (the two seq-$2048$ rows, differing only in LR, bracket the baseline), but neither effect is statistically meaningful here. Compression capacity is thus insensitive to the finetuning sequence length over this $4\times$ range.
+All runs use the same PG19 sample set, learning rate ($0.1$), and optimization budget as our main SmolLM2-1.7B run, so the only varying factor is the prefix length $P$. Table~\ref{tab:prefix_ablation} reports, for each $P$, the achieved compressed (continuation) token count, the information gain of the compression embedding measured on top of the prefix context, trajectory length, the number of principal components explaining 99\% of trajectory variance (PCA 99\%), and the average base-LM surprisal over the prefix tokens themselves (bits per token).
+% BEGIN AUTOGEN prefix-ablation-trend (filled from the prefix-ablation eval results)
+Concretely, the mean number of perfectly reconstructed (compressed) tokens is 361.5 (p=128), 352.8 (p=256), 363.5 (p=512), 360.2 (p=1024).
+% END AUTOGEN prefix-ablation-trend
+
+The prefix becomes more predictable as it lengthens: the base model's average surprisal over the prefix tokens falls monotonically from $4.09$ bits/token at $P{=}128$ to $3.84$, $3.73$, and $3.62$ bits/token at $P{=}256, 512, 1024$, consistent with a longer span of coherent context making each prefix token easier to anticipate. The cramming task itself, however, is left essentially unchanged. The number of continuation tokens the \texttt{[mem]} token can perfectly cram is flat across prefix lengths (${\approx}\,360$ for every $P$, versus $335$ with no prefix), and so are the information gain (${\approx}\,1150$--$1255$ bits), the trajectory length (${\approx}\,970$--$1050$), and the dimensionality of the optimization path (PCA-99\% ${\approx}\,33$ for all rows, including the reference). In other words, giving the model a large block of visible, uncompressed context neither eases nor reshapes the problem of packing the \emph{continuation} into a single embedding: the compression embedding's capacity and the geometry of its optimization are governed by the span it must itself encode, not by how much surrounding text the model can already attend to.
 
 \begin{table*}[t]
     \centering
-    \caption{Finetuning sequence-length ablation on SmolLM2-1.7B (first-4 + last-4 = 8 layers). The same truncated checkpoint is re-finetuned on fineweb-edu at sequence lengths $512$ / $1024$ / $2048$ (and varying learning rate), holding the per-device token footprint and $256$-sequence global batch constant, then evaluated with baseline progressive cramming (PG19, $\mathrm{lr}=0.1$). The seq-$1024$ / $\mathrm{lr}\,10^{-3}$ row is the Table~\ref{tab:width_ablation} causal-LM baseline. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
-    \label{tab:finetune_seqlen_ablation}
+    \caption{Fixed-prefix progressive cramming ablation on SmolLM2-1.7B. The model attends to a fixed, uncompressed prefix of $P$ real tokens and crams only the continuation that follows; the $P=0$ row is the no-prefix reference. All rows use the identical progressive-cramming eval (PG19, $\mathrm{lr}=0.1$). ``Compressed Tokens'' is the achieved continuation length $n$ (excluding the prefix), ``Trajectory Length'' is $L_{\text{traj}}$, ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance, and ``Avg Prefix Surprisal'' is the base-LM next-token cross-entropy over the prefix tokens, in bits per token.}
+    \label{tab:prefix_ablation}
     \begin{small}
-    \input{tables/finetune_seqlen_ablation}
+    \input{tables/prefix_ablation}
     \end{small}
 \vskip -0.1in
 \end{table*}
 
-
-\section{Activation Alignment}
+\subsection{Activation Alignment}
 \label{app:activation_alignment}
 
 To stabilize optimization, we regularize hidden states toward those of the uncompressed sequence.
@@ -315,7 +158,7 @@ Across settings, we observe that alignment qualitatively changes attention behav
 \end{table*}
 
 
-\section{Full activation alignment experiments}
+\subsection{Full activation alignment experiments}
 
 Table~\ref{tab:full_activation_alignment_and_low_dim_projections} reports the full sweep over activation alignment strength \(\alpha\), number of aligned layers \(L\), and projection dimension, together with the resulting progressive cramming metrics.
 
@@ -331,7 +174,7 @@ Table~\ref{tab:full_activation_alignment_and_low_dim_projections} reports the fu
 \end{table*}
 
 
-\section{Full Low dimensional experiments}
+\subsection{Full Low dimensional experiments}
 
 Table~\ref{tab:low_dim_projection_results} ablates projection dimension across model families.
 Three takeaways stand out:
@@ -354,194 +197,82 @@ Three takeaways stand out:
 
 \end{table*}
 
-\begin{table*}[t]
-\centering
-\caption{Compression reconstruction accuracy under non-ideal training convergence.
-We report mean teacher-forcing accuracy over all compressed samples, mean greedy
-decoding accuracy when generating autoregressively from the compression embedding,
-and the fraction of samples with a token mismatch at indices 0, 1, and 2.
-Variants include ignoring the BOS loss during training (no BOS) and upweighting
-the loss of the first two tokens by a factor of three (2 leading).}
-\label{tab:compression_reconstruction_summary}
-\begin{small}
-\input{tables/manual/compression_reconstruction_summary}
-\end{small}
-\vskip -0.1in
-\end{table*}
+\subsection{Prefix tuning}
 
+Prefix tuning introduces a separate trainable prefix embedding at each transformer layer, avoiding the per-layer forward-pass bottleneck of soft-prompt setups such as full or progressive cramming. The trade-off is parameter cost: it requires $L$ times more trainable embeddings, where $L$ is the number of hidden layers in the LLM.
 
-\section{Analysis of the Reconstruction Accuracy}
-\label{app:I}
+To separate ``cramming'' from general soft-prompt steering, we evaluate prefix tuning baselines.
+Table~\ref{tab:prefix_tuning_attention_hijacking} reports the same attention-mass metric for prefix tokens.
+Compared to cramming, prefix tuning typically attracts less attention mass than BOS and shows weaker or more variable correlation patterns, indicating that this attention concentration is not an inevitable consequence of prepending learned embeddings but depends on the optimization objective.
 
-As noted in Section~\ref{sec:prior_limitations}, a 99\% token-level accuracy threshold is insufficient to guarantee correct reconstruction when evaluation is performed without \emph{teacher forcing} (i.e., when generated tokens are fed back into the prefix rather than replacing them with the ground-truth tokens). Table~\ref{tab:compression_reconstruction_summary} shows that under non-progressive training, the remaining $\sim$1\% error is concentrated in the first few positions (indices 0-2); these early mistakes then compound, leading to divergent generations.
+We also evaluated compression limits under prefix tuning. Table~\ref{tab:prefix_tuning_accuracy} shows that, for Llama~3 models at 3B and 8B, we cannot reach the cramming limits; however, in the prefix-tuning setup these models can still compress up to 8k tokens with perfect reconstruction accuracy, while 16k tokens results in out-of-memory (OOM) failures. For the 1B Llama~3 model, the limit is about 4096 tokens, which is roughly \(10\times\) higher than with progressive cramming. This gain comes at a higher parameter cost: prefix tuning requires \(L\)-times more trainable embeddings (one per layer), i.e., \(16\times\) more parameters for a 16-layer model.
+For Pythia, the prefix-tuning setup increases the compression limit by about \(20\times\) for Pythia-410M and by about \(8\times\) for Pythia-1.4B relative to progressive cramming.
 
-
-\section{Effect of Imperfect Reconstruction on HellaSwag and ARC}
-\label{app:imperfect_reconstruction}
-
-The downstream evaluation in Section~\ref{sec:semantic_evaluation} retains benchmark instances whose prefixes are not perfectly reconstructed, which raises the question of whether the observed capability drop is caused by the compression embedding itself disrupting reasoning, or simply by failed reconstruction corrupting the prefix.
-To disentangle the effect of imperfect reconstruction from the effect of the compression embedding itself, we emphasize the difference between autoregressive generation and multiple-choice benchmarks such as HellaSwag and ARC. In greedy generation, even small reconstruction errors can lead to large deviations in the output due to error accumulation, especially when errors occur early in the sequence (Section~\ref{sec:prior_limitations}).
-
-In contrast, HellaSwag and ARC operate in a non-generative (scoring) regime: the model evaluates fixed context--continuation pairs without regenerating the prefix. As a result, these benchmarks are significantly less sensitive to small reconstruction imperfections, since no sequential error propagation occurs.
-
-The near-identical token-normalized accuracies for SmolLM2-1.7B (Table~\ref{tab:rebuttal_token_norm}) indicate that imperfect reconstruction has minimal impact on benchmark performance. This confirms that the observed degradation is driven primarily by the compression embedding itself, rather than by reconstruction errors.
-
-\begin{table}[t]
-\centering
-\caption{Token-normalized accuracy (\%) for HellaSwag, ARC-Easy, and ARC-Challenge on SmolLM2-1.7B. Values are reported for perfectly reconstructed examples and for all examples.}
-\label{tab:rebuttal_token_norm}
-\begin{small}
-\input{tables/manual/rebuttal_token_norm}
-\end{small}
-\end{table}
-
-\section{Generative Benchmark Evaluation (5-shot MMLU)}
-\label{app:mmlu}
-
-The downstream evaluation in Section~\ref{sec:semantic_evaluation} relies on HellaSwag and ARC, which probe a limited slice of downstream behavior. To broaden this evaluation, we additionally evaluate on 5-shot MMLU (512 samples) under three compression modes: \textit{few\_shot} (only the few-shot examples are compressed), \textit{full\_prefix} (both the few-shot examples and the question are compressed), and \textit{random} (a random embedding replaces the compression embedding as a control).
-
-The results (Table~\ref{tab:rebuttle_mmlu}) are consistent with our earlier findings. When only the few-shot tokens are compressed, all models show accuracy degradation (ranging from $-2\%$ for Gemma-3-4B to $-15\%$ for Llama-3.1-8B), confirming that the model retains generative capability when uncompressed tokens follow the compression embedding. In contrast, \textit{full\_prefix} compression---where the compression embedding compresses the full prefix---leads to near-complete failure: for Llama-3.1-8B, SmolLM2-1.7B, and Gemma-3-4B accuracy drops to $0\%$ with no valid (parseable) answers, while the smaller Pythia-1.4B retains only partial output validity ($24.8\%$) at near-chance accuracy ($4.83\%$). In every case the generative process collapses. Notably, the \textit{random} baseline causes only minor degradation (at most $-4.3\%$, and slightly \emph{positive} for Gemma-3-4B), nowhere near the catastrophic collapse under \textit{full\_prefix}; this shows that the mere presence of an out-of-distribution token is not sufficient to explain the failure---it is specifically the \emph{optimized} compression embedding that disrupts downstream computation.
-
-These results on a generative benchmark with longer context reinforce the conclusions drawn from HellaSwag and ARC, and demonstrate that the downstream collapse generalizes beyond multiple-choice likelihood-based evaluation.
 
 \begin{table*}[tb]
-\centering
-\caption{5-shot MMLU accuracy on 512 samples with a compression embedding in context. \textbf{CompMode = few\_shot}: only the few-shot tokens were compressed with cramming. \textbf{CompMode = full\_prefix}: few-shot tokens and question tokens were compressed. \textbf{CompMode = random}: a random embedding was placed instead of the compression embedding. \textbf{Baseline Acc}: accuracy of the base model without a compression embedding. \textbf{Compressed Acc}: accuracy with a compression embedding in context (regular tokens placed after the compression embedding). \textbf{Valid} columns report the percentage of valid generated answers (answers parsed successfully).}
-\label{tab:rebuttle_mmlu}
-\begin{small}
-\input{tables/manual/rebuttle_mmlu}
-\end{small}
-\end{table*}
-
-\section{Generalization to a Second Dataset (Fanfics)}
-\label{app:fanfics}
-
-The experiments in the main text evaluate compression on PG-19. To verify that our findings are not specific to a single corpus, we reproduce the Fanfics data-preparation pipeline of \citet{kuratov2025cramming} (the \texttt{LarryLovestein/fanfics\_1k} Hugging Face dataset) and rerun progressive cramming on $50$ samples across four model families (Table~\ref{tab:rebuttle_fanfics}). For each family we report baseline progressive cramming, low-dimensional projection only (``dim''), activation alignment only ($\alpha$, $L$), and their combination.
-
-The key findings are consistent with those observed on PG-19. Information gain follows the same patterns across configurations: low-dimensional projection substantially increases both the number of compressed tokens and information gain. The low-dimensional structure of compression trajectories also generalizes to Fanfics data: while the PCA-99\% values are somewhat larger than those observed on PG-19---likely reflecting the greater distributional diversity of fan-fiction text---they remain at least an order of magnitude below the embedding dimensionality.
-
-\begin{table*}[t]
     \centering
-    \caption{Progressive cramming variants and key metrics across model families on \textbf{50 samples} of the \textbf{Fanfics} dataset following \citet{kuratov2025cramming} (\texttt{LarryLovestein/fanfics\_1k}). For each family we report baseline progressive cramming, low-dimensional projection only (``dim''), activation alignment only ($\alpha$, $L$), and their combination.}
-    \label{tab:rebuttle_fanfics}
+    \caption{Prefix-tuning attention mass, computed with the same metric as Table~\ref{tab:attn_hijacking} but for learned prefix tokens instead of the compression embedding.}
+    \label{tab:prefix_tuning_attention_hijacking}
     \begin{small}
-    \input{tables/manual/rebuttle_fanfics}
+    \input{tables/prefix_tuning_attention_hijacking}
     \end{small}
 \vskip -0.1in
 \end{table*}
 
-\section{Transformer-Depth Ablation}
-\label{app:layer_ablation}
 
-The main text (Section~\ref{sec:depth_size}, Table~\ref{tab:depth_size_pivot}) summarises the headline depth--size result---compression capacity rises with both retained depth and model size---as a compact pivot of compressed-token counts. Table~\ref{tab:layer_ablation} here gives the full per-metric breakdown of that sweep (the \emph{first-only} scheme: keep the first $N$ decoder layers, finetune to repair the cut, then measure compression, across five model families ordered by size). The rest of this appendix covers how a checkpoint is truncated, why the recovery finetune matters, and two alternative truncation schemes that confirm the same monotone-in-depth trend.
-
-\begin{table*}[t]
+\begin{table}[tb]
     \centering
-    \caption{Compression capacity vs.\ network depth and model size (full breakdown of the main-text pivot, Table~\ref{tab:depth_size_pivot}). Each pretrained model (name annotated with its total decoder-layer count) is truncated to its first $N$ decoder layers, recovered by a short causal-LM finetune on fineweb-edu, and evaluated with progressive cramming (PG19, $50$ samples, sequence length $4096$, $\mathrm{lr}=0.1$, random per-sample initialization); ``full'' is the untruncated model. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance. Compression rises monotonically with both retained depth (within each family) and model size (across families at matched depth).}
-    \label{tab:layer_ablation}
+    \caption{Prefix-tuning reconstruction accuracy compared to progressive cramming. ``Tokens'' denotes the number of learned prefix tokens (or reconstructed tokens for progressive cramming).}
+    \label{tab:prefix_tuning_accuracy}
     \begin{small}
-    \input{tables/layer_ablation}
+    \input{tables/prefix_tuning_accuracy}
     \end{small}
 \vskip -0.1in
-\end{table*}
+\end{table}
 
-\textbf{Truncation and recovery.} For a target of $N$ retained layers we keep the chosen decoder layers, preserve the input embedding and output projection, renumber the layer indices, and update \texttt{num\_hidden\_layers} so each truncated model is a self-contained checkpoint. Truncation leaves the retained layers stitched across a gap they were never trained to bridge, so a truncated checkpoint is a degraded---but not retrained---language model. To separate ``capacity lost to fewer layers'' from ``capacity lost to the un-adapted stitch,'' we \emph{finetune} each truncated checkpoint with a standard next-token objective (fineweb-edu, $5\mathrm{k}$ steps at sequence length $1024$, effective batch ${\approx}256\mathrm{k}$ tokens per step, AdamW, cosine-with-min-lr schedule, peak learning rate $10^{-3}$, $500$ warmup steps, bf16) before measuring compression---the same recipe as the model-width ablation (Appendix~\ref{app:width_ablation}). The first-only rows of Table~\ref{tab:layer_ablation} are all recovered this way; the larger Llama-3.1-8B instead uses a gentler $15\mathrm{k}$-step / $3\times10^{-4}$ / $1000$-warmup finetune, because at the common $10^{-3}$ rate its truncations are prone to a transient warmup loss spike that leaves some checkpoints in a degraded basin. Recovery matters: for SmolLM2-1.7B at $\{2,4,8,16\}$ retained layers (first+last scheme) finetuning lifts the compressed-token count from $76.9$/$270.9$/$240.8$/$272.5$ (as-is) to $233.8$/$453.3$/$428.6$/$335.3$, recovering---and at $4$ layers exceeding---the full $24$-layer model ($335.1$).
 
-\textbf{Alternative truncation schemes.} The main-text table keeps the \emph{first} $N$ layers; two alternatives confirm the depth trend is not an artifact of \emph{which} layers are kept. Keeping the first $N$ \emph{and} last $N$ layers (first+last), or only the last $N$ layers (last-only), both leave compression rising monotonically with retained depth: SmolLM2-1.7B last-only gives $88.8$/$176.0$/$211.7$/$351.5$ at $1$/$2$/$4$/$8$ layers, and Llama-3.1-8B last-only gives $56.3$/$116.9$/$330.3$ at $1$/$2$/$4$. Table~\ref{tab:layer_ablation_schemes} reports these alternative-scheme rows, together with the un-finetuned first+last checkpoints used for the recovery comparison above.
 
-\begin{table*}[t]
+
+
+\section{Optimization Geometry and Trajectory Structure}
+\label{app:part_geometry}
+
+\subsection{Dataset Modifications}
+
+To probe sensitivity to surface form, we create controlled variants of PG19 samples and compare their progressive trajectories (Figure~\ref{fig:trajectories_text_modifications}).
+Each variant shares an identical 64-token prefix and modifies the suffix in one of three ways: random word permutation, greedy decoding from Llama-3.1-8B (``Sampled''), or lowercasing.
+Trajectories coincide during the shared prefix and diverge immediately after the edit point, indicating that the optimization path is highly sensitive to token-level details.
+Notably, lowercasing (which should preserve high-level semantics) induces a markedly different trajectory, suggesting that progressive cramming is driven by tokenization- and distribution-level properties rather than semantic equivalence.
+
+
+
+\begin{figure*}[tb]
     \centering
-    \caption{Detailed transformer-depth cuts supporting the depth--size table (Table~\ref{tab:layer_ablation}). \emph{First+last}: SmolLM2-1.7B with the first $N$ and last $N$ decoder layers ($2N$ total), shown as-is and after causal-LM finetuning. \emph{Last-only}: SmolLM2-1.7B and Llama-3.1-8B with only the last $N$ layers (finetuned). Full-depth references are in Table~\ref{tab:layer_ablation}. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
-    \label{tab:layer_ablation_schemes}
-    \begin{small}
-    \input{tables/layer_ablation_schemes}
-    \end{small}
-\vskip -0.1in
-\end{table*}
+    \centerline{\includegraphics[width=\linewidth]{Llama3.1-8B-text-modifications_lr-0p1.pdf}}
+    \caption{Progressive trajectories projected onto PCA components (Llama-3.1-8B, one PG19 sample). All variants share the same 64-token prefix; the suffix is either original (Base), randomly permuted (Random), greedily sampled continuation (Sampled), or lowercased (Lowercased). Circles mark the start and squares mark the end. Axis titles report the signed explained-variance fraction.}
+    \label{fig:trajectories_text_modifications}
+\end{figure*}
 
-\section{Initialization Ablation}
-\label{app:init_ablation}
 
-To identify which pretrained components are load-bearing for progressive cramming, we ablate \emph{initialization} on SmolLM2-1.7B: starting from the pretrained model, we randomly re-initialize exactly one component and keep the rest pretrained. We consider three variants: (i) \emph{random transformer layers}, where the decoder layers are re-initialized while the input embedding and (tied) output projection are preserved; (ii) \emph{random LM head}, where only the output projection is re-initialized; and (iii) \emph{random input embeddings}, where only the input token-embedding matrix is re-initialized. Because SmolLM2-1.7B ties its input and output embeddings, for variants (ii) and (iii) we first \emph{untie} them - so that exactly one matrix is randomized while the other retains its pretrained values.
 
-We then run the baseline progressive-cramming procedure on each checkpoint, using the same PG19 sample set, learning rate ($0.1$), and optimization budget as our main run; the fully pretrained model is the reference. Table~\ref{tab:init_ablation} reports, for each variant, the achieved compressed-token count, information gain, trajectory length, and the number of principal components explaining 99\% of trajectory variance (PCA 99\%).
-
-The fully pretrained model compresses 335 tokens on average. Re-initializing the LM head causes by far the largest drop, to only 33 tokens, whereas re-initializing the input embeddings or the transformer layers is far less damaging, leaving 173 and 148 tokens respectively. Progressive cramming is therefore most sensitive to the LM head: a pretrained output projection matters more than either pretrained embeddings or pretrained layers.
-
-\begin{table*}[t]
-    \centering
-    \caption{Initialization ablation on SmolLM2-1.7B. Exactly one component is randomly re-initialized---transformer layers, LM head, or input embeddings---while the rest stay pretrained; the fully pretrained model is the reference. For the LM-head and input-embedding variants the tied embeddings are first untied so a single matrix is randomized. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
-    \label{tab:init_ablation}
-    \begin{small}
-    \input{tables/init_ablation}
-    \end{small}
-\vskip -0.1in
-\end{table*}
-
-\section{Model-Width Ablation}
-\label{app:width_ablation}
-
-The depth ablation (Appendix~\ref{app:layer_ablation}) varies the number of layers at a fixed width; here we hold depth fixed and vary model \emph{width}. Across the SmolLM2 family (135M, 360M, and 1.7B; hidden sizes $576$, $960$, and $2048$) we keep only the first $4$ and last $4$ decoder layers of each model ($8$ layers total), so every checkpoint has identical depth and differs essentially only in width. As in the depth ablation, discarding the middle block leaves the retained layers stitched across a gap they were never trained to bridge, so we \emph{recover} each truncated checkpoint before measuring compression. We finetune all parameters with a standard next-token objective on fineweb-edu for $5\mathrm{k}$ optimizer steps at sequence length $1024$ with an effective batch of ${\approx}256\mathrm{k}$ tokens per step (AdamW, cosine-with-min-lr schedule, peak learning rate $10^{-3}$, $500$ warmup steps, bf16, \texttt{torch.compile}; 8$\times$A100), then run baseline progressive cramming with random per-sample initialization.
-% Q-Former recovery route commented out (qformer width-ablation arm hidden):
-% As in the depth ablation, discarding the middle block leaves the retained layers stitched across a gap they were never trained to bridge, so we \emph{recover} each truncated checkpoint before measuring compression, comparing two recovery routes. In the \emph{causal-LM} route we finetune all parameters with a standard next-token objective on fineweb-edu for $5\mathrm{k}$ optimizer steps at sequence length $1024$ with an effective batch of ${\approx}256\mathrm{k}$ tokens per step (AdamW, cosine-with-min-lr schedule, peak learning rate $10^{-3}$, $500$ warmup steps, bf16, \texttt{torch.compile}; 8$\times$A100), then run baseline progressive cramming with random per-sample initialization. In the \emph{Q-Former} route we instead train a small Q-Former compression head (one query, three layers, eight heads) on the same data and with the same optimization budget, and seed progressive cramming from the head (\texttt{compression\_head\_forward} initialization).
-
-Every progressive-cramming run uses the same PG19 sample set, learning rate ($0.1$), and optimization budget as our main SmolLM2-1.7B run, so the only varying factor is model width. Table~\ref{tab:width_ablation} reports, for each width, the achieved compressed-token count, information gain, trajectory length, and the number of principal components explaining 99\% of trajectory variance (PCA 99\%).
-% BEGIN AUTOGEN width-ablation-trend (filled from the width-ablation eval results)
-Concretely, the mean number of perfectly reconstructed (compressed) tokens rises sharply with width: $42$ at 135M, $84.5$ at 360M, and $428.6$ at 1.7B.
-% Q-Former recovery arm commented out (qformer width-ablation arm hidden):
-% Concretely, the mean number of perfectly reconstructed (compressed) tokens rises sharply with width: $42$ / $64.4$ at 135M, $84.5$ / $55.2$ at 360M, and $428.6$ / $355.9$ at 1.7B for the causal-LM / Q-Former recovery routes respectively. The Q-Former head leads at the smallest width, but the plain causal-LM finetune matches or exceeds it at $360\mathrm{M}$ and $1.7\mathrm{B}$, even though the Q-Former consistently induces longer optimization trajectories and larger information gain.
-% END AUTOGEN width-ablation-trend
-
-\begin{table*}[t]
-    \centering
-    \caption{Model-width ablation on the SmolLM2 family. Every model is truncated to its first $4$ and last $4$ decoder layers ($8$ layers total), holding depth fixed while width varies (hidden sizes $576$, $960$, $2048$). Each width is recovered by plain causal-LM finetuning before measuring compression (evaluated with baseline random per-sample initialization). ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
-    \label{tab:width_ablation}
-    \begin{small}
-    \input{tables/width_ablation}
-    \end{small}
-\vskip -0.1in
-\end{table*}
-
-\section{Compression-Head Depth Ablation}
-\label{app:ch_qformer_layer_ablation}
-
-The depth ablation (Appendix~\ref{app:layer_ablation}) recovers each truncated checkpoint with a causal-LM finetune and then runs progressive cramming from a random per-sample initialization. Here we repeat the identical depth sweep but recover each checkpoint with a learned \emph{compression head} and seed progressive cramming from it (\texttt{compression\_head\_forward} initialization), as in the Q-Former recovery route of the width ablation (Appendix~\ref{app:width_ablation}). Starting from SmolLM2-1.7B we again keep only the first $N$ and last $N$ decoder layers for $N \in \{1, 2, 4, 8\}$ ($2N \in \{2, 4, 8, 16\}$ layers) plus the full 24-layer model, and for each depth we train a small Q-Former compression head (one query, three layers, eight heads) jointly with the unfrozen backbone on fineweb-edu for $5\mathrm{k}$ optimizer steps at sequence length $1024$ with an effective batch of ${\approx}256\mathrm{k}$ tokens per step (AdamW, cosine-with-min-lr schedule, peak learning rate $10^{-3}$, $500$ warmup steps, bf16; 8$\times$A100). At full depth we additionally train a simpler MLP head (a Linear--GELU--Linear network on the final prefix hidden state) as a head-architecture reference. Every progressive-cramming run then uses the same PG19 sample set, learning rate ($0.1$), and optimization budget as our main SmolLM2-1.7B run, so the only varying factors are network depth and head architecture.
-
-Table~\ref{tab:ch_qformer_layer_ablation} reports, for each depth, the achieved compressed-token count, information gain, trajectory length, and the number of principal components explaining 99\% of trajectory variance (PCA 99\%).
-% trend numbers taken from tables/ch_qformer_layer_ablation.tex
-Concretely, the mean number of perfectly reconstructed (compressed) tokens is $196$, $369.6$, $355.9$, $276.7$, and $207.3$ for the 2-, 4-, 8-, 16-, and 24-layer Q-Former variants, respectively---peaking at $4$ layers and then \emph{decreasing} as depth grows, so the full-depth model compresses fewer tokens than every shallower truncation except the 2-layer one. This inverts the trend of the causal-LM depth ablation (Appendix~\ref{app:layer_ablation}), whose compression capacity instead rises toward full depth, and the Q-Former's information gain and trajectory length likewise peak at intermediate depth. At full depth the simpler MLP head ($237.5$) modestly exceeds the Q-Former head ($207.3$), indicating that the extra capacity of the Q-Former is most useful when the backbone is shallow.
-
-\begin{table*}[t]
-    \centering
-    \caption{Compression-head depth ablation on SmolLM2-1.7B. The model is truncated to its first $N$ and last $N$ decoder layers ($2N$ layers total); each depth is recovered by training a Q-Former compression head and is evaluated with \texttt{compression\_head\_forward} initialization, with the simpler MLP head shown at full depth as a head-architecture reference. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
-    \label{tab:ch_qformer_layer_ablation}
-    \begin{small}
-    \input{tables/ch_qformer_layer_ablation}
-    \end{small}
-\vskip -0.1in
-\end{table*}
-
-% Q-Former single-vs-dual-model section commented out (qformer width experiments hidden):
-% \section{Single- vs Dual-Model Compression-Head Training}
-% \label{app:width_dualmodel_ablation}
-%
-% The Q-Former recovery route (Appendix~\ref{app:width_ablation}) trains a single model that both \emph{compresses} a prefix into the head's output embeddings and \emph{reconstructs} it from them, so the compression and reconstruction objectives share---and update---one set of weights. A natural question is whether decoupling the two helps: in the \emph{dual-model} variant we instantiate a separate compressor and reconstructor (\texttt{-{}-separate\_reconstructor\_model}), trained jointly but with disjoint parameters, so the reconstruction gradient never flows into the compressor and vice versa. We compare the single- and dual-model heads across the SmolLM2 width family (135M, 360M, and 1.7B; first-4 + last-4 = 8 layers, as in Appendix~\ref{app:width_ablation}). Both arms use the same Q-Former head (one query, three layers, eight heads), peak learning rate $10^{-3}$, distillation weights $\alpha=1.0$ / $\beta=0.0$, and fineweb-edu; the global batch is held at $256$ sequences. Each width trains at its own sequence length ($135\mathrm{M}@64$, $360\mathrm{M}@128$, $1.7\mathrm{B}@512$), the short-prefix regime in which a separate reconstruction signal is most plausibly useful, and we then seed progressive cramming from the head (\texttt{compression\_head\_forward}) under the standard PG19 / $\mathrm{lr}=0.1$ eval.
-%
-% Table~\ref{tab:width_dualmodel_ablation} reports both arms. Splitting the model into a separate compressor and reconstructor yields \emph{no} improvement in compression at any width: the mean number of perfectly reconstructed tokens is $54.2$ (single) vs.\ $50.3$ (dual) at 135M, $56.9$ vs.\ $56.0$ at 360M, and $335.4$ vs.\ $332.5$ at 1.7B---marginally \emph{lower} for the dual-model head in every case, and well within the per-run spread. The dual-model head also induces markedly shorter optimization trajectories and smaller information gain (e.g.\ $1703$ vs.\ $4321$ information gain at 1.7B) without translating that into more compressed tokens. We therefore retain the single-model head in the main text.
-%
-% \begin{table*}[t]
+% \begin{table}[]
 %     \centering
-%     \caption{Single- vs dual-model compression-head training across the SmolLM2 width family (first-4 + last-4 = 8 layers; each width trained at its own sequence length $64$ / $128$ / $512$). The single-model head compresses and reconstructs with one set of weights; the dual-model head uses a separate compressor and reconstructor so their gradients never overlap. All rows are progressive-cramming evals (PG19, $\mathrm{lr}=0.1$) seeded from the head. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
-%     \label{tab:width_dualmodel_ablation}
-%     \begin{small}
-%     \input{tables/width_dualmodel_ablation}
-%     \end{small}
-% \vskip -0.1in
-% \end{table*}
+%     \caption{Progressive cramming on modified PG19 samples (Llama-3.1-8B). All variants share a 64-token prefix and differ only in the suffix (Base/Random/Sampled/Lowercased). {\color{red} TODO recompute via \texttt{scripts/paper/text\_modifications\_table.py}.}}
+%     \label{tab:text_modifications}
 
+% \begin{tabular}{llll}
+% \hline
+%  Experiment   & Tokens                  & Info Gain                & PCA 99\%              \\
+% \hline
+%  Base         & 1048 {\small $\pm$ 404} & 3169 {\small $\pm$ 1212} & 74 {\small $\pm$ 8}  \\
+%  Random       & 1 {\small $\pm$ 0}      & 0 {\small $\pm$ 0}       & nan                  \\
+%  Sampled      & 2048 {\small $\pm$ 0}   & 432 {\small $\pm$ 141}   & 60 {\small $\pm$ 28} \\
+%  Lowercased   & 1 {\small $\pm$ 0}      & 0 {\small $\pm$ 0}       & nan                  \\
+% \hline
+% \end{tabular}
+% \end{table}
 
-
-\section{Surprisal Predicts Per-Token Cramming Effort}
+\subsection{Surprisal Predicts Per-Token Cramming Effort}
 \label{app:surprisal_steps}
 
 Progressive cramming spends a variable number of optimizer steps on each token: some are absorbed in
@@ -616,7 +347,7 @@ effects, interactions between co-compressed tokens, and repeated structure contr
 \end{table*}
 
 
-\section{Equally-Good Solutions Are Far Apart: Low-Dimensionality Is a Path Property}
+\subsection{Equally-Good Solutions Are Far Apart: Low-Dimensionality Is a Path Property}
 \label{app:solution_diversity}
 
 Section~\ref{sec:trajectory} reports that a single progressive-cramming trajectory occupies a
@@ -695,7 +426,7 @@ independent initializations can only increase diversity, and leave it to future 
 \end{table*}
 
 
-\section{Trajectory Shape: Smooth Wandering or Jumps Between Basins?}
+\subsection{Trajectory Shape: Smooth Wandering or Jumps Between Basins?}
 \label{app:trajectory_clusters}
 
 Appendix~\ref{app:solution_diversity} establishes that a trajectory's low dimensionality is a property of one warm-started \emph{path}, not of an intrinsic low-dimensional solution manifold. This raises a complementary question about that same path: what does it look like \emph{geometrically}? Is it a smooth low-dimensional curve, or a punctuated walk that dwells in a region and then leaps to a far-apart one---the ``disconnected local-minima basins'' picture suggested by the variable per-token cramming cost of Appendix~\ref{app:surprisal_steps}?
@@ -733,25 +464,329 @@ Appendix~\ref{app:solution_diversity} establishes that a trajectory's low dimens
 \end{table*}
 
 
-\section{Fixed-Prefix Progressive Cramming Ablation}
-\label{app:prefix_ablation}
+\section{Reconstruction Fidelity and Downstream Capability}
+\label{app:part_downstream}
 
-Our main progressive-cramming setup asks a single compression embedding to reconstruct a sequence from scratch, with no other context. Here we ask how the task changes when the model is additionally given a fixed, \emph{uncompressed} prefix that it can attend to but never has to compress. Concretely, we tokenize each document as $[\,p_1 \dots p_P \mid c_1 \dots c_L\,]$ and feed the model $[\,\texttt{[mem]}\ p_1 \dots p_P\ c_1 \dots c_L\,]$: the $P$ prefix tokens $p_{1:P}$ are real token embeddings the model reads as ordinary context, the learnable \texttt{[mem]} token sits ahead of them, and the loss, convergence check, and information gain are computed only over the continuation $c_{1:L}$ that follows the prefix. The prefix is never folded into \texttt{[mem]}. Progressive cramming then grows the continuation $c_{1:L}$ token-by-token exactly as in the prefix-free setting, so ``Compressed Tokens'' counts only the crammed continuation, excluding the visible prefix. We sweep the prefix length $P \in \{128, 256, 512, 1024\}$ on SmolLM2-1.7B, with the no-prefix run ($P=0$) as the reference.
+\subsection{Analysis of the Reconstruction Accuracy}
+\label{app:I}
 
-All runs use the same PG19 sample set, learning rate ($0.1$), and optimization budget as our main SmolLM2-1.7B run, so the only varying factor is the prefix length $P$. Table~\ref{tab:prefix_ablation} reports, for each $P$, the achieved compressed (continuation) token count, the information gain of the compression embedding measured on top of the prefix context, trajectory length, the number of principal components explaining 99\% of trajectory variance (PCA 99\%), and the average base-LM surprisal over the prefix tokens themselves (bits per token).
-% BEGIN AUTOGEN prefix-ablation-trend (filled from the prefix-ablation eval results)
-Concretely, the mean number of perfectly reconstructed (compressed) tokens is 361.5 (p=128), 352.8 (p=256), 363.5 (p=512), 360.2 (p=1024).
-% END AUTOGEN prefix-ablation-trend
+As noted in Section~\ref{sec:prior_limitations}, a 99\% token-level accuracy threshold is insufficient to guarantee correct reconstruction when evaluation is performed without \emph{teacher forcing} (i.e., when generated tokens are fed back into the prefix rather than replacing them with the ground-truth tokens). Table~\ref{tab:compression_reconstruction_summary} shows that under non-progressive training, the remaining $\sim$1\% error is concentrated in the first few positions (indices 0-2); these early mistakes then compound, leading to divergent generations.
+\begin{table*}[t]
+\centering
+\caption{Compression reconstruction accuracy under non-ideal training convergence.
+We report mean teacher-forcing accuracy over all compressed samples, mean greedy
+decoding accuracy when generating autoregressively from the compression embedding,
+and the fraction of samples with a token mismatch at indices 0, 1, and 2.
+Variants include ignoring the BOS loss during training (no BOS) and upweighting
+the loss of the first two tokens by a factor of three (2 leading).}
+\label{tab:compression_reconstruction_summary}
+\begin{small}
+\input{tables/manual/compression_reconstruction_summary}
+\end{small}
+\vskip -0.1in
+\end{table*}
 
-The prefix becomes more predictable as it lengthens: the base model's average surprisal over the prefix tokens falls monotonically from $4.09$ bits/token at $P{=}128$ to $3.84$, $3.73$, and $3.62$ bits/token at $P{=}256, 512, 1024$, consistent with a longer span of coherent context making each prefix token easier to anticipate. The cramming task itself, however, is left essentially unchanged. The number of continuation tokens the \texttt{[mem]} token can perfectly cram is flat across prefix lengths (${\approx}\,360$ for every $P$, versus $335$ with no prefix), and so are the information gain (${\approx}\,1150$--$1255$ bits), the trajectory length (${\approx}\,970$--$1050$), and the dimensionality of the optimization path (PCA-99\% ${\approx}\,33$ for all rows, including the reference). In other words, giving the model a large block of visible, uncompressed context neither eases nor reshapes the problem of packing the \emph{continuation} into a single embedding: the compression embedding's capacity and the geometry of its optimization are governed by the span it must itself encode, not by how much surrounding text the model can already attend to.
+
+
+\subsection{Effect of Imperfect Reconstruction on HellaSwag and ARC}
+\label{app:imperfect_reconstruction}
+
+The downstream evaluation in Section~\ref{sec:semantic_evaluation} retains benchmark instances whose prefixes are not perfectly reconstructed, which raises the question of whether the observed capability drop is caused by the compression embedding itself disrupting reasoning, or simply by failed reconstruction corrupting the prefix.
+To disentangle the effect of imperfect reconstruction from the effect of the compression embedding itself, we emphasize the difference between autoregressive generation and multiple-choice benchmarks such as HellaSwag and ARC. In greedy generation, even small reconstruction errors can lead to large deviations in the output due to error accumulation, especially when errors occur early in the sequence (Section~\ref{sec:prior_limitations}).
+
+In contrast, HellaSwag and ARC operate in a non-generative (scoring) regime: the model evaluates fixed context--continuation pairs without regenerating the prefix. As a result, these benchmarks are significantly less sensitive to small reconstruction imperfections, since no sequential error propagation occurs.
+
+The near-identical token-normalized accuracies for SmolLM2-1.7B (Table~\ref{tab:rebuttal_token_norm}) indicate that imperfect reconstruction has minimal impact on benchmark performance. This confirms that the observed degradation is driven primarily by the compression embedding itself, rather than by reconstruction errors.
+
+\begin{table}[t]
+\centering
+\caption{Token-normalized accuracy (\%) for HellaSwag, ARC-Easy, and ARC-Challenge on SmolLM2-1.7B. Values are reported for perfectly reconstructed examples and for all examples.}
+\label{tab:rebuttal_token_norm}
+\begin{small}
+\input{tables/manual/rebuttal_token_norm}
+\end{small}
+\end{table}
+
+\subsubsection{Likelihood-Scoring Strategies}
+\label{app:scoring_strategies}
+
+We further localize the degradation reported in Section~\ref{sec:semantic_evaluation} by varying which token logits enter the likelihood score on SmolLM2-1.7B, over perfectly reconstructed instances (Table~\ref{tab:semantic_benchmarks_token}).
+Replacing the prefix with its compression embedding while scoring the full context plus the candidate ending drops HellaSwag from $52.4\%$ to $36.5\%$ and ARC-Challenge from $36.7\%$ to $28.6\%$.
+Scoring only the answer-ending tokens -- which do not require reading the compressed prefix -- recovers part of the gap (HellaSwag $40.7\%$), and replacing the context entirely with the embedding (``compression only'') is worst ($34.6\%$ / $22.9\%$).
+Across every scoring strategy the compressed conditions remain well below baseline, reinforcing that faithful reconstruction does not translate into usable downstream semantics.
+
+\begin{table}[t]
+    \centering
+    \caption{Token-normalized accuracy (\%) on HellaSwag, ARC-Easy (ARC-E), and ARC-Challenge (ARC-C) for SmolLM2-1.7B under different likelihood-scoring strategies, over perfectly reconstructed instances. \emph{Baseline} uses the original prefix; \emph{Compression} replaces the prefix with its crammed embedding; \emph{compression only} drops the prefix and keeps only the embedding. ``context $+$ ending'' scores all tokens, while ``ending only'' scores just the candidate-continuation tokens.}
+    \label{tab:semantic_benchmarks_token}
+    \begin{small}
+    \input{tables/manual/semantic_benchmarks_token}
+    \end{small}
+\end{table}
+
+\subsection{Generative Benchmark Evaluation (5-shot MMLU)}
+\label{app:mmlu}
+
+The downstream evaluation in Section~\ref{sec:semantic_evaluation} relies on HellaSwag and ARC, which probe a limited slice of downstream behavior. To broaden this evaluation, we additionally evaluate on 5-shot MMLU (512 samples) under three compression modes: \textit{few\_shot} (only the few-shot examples are compressed), \textit{full\_prefix} (both the few-shot examples and the question are compressed), and \textit{random} (a random embedding replaces the compression embedding as a control).
+
+The results (Table~\ref{tab:rebuttle_mmlu}) are consistent with our earlier findings. When only the few-shot tokens are compressed, all models show accuracy degradation (ranging from $-2\%$ for Gemma-3-4B to $-15\%$ for Llama-3.1-8B), confirming that the model retains generative capability when uncompressed tokens follow the compression embedding. In contrast, \textit{full\_prefix} compression---where the compression embedding compresses the full prefix---leads to near-complete failure: for Llama-3.1-8B, SmolLM2-1.7B, and Gemma-3-4B accuracy drops to $0\%$ with no valid (parseable) answers, while the smaller Pythia-1.4B retains only partial output validity ($24.8\%$) at near-chance accuracy ($4.83\%$). In every case the generative process collapses. Notably, the \textit{random} baseline causes only minor degradation (at most $-4.3\%$, and slightly \emph{positive} for Gemma-3-4B), nowhere near the catastrophic collapse under \textit{full\_prefix}; this shows that the mere presence of an out-of-distribution token is not sufficient to explain the failure---it is specifically the \emph{optimized} compression embedding that disrupts downstream computation.
+
+These results on a generative benchmark with longer context reinforce the conclusions drawn from HellaSwag and ARC, and demonstrate that the downstream collapse generalizes beyond multiple-choice likelihood-based evaluation.
+
+\begin{table*}[tb]
+\centering
+\caption{5-shot MMLU accuracy on 512 samples with a compression embedding in context. \textbf{CompMode = few\_shot}: only the few-shot tokens were compressed with cramming. \textbf{CompMode = full\_prefix}: few-shot tokens and question tokens were compressed. \textbf{CompMode = random}: a random embedding was placed instead of the compression embedding. \textbf{Baseline Acc}: accuracy of the base model without a compression embedding. \textbf{Compressed Acc}: accuracy with a compression embedding in context (regular tokens placed after the compression embedding). \textbf{Valid} columns report the percentage of valid generated answers (answers parsed successfully).}
+\label{tab:rebuttle_mmlu}
+\begin{small}
+\input{tables/manual/rebuttle_mmlu}
+\end{small}
+\end{table*}
+
+\subsection{Generalization to a Second Dataset (Fanfics)}
+\label{app:fanfics}
+
+The experiments in the main text evaluate compression on PG-19. To verify that our findings are not specific to a single corpus, we reproduce the Fanfics data-preparation pipeline of \citet{kuratov2025cramming} (the \texttt{LarryLovestein/fanfics\_1k} Hugging Face dataset) and rerun progressive cramming on $50$ samples across four model families (Table~\ref{tab:rebuttle_fanfics}). For each family we report baseline progressive cramming, low-dimensional projection only (``dim''), activation alignment only ($\alpha$, $L$), and their combination.
+
+The key findings are consistent with those observed on PG-19. Information gain follows the same patterns across configurations: low-dimensional projection substantially increases both the number of compressed tokens and information gain. The low-dimensional structure of compression trajectories also generalizes to Fanfics data: while the PCA-99\% values are somewhat larger than those observed on PG-19---likely reflecting the greater distributional diversity of fan-fiction text---they remain at least an order of magnitude below the embedding dimensionality.
 
 \begin{table*}[t]
     \centering
-    \caption{Fixed-prefix progressive cramming ablation on SmolLM2-1.7B. The model attends to a fixed, uncompressed prefix of $P$ real tokens and crams only the continuation that follows; the $P=0$ row is the no-prefix reference. All rows use the identical progressive-cramming eval (PG19, $\mathrm{lr}=0.1$). ``Compressed Tokens'' is the achieved continuation length $n$ (excluding the prefix), ``Trajectory Length'' is $L_{\text{traj}}$, ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance, and ``Avg Prefix Surprisal'' is the base-LM next-token cross-entropy over the prefix tokens, in bits per token.}
-    \label{tab:prefix_ablation}
+    \caption{Progressive cramming variants and key metrics across model families on \textbf{50 samples} of the \textbf{Fanfics} dataset following \citet{kuratov2025cramming} (\texttt{LarryLovestein/fanfics\_1k}). For each family we report baseline progressive cramming, low-dimensional projection only (``dim''), activation alignment only ($\alpha$, $L$), and their combination.}
+    \label{tab:rebuttle_fanfics}
     \begin{small}
-    \input{tables/prefix_ablation}
+    \input{tables/manual/rebuttle_fanfics}
     \end{small}
 \vskip -0.1in
 \end{table*}
+
+\section{Mechanism: Attention and Causality}
+\label{app:part_mechanism}
+
+\subsection{Attention Concentration}
+\label{app:attention_concentration}
+
+To probe the mechanism behind perfect reconstruction, we measure whether the compression embedding becomes an \emph{attention sink} that captures a disproportionate fraction of attention, analogous to (and potentially competing with) the BOS token.
+We quantify how much attention mass other positions allocate to the first position (position $0$), which corresponds to the compression embedding in crammed inputs or the BOS token in the uncompressed baseline.
+Let $\mathbf{A}_l \in [0,1]^{S \times S}$ denote the attention matrix at layer $l$ after averaging over heads.
+For a given prefix length $s \le S$, we define the attention mass on position $0$ as
+%
+\begin{equation}
+    m_l(s) = \frac{1}{s-1} \sum_{q=1}^{s-1} \mathbf{A}_l(q, 0)
+\end{equation}
+%
+which excludes self-attention ($q=0$) and averages over query positions.
+We report $100 \cdot m_l(s)$ as a percentage, and average over a set of target prefix lengths $\mathcal{S}$:
+%
+\begin{equation}
+    \bar{m}_l = \frac{1}{|\mathcal{S}|} \sum_{s \in \mathcal{S}} m_l(s)
+\end{equation}
+
+Table~\ref{tab:attn_hijacking} shows that this attention concentration is highly model-dependent when aggregated over layers.
+SmolLM2 and Pythia exhibit strong correlation between the layer-wise attention-mass profiles for the BOS token and the compression embedding; in these families the compression embedding attracts substantial attention mass in the same layers where BOS is an attention sink, and in Pythia it can match or exceed BOS attention on average.
+In contrast, Llama and Gemma show much lower compression-embedding attention mass than BOS on average and weak (or negative) correlation, suggesting that the concentration is confined to specific layers rather than uniformly matching the BOS pattern.
+
+Motivated by this similarity, we test whether including both a BOS token and a compression embedding in the prompt creates interference between two attention sinks.
+We therefore run ablations that remove the BOS token and recompute progressive cramming metrics (Table~\ref{tab:progressive_no_bos_token}).
+Removing BOS increases reconstructed length and information gain (and reduces compression-embedding attention mass) for Llama-3.1-8B, but has little effect on the other model families.
+
+This attention concentration is correlational: the causal analysis in Section~\ref{sec:causal} shows it is a \emph{symptom} of cramming rather than the cause of downstream degradation.
+
+\begin{table*}[]
+    \centering
+    \caption{Attention-concentration summary. ``Compression Embedding'' is attention mass to position 0 for the compression embedding in the crammed input; ``BOS Token'' is attention mass to position 0 for the uncompressed baseline; ``Diff'' is (Compression$-$BOS). ``Correlation'' is the Pearson correlation between per-layer attention-mass profiles. \bcancel{B} stands for removed BOS token for cramming compression column.}
+    \label{tab:attn_hijacking}
+    \begin{small}
+    \input{tables/attn_hijacking}
+    \end{small}
+\end{table*}
+
+\begin{table}[]
+    \centering
+    \caption{Progressive cramming with and without the BOS token. \bcancel{B} denotes runs where the BOS token is removed.}
+    \label{tab:progressive_no_bos_token}
+    \begin{small}
+    \input{tables/progressive_no_bos_token}
+    \end{small}
+\end{table}
+
+
+\subsection{Attention Knockout Across Model Families}
+\label{app:knockout_models}
+
+To test whether the causal picture in Section~\ref{sec:causal} is specific to Llama-3.1-8B, we repeat the identical attention-knockout protocols on two further model families: Pythia-1.4B (GPT-NeoX, $L=24$ layers) and SmolLM2-1.7B ($L=24$ layers). All settings match the main text (HellaSwag, $512$ samples, a single compression embedding, $1000$ optimization steps, per-model compression learning rate). The results are consistent with Llama-3.1-8B (Figures~\ref{fig:knockout_pythia} and~\ref{fig:knockout_smollm2}): early-layer knockout sharply degrades teacher-forced reconstruction while leaving downstream accuracy at or above the crammed baseline; the late layers that carry the most attention mass have negligible causal effect on either metric; and the forward/reverse cumulative protocols exhibit the same asymmetry that localizes the downstream collapse to the early layers.
+
+\begin{figure*}[tb]
+    \centering
+    \begin{subfigure}{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{attention_knockout_per_layer_pythia-1p4b.pdf}
+        \caption{Per-layer knockout.}
+    \end{subfigure}
+    \\[0.6em]
+    \begin{subfigure}{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{attention_knockout_cumulative_pythia-1p4b.pdf}
+        \caption{Cumulative knockout (left: forward, masking layers $0$ through $k$; right: reverse, masking layers $k$ through $L-1$).}
+    \end{subfigure}
+    \caption{Attention knockout on Pythia-1.4B ($L=24$), using the protocols of Figures~\ref{fig:knockout_per_layer} and~\ref{fig:knockout_cumulative}. The early-layer reconstruction collapse, the dissociation between attention mass and causal importance, and the forward/reverse asymmetry all reproduce the Llama-3.1-8B findings.}
+    \label{fig:knockout_pythia}
+\end{figure*}
+
+\begin{figure*}[tb]
+    \centering
+    \begin{subfigure}{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{attention_knockout_per_layer_smollm2-1p7b.pdf}
+        \caption{Per-layer knockout.}
+    \end{subfigure}
+    \\[0.6em]
+    \begin{subfigure}{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{attention_knockout_cumulative_smollm2-1p7b.pdf}
+        \caption{Cumulative knockout (left: forward, masking layers $0$ through $k$; right: reverse, masking layers $k$ through $L-1$).}
+    \end{subfigure}
+    \caption{Attention knockout on SmolLM2-1.7B ($L=24$), using the protocols of Figures~\ref{fig:knockout_per_layer} and~\ref{fig:knockout_cumulative}. The findings are consistent with Llama-3.1-8B: early-layer interactions causally drive the downstream collapse, while the high-attention-mass late layers do not.}
+    \label{fig:knockout_smollm2}
+\end{figure*}
+
+
+
+\subsection{On Gemma's Lower Information Gain}
+\label{app:gemma_softcapping}
+
+Gemma~3 reaches lower information gain at shorter reconstructed lengths than Llama and Pythia. One candidate explanation is logit softcapping \cite{gemma2}, which bounds logit magnitudes and limits how peaked the model's next-token distributions can become: because cramming drives the model toward high-confidence, token-specific predictions over long horizons, capped logits would reduce the separability between the correct token and its close alternatives and damp gradients in the high-confidence regime. This is consistent with Gemma's lower information gain and earlier saturation, but we do not isolate softcapping from other architectural and training-time differences, and leave confirming the mechanism to future work.
+
+
+\section{Compression Capacity: Depth, Width, and Recovery}
+\label{app:part_capacity}
+
+\subsection{Transformer-Depth Ablation}
+\label{app:layer_ablation}
+
+The main text (Section~\ref{sec:depth_size}, Table~\ref{tab:depth_size_pivot}) summarises the headline depth--size result---compression capacity rises with both retained depth and model size---as a compact pivot of compressed-token counts. Table~\ref{tab:layer_ablation} here gives the full per-metric breakdown of that sweep (the \emph{first-only} scheme: keep the first $N$ decoder layers, finetune to repair the cut, then measure compression, across five model families ordered by size). The rest of this appendix covers how a checkpoint is truncated, why the recovery finetune matters, and two alternative truncation schemes that confirm the same monotone-in-depth trend.
+
+\begin{table*}[t]
+    \centering
+    \caption{Compression capacity vs.\ network depth and model size (full breakdown of the main-text pivot, Table~\ref{tab:depth_size_pivot}). Each pretrained model (name annotated with its total decoder-layer count) is truncated to its first $N$ decoder layers, recovered by a short causal-LM finetune on fineweb-edu, and evaluated with progressive cramming (PG19, $50$ samples, sequence length $4096$, $\mathrm{lr}=0.1$, random per-sample initialization); ``full'' is the untruncated model. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance. Compression rises monotonically with both retained depth (within each family) and model size (across families at matched depth).}
+    \label{tab:layer_ablation}
+    \begin{small}
+    \input{tables/layer_ablation}
+    \end{small}
+\vskip -0.1in
+\end{table*}
+
+\textbf{Truncation and recovery.} For a target of $N$ retained layers we keep the chosen decoder layers, preserve the input embedding and output projection, renumber the layer indices, and update \texttt{num\_hidden\_layers} so each truncated model is a self-contained checkpoint. Truncation leaves the retained layers stitched across a gap they were never trained to bridge, so a truncated checkpoint is a degraded---but not retrained---language model. To separate ``capacity lost to fewer layers'' from ``capacity lost to the un-adapted stitch,'' we \emph{finetune} each truncated checkpoint with a standard next-token objective (fineweb-edu, $5\mathrm{k}$ steps at sequence length $1024$, effective batch ${\approx}256\mathrm{k}$ tokens per step, AdamW, cosine-with-min-lr schedule, peak learning rate $10^{-3}$, $500$ warmup steps, bf16) before measuring compression---the same recipe as the model-width ablation (Appendix~\ref{app:width_ablation}). The first-only rows of Table~\ref{tab:layer_ablation} are all recovered this way; the larger Llama-3.1-8B instead uses a gentler $15\mathrm{k}$-step / $3\times10^{-4}$ / $1000$-warmup finetune, because at the common $10^{-3}$ rate its truncations are prone to a transient warmup loss spike that leaves some checkpoints in a degraded basin. Recovery matters: for SmolLM2-1.7B at $\{2,4,8,16\}$ retained layers (first+last scheme) finetuning lifts the compressed-token count from $76.9$/$270.9$/$240.8$/$272.5$ (as-is) to $233.8$/$453.3$/$428.6$/$335.3$, recovering---and at $4$ layers exceeding---the full $24$-layer model ($335.1$).
+
+\textbf{Alternative truncation schemes.} The main-text table keeps the \emph{first} $N$ layers; two alternatives confirm the depth trend is not an artifact of \emph{which} layers are kept. Keeping the first $N$ \emph{and} last $N$ layers (first+last), or only the last $N$ layers (last-only), both leave compression rising monotonically with retained depth: SmolLM2-1.7B last-only gives $88.8$/$176.0$/$211.7$/$351.5$ at $1$/$2$/$4$/$8$ layers, and Llama-3.1-8B last-only gives $56.3$/$116.9$/$330.3$ at $1$/$2$/$4$. Table~\ref{tab:layer_ablation_schemes} reports these alternative-scheme rows, together with the un-finetuned first+last checkpoints used for the recovery comparison above.
+
+\begin{table*}[t]
+    \centering
+    \caption{Detailed transformer-depth cuts supporting the depth--size table (Table~\ref{tab:layer_ablation}). \emph{First+last}: SmolLM2-1.7B with the first $N$ and last $N$ decoder layers ($2N$ total), shown as-is and after causal-LM finetuning. \emph{Last-only}: SmolLM2-1.7B and Llama-3.1-8B with only the last $N$ layers (finetuned). Full-depth references are in Table~\ref{tab:layer_ablation}. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
+    \label{tab:layer_ablation_schemes}
+    \begin{small}
+    \input{tables/layer_ablation_schemes}
+    \end{small}
+\vskip -0.1in
+\end{table*}
+
+\subsection{Initialization Ablation}
+\label{app:init_ablation}
+
+To identify which pretrained components are load-bearing for progressive cramming, we ablate \emph{initialization} on SmolLM2-1.7B: starting from the pretrained model, we randomly re-initialize exactly one component and keep the rest pretrained. We consider three variants: (i) \emph{random transformer layers}, where the decoder layers are re-initialized while the input embedding and (tied) output projection are preserved; (ii) \emph{random LM head}, where only the output projection is re-initialized; and (iii) \emph{random input embeddings}, where only the input token-embedding matrix is re-initialized. Because SmolLM2-1.7B ties its input and output embeddings, for variants (ii) and (iii) we first \emph{untie} them - so that exactly one matrix is randomized while the other retains its pretrained values.
+
+We then run the baseline progressive-cramming procedure on each checkpoint, using the same PG19 sample set, learning rate ($0.1$), and optimization budget as our main run; the fully pretrained model is the reference. Table~\ref{tab:init_ablation} reports, for each variant, the achieved compressed-token count, information gain, trajectory length, and the number of principal components explaining 99\% of trajectory variance (PCA 99\%).
+
+The fully pretrained model compresses 335 tokens on average. Re-initializing the LM head causes by far the largest drop, to only 33 tokens, whereas re-initializing the input embeddings or the transformer layers is far less damaging, leaving 173 and 148 tokens respectively. Progressive cramming is therefore most sensitive to the LM head: a pretrained output projection matters more than either pretrained embeddings or pretrained layers.
+
+\begin{table*}[t]
+    \centering
+    \caption{Initialization ablation on SmolLM2-1.7B. Exactly one component is randomly re-initialized---transformer layers, LM head, or input embeddings---while the rest stay pretrained; the fully pretrained model is the reference. For the LM-head and input-embedding variants the tied embeddings are first untied so a single matrix is randomized. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
+    \label{tab:init_ablation}
+    \begin{small}
+    \input{tables/init_ablation}
+    \end{small}
+\vskip -0.1in
+\end{table*}
+
+\subsection{Model-Width Ablation}
+\label{app:width_ablation}
+
+The depth ablation (Appendix~\ref{app:layer_ablation}) varies the number of layers at a fixed width; here we hold depth fixed and vary model \emph{width}. Across the SmolLM2 family (135M, 360M, and 1.7B; hidden sizes $576$, $960$, and $2048$) we keep only the first $4$ and last $4$ decoder layers of each model ($8$ layers total), so every checkpoint has identical depth and differs essentially only in width. As in the depth ablation, discarding the middle block leaves the retained layers stitched across a gap they were never trained to bridge, so we \emph{recover} each truncated checkpoint before measuring compression. We finetune all parameters with a standard next-token objective on fineweb-edu for $5\mathrm{k}$ optimizer steps at sequence length $1024$ with an effective batch of ${\approx}256\mathrm{k}$ tokens per step (AdamW, cosine-with-min-lr schedule, peak learning rate $10^{-3}$, $500$ warmup steps, bf16, \texttt{torch.compile}; 8$\times$A100), then run baseline progressive cramming with random per-sample initialization.
+% Q-Former recovery route commented out (qformer width-ablation arm hidden):
+% As in the depth ablation, discarding the middle block leaves the retained layers stitched across a gap they were never trained to bridge, so we \emph{recover} each truncated checkpoint before measuring compression, comparing two recovery routes. In the \emph{causal-LM} route we finetune all parameters with a standard next-token objective on fineweb-edu for $5\mathrm{k}$ optimizer steps at sequence length $1024$ with an effective batch of ${\approx}256\mathrm{k}$ tokens per step (AdamW, cosine-with-min-lr schedule, peak learning rate $10^{-3}$, $500$ warmup steps, bf16, \texttt{torch.compile}; 8$\times$A100), then run baseline progressive cramming with random per-sample initialization. In the \emph{Q-Former} route we instead train a small Q-Former compression head (one query, three layers, eight heads) on the same data and with the same optimization budget, and seed progressive cramming from the head (\texttt{compression\_head\_forward} initialization).
+
+Every progressive-cramming run uses the same PG19 sample set, learning rate ($0.1$), and optimization budget as our main SmolLM2-1.7B run, so the only varying factor is model width. Table~\ref{tab:width_ablation} reports, for each width, the achieved compressed-token count, information gain, trajectory length, and the number of principal components explaining 99\% of trajectory variance (PCA 99\%).
+% BEGIN AUTOGEN width-ablation-trend (filled from the width-ablation eval results)
+Concretely, the mean number of perfectly reconstructed (compressed) tokens rises sharply with width: $42$ at 135M, $84.5$ at 360M, and $428.6$ at 1.7B.
+% Q-Former recovery arm commented out (qformer width-ablation arm hidden):
+% Concretely, the mean number of perfectly reconstructed (compressed) tokens rises sharply with width: $42$ / $64.4$ at 135M, $84.5$ / $55.2$ at 360M, and $428.6$ / $355.9$ at 1.7B for the causal-LM / Q-Former recovery routes respectively. The Q-Former head leads at the smallest width, but the plain causal-LM finetune matches or exceeds it at $360\mathrm{M}$ and $1.7\mathrm{B}$, even though the Q-Former consistently induces longer optimization trajectories and larger information gain.
+% END AUTOGEN width-ablation-trend
+
+\begin{table*}[t]
+    \centering
+    \caption{Model-width ablation on the SmolLM2 family. Every model is truncated to its first $4$ and last $4$ decoder layers ($8$ layers total), holding depth fixed while width varies (hidden sizes $576$, $960$, $2048$). Each width is recovered by plain causal-LM finetuning before measuring compression (evaluated with baseline random per-sample initialization). ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
+    \label{tab:width_ablation}
+    \begin{small}
+    \input{tables/width_ablation}
+    \end{small}
+\vskip -0.1in
+\end{table*}
+
+\subsection{Compression-Head Depth Ablation}
+\label{app:ch_qformer_layer_ablation}
+
+The depth ablation (Appendix~\ref{app:layer_ablation}) recovers each truncated checkpoint with a causal-LM finetune and then runs progressive cramming from a random per-sample initialization. Here we repeat the identical depth sweep but recover each checkpoint with a learned \emph{compression head} and seed progressive cramming from it (\texttt{compression\_head\_forward} initialization), as in the Q-Former recovery route of the width ablation (Appendix~\ref{app:width_ablation}). Starting from SmolLM2-1.7B we again keep only the first $N$ and last $N$ decoder layers for $N \in \{1, 2, 4, 8\}$ ($2N \in \{2, 4, 8, 16\}$ layers) plus the full 24-layer model, and for each depth we train a small Q-Former compression head (one query, three layers, eight heads) jointly with the unfrozen backbone on fineweb-edu for $5\mathrm{k}$ optimizer steps at sequence length $1024$ with an effective batch of ${\approx}256\mathrm{k}$ tokens per step (AdamW, cosine-with-min-lr schedule, peak learning rate $10^{-3}$, $500$ warmup steps, bf16; 8$\times$A100). At full depth we additionally train a simpler MLP head (a Linear--GELU--Linear network on the final prefix hidden state) as a head-architecture reference. Every progressive-cramming run then uses the same PG19 sample set, learning rate ($0.1$), and optimization budget as our main SmolLM2-1.7B run, so the only varying factors are network depth and head architecture.
+
+Table~\ref{tab:ch_qformer_layer_ablation} reports, for each depth, the achieved compressed-token count, information gain, trajectory length, and the number of principal components explaining 99\% of trajectory variance (PCA 99\%).
+% trend numbers taken from tables/ch_qformer_layer_ablation.tex
+Concretely, the mean number of perfectly reconstructed (compressed) tokens is $196$, $369.6$, $355.9$, $276.7$, and $207.3$ for the 2-, 4-, 8-, 16-, and 24-layer Q-Former variants, respectively---peaking at $4$ layers and then \emph{decreasing} as depth grows, so the full-depth model compresses fewer tokens than every shallower truncation except the 2-layer one. This inverts the trend of the causal-LM depth ablation (Appendix~\ref{app:layer_ablation}), whose compression capacity instead rises toward full depth, and the Q-Former's information gain and trajectory length likewise peak at intermediate depth. At full depth the simpler MLP head ($237.5$) modestly exceeds the Q-Former head ($207.3$), indicating that the extra capacity of the Q-Former is most useful when the backbone is shallow.
+
+\begin{table*}[t]
+    \centering
+    \caption{Compression-head depth ablation on SmolLM2-1.7B. The model is truncated to its first $N$ and last $N$ decoder layers ($2N$ layers total); each depth is recovered by training a Q-Former compression head and is evaluated with \texttt{compression\_head\_forward} initialization, with the simpler MLP head shown at full depth as a head-architecture reference. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
+    \label{tab:ch_qformer_layer_ablation}
+    \begin{small}
+    \input{tables/ch_qformer_layer_ablation}
+    \end{small}
+\vskip -0.1in
+\end{table*}
+
+% Q-Former single-vs-dual-model section commented out (qformer width experiments hidden):
+% \section{Single- vs Dual-Model Compression-Head Training}
+% \label{app:width_dualmodel_ablation}
+%
+% The Q-Former recovery route (Appendix~\ref{app:width_ablation}) trains a single model that both \emph{compresses} a prefix into the head's output embeddings and \emph{reconstructs} it from them, so the compression and reconstruction objectives share---and update---one set of weights. A natural question is whether decoupling the two helps: in the \emph{dual-model} variant we instantiate a separate compressor and reconstructor (\texttt{-{}-separate\_reconstructor\_model}), trained jointly but with disjoint parameters, so the reconstruction gradient never flows into the compressor and vice versa. We compare the single- and dual-model heads across the SmolLM2 width family (135M, 360M, and 1.7B; first-4 + last-4 = 8 layers, as in Appendix~\ref{app:width_ablation}). Both arms use the same Q-Former head (one query, three layers, eight heads), peak learning rate $10^{-3}$, distillation weights $\alpha=1.0$ / $\beta=0.0$, and fineweb-edu; the global batch is held at $256$ sequences. Each width trains at its own sequence length ($135\mathrm{M}@64$, $360\mathrm{M}@128$, $1.7\mathrm{B}@512$), the short-prefix regime in which a separate reconstruction signal is most plausibly useful, and we then seed progressive cramming from the head (\texttt{compression\_head\_forward}) under the standard PG19 / $\mathrm{lr}=0.1$ eval.
+%
+% Table~\ref{tab:width_dualmodel_ablation} reports both arms. Splitting the model into a separate compressor and reconstructor yields \emph{no} improvement in compression at any width: the mean number of perfectly reconstructed tokens is $54.2$ (single) vs.\ $50.3$ (dual) at 135M, $56.9$ vs.\ $56.0$ at 360M, and $335.4$ vs.\ $332.5$ at 1.7B---marginally \emph{lower} for the dual-model head in every case, and well within the per-run spread. The dual-model head also induces markedly shorter optimization trajectories and smaller information gain (e.g.\ $1703$ vs.\ $4321$ information gain at 1.7B) without translating that into more compressed tokens. We therefore retain the single-model head in the main text.
+%
+% \begin{table*}[t]
+%     \centering
+%     \caption{Single- vs dual-model compression-head training across the SmolLM2 width family (first-4 + last-4 = 8 layers; each width trained at its own sequence length $64$ / $128$ / $512$). The single-model head compresses and reconstructs with one set of weights; the dual-model head uses a separate compressor and reconstructor so their gradients never overlap. All rows are progressive-cramming evals (PG19, $\mathrm{lr}=0.1$) seeded from the head. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
+%     \label{tab:width_dualmodel_ablation}
+%     \begin{small}
+%     \input{tables/width_dualmodel_ablation}
+%     \end{small}
+% \vskip -0.1in
+% \end{table*}
+
+
+
+
+\subsection{Finetuning Sequence-Length Ablation}
+\label{app:finetune_seqlen_ablation}
+
+The causal-LM recovery route (Appendix~\ref{app:width_ablation}) finetunes each truncated checkpoint at sequence length $1024$. Here we ask whether that finetuning sequence length affects the compression measured afterward. Starting from the same SmolLM2-1.7B first-4 + last-4 checkpoint, we re-finetune it with everything held fixed except the training sequence length---$512$, $1024$ (the baseline), and $2048$---and, at the off-baseline lengths, also vary the peak learning rate ($\tfrac12\times$ and $1\times$ at $512$; $1\times$ and $2\times$ at $2048$) to check that any seq-length effect is not merely an LR artifact. To keep memory and the effective batch comparable, we hold the per-device token footprint and the $256$-sequence global batch constant across variants (per-device batch $=8192 / \text{seq\_len}$). Every finetuned checkpoint is then evaluated with the identical baseline progressive-cramming procedure (random per-sample initialization, PG19, $\mathrm{lr}=0.1$), exactly as the causal-LM rows of Table~\ref{tab:width_ablation}.
+
+Table~\ref{tab:finetune_seqlen_ablation} shows that the finetuning sequence length has no meaningful effect on compression. The mean number of perfectly reconstructed tokens is $414.1$ and $404.5$ at seq $512$ ($\mathrm{lr}\,5\times10^{-4}$ / $10^{-3}$), $428.6$ at the seq-$1024$ baseline, and $434.4$ and $390.7$ at seq $2048$ ($\mathrm{lr}\,10^{-3}$ / $2\times10^{-3}$)---every variant lands within ${\approx}38$ tokens of the baseline, well inside the per-run standard deviation (${\approx}60$--$77$). If anything the learning rate matters slightly more than the sequence length (the two seq-$2048$ rows, differing only in LR, bracket the baseline), but neither effect is statistically meaningful here. Compression capacity is thus insensitive to the finetuning sequence length over this $4\times$ range.
+
+\begin{table*}[t]
+    \centering
+    \caption{Finetuning sequence-length ablation on SmolLM2-1.7B (first-4 + last-4 = 8 layers). The same truncated checkpoint is re-finetuned on fineweb-edu at sequence lengths $512$ / $1024$ / $2048$ (and varying learning rate), holding the per-device token footprint and $256$-sequence global batch constant, then evaluated with baseline progressive cramming (PG19, $\mathrm{lr}=0.1$). The seq-$1024$ / $\mathrm{lr}\,10^{-3}$ row is the Table~\ref{tab:width_ablation} causal-LM baseline. ``Compressed Tokens'' is the achieved prefix length $n$, ``Trajectory Length'' is $L_{\text{traj}}$, and ``PCA 99\%'' is the number of principal components explaining 99\% of trajectory variance.}
+    \label{tab:finetune_seqlen_ablation}
+    \begin{small}
+    \input{tables/finetune_seqlen_ablation}
+    \end{small}
+\vskip -0.1in
+\end{table*}
+
 
