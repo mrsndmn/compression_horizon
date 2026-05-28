@@ -592,11 +592,14 @@ These trends are robust to the design choices detailed in the appendix: the same
 
 We introduced progressive cramming, which grows the reconstruction target token-by-token and enables controlled measurement of when embedding-based reconstruction succeeds or fails under a fixed optimization budget.
 Across model families, progressive trajectories are low-dimensional.
+This low dimensionality is a property of the warm-started optimization \emph{path} rather than of an intrinsically small solution set: embeddings optimized independently for the same prefix end up far apart and nearly orthogonal (Appendix~\ref{app:solution_diversity}).
 Causal attention-knockout interventions localize the downstream collapse to the compression embedding's interactions in the early layers, and show that the late layers carrying the most attention mass have little causal effect -- attention mass is a symptom rather than the cause of capability loss.
 Separately, we find that how much a single embedding can store is bounded by the frozen reconstructor itself: compression capacity rises monotonically with both retained model depth and width.
+Because the two axes partly substitute for one another, it is the reconstructor's architecture---not parameter count alone---that sets the compression ceiling, so compressibility can be improved by reshaping the model and not only by scaling it.
 Critically, downstream evaluation indicates that optimizing embeddings for reconstruction can coincide with large capability drops, even when the original prefix remains in context, so reconstruction accuracy alone is not a sufficient criterion for meaningful compression.
 
 Our study remains limited in scope: we use a small number of PG19 samples. Our causal interventions cover three model families---Llama-3.1-8B in the main text, with consistent results for Pythia-1.4B and SmolLM2-1.7B in Appendix~\ref{app:knockout_models}---but a single evaluation dataset.
+Encouragingly, our core compression findings already replicate on a second corpus: progressive cramming on Fanfics reproduces the same information-gain and low-dimensional-projection trends across four model families (Appendix~\ref{app:fanfics}).
 Future work should extend these interventions to larger and more diverse models and develop a \emph{fast} compressor that produces semantically meaningful compression embeddings.
 
 \section*{Impact Statement}
