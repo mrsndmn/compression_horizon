@@ -275,22 +275,23 @@ critical failure modes that emerge during autoregressive generation.
 \paragraph{The ``last 1\%'' problem.}
 While a 99\% reconstruction accuracy suggests near-perfect training performance,
 the remaining errors are not uniformly distributed nor benign.
-As shown in Table~\ref{tab:compression_reconstruction_summary}, reconstruction
-mismatches are almost entirely concentrated at the earliest token positions,
-specifically at indices 0 and 1.
-Even when mean teacher-forcing convergence exceeds 97--99\%, the probability of an
-incorrect prediction at the first or second token during inference approaches
-100\% across most model sizes and training variants.
+As shown in Table~\ref{tab:compression_reconstruction_summary}, under teacher
+forcing -- where each position is scored against the ground-truth prefix --
+reconstruction mismatches are concentrated at the earliest token positions
+(indices 0--1) and taper off within the first few positions.
+Even when mean teacher-forcing convergence exceeds 98--99\%, the probability of an
+incorrect prediction at the first or second token is high across model sizes and
+training variants, frequently approaching 100\% in the default setup.
 
 \paragraph{Early-token errors induce autoregressive collapse.}
-Errors at the earliest positions have a disproportionate impact under greedy
-decoding.
-Once the autoregressive process deviates at the first or second token, all
-subsequent tokens are generated conditioned on an incorrect prefix, leading to
-rapid and irreversible divergence.
-Consistently across all evaluated models, we observe that mean greedy convergence
-drops below 2\% whenever compression training fails to achieve perfect
-reconstruction.
+These early errors have a disproportionate impact under greedy autoregressive
+decoding. Once the process deviates at one of the first tokens, every subsequent
+token is generated from an already-incorrect prefix, leading to rapid and
+irreversible divergence. Table~\ref{tab:compression_reconstruction_summary} makes
+the contrast explicit: whereas the teacher-forced mismatch decays after the first
+positions, the greedy mismatch stays near 100\% across essentially the entire
+sequence, and mean greedy convergence collapses to near zero (below 4\%) whenever
+compression training fails to achieve perfect reconstruction.
 In practice, a single early mismatch nullifies the utility of the remaining
 correctly reconstructed tokens, despite high aggregate training accuracy.
 

@@ -356,12 +356,15 @@ Three takeaways stand out:
 
 \begin{table*}[t]
 \centering
-\caption{Compression reconstruction accuracy under non-ideal training convergence.
-We report mean teacher-forcing accuracy over all compressed samples, mean greedy
-decoding accuracy when generating autoregressively from the compression token,
-and the fraction of samples with a token mismatch at indices 0, 1, and 2.
-Variants include ignoring the BOS loss during training (no BOS) and upweighting
-the loss of the first two tokens by a factor of three (2 leading).}
+\caption{Compression reconstruction accuracy under non-ideal training convergence
+(50 PG19 samples per setting). ``Final conv.'' is mean teacher-forcing accuracy over
+all compressed samples; ``Greedy conv.'' is mean full-sequence match rate when
+generating autoregressively from the compression token. We then report the fraction
+of samples with a token mismatch at indices 0, 1, and 2 under two decoding regimes:
+greedy autoregressive decoding (errors compound) and teacher forcing (each position
+scored against the ground-truth prefix). Variants include ignoring the BOS loss during
+training (no BOS) and upweighting the loss of the first two tokens by a factor of
+three (2 leading).}
 \label{tab:compression_reconstruction_summary}
 \begin{small}
 \input{tables/manual/compression_reconstruction_summary}
@@ -373,7 +376,7 @@ the loss of the first two tokens by a factor of three (2 leading).}
 \section{Analysis of the Recostruction Accuracy}
 \label{app:I}
 
-As noted in Section~\ref{sec:prior_limitations}, a 99\% token-level accuracy threshold is insufficient to guarantee correct reconstruction when evaluation is performed without \emph{teacher forcing} (i.e., when generated tokens are fed back into the prefix rather than replacing them with the ground-truth tokens). Table~\ref{tab:compression_reconstruction_summary} shows that under non-progressive training, the remaining $\sim$1\% error is concentrated in the first few positions (indices 0-2); these early mistakes then compound, leading to divergent generations.
+As noted in Section~\ref{sec:prior_limitations}, a 99\% token-level accuracy threshold is insufficient to guarantee correct reconstruction when evaluation is performed without \emph{teacher forcing} (i.e., when generated tokens are fed back into the prefix rather than replacing them with the ground-truth tokens). Table~\ref{tab:compression_reconstruction_summary} shows that under non-progressive training, the teacher-forced error is concentrated in the first few positions (indices 0--1, tapering thereafter); under greedy decoding these early mistakes compound, keeping the per-position mismatch near 100\% for the rest of the sequence and leading to divergent generations.
 
 
 \section{Effect of Imperfect Reconstruction on HellaSwag and ARC}

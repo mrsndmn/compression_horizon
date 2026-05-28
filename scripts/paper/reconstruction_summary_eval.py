@@ -12,7 +12,7 @@ For each saved sample we:
         mismatch@0/1/2    - fraction of samples whose greedy prediction differs
                             from ground truth at position 0 / 1 / 2
 
-Output JSON is consumed by scripts/build_table_18.py.
+Output JSON is consumed by scripts/paper/tables/reconstruction_summary_table.py.
 """
 
 from __future__ import annotations
@@ -153,7 +153,7 @@ def _evaluate_one(
         "final_convergence": float(row.get("final_convergence", float("nan"))),
         "greedy_match_rate": greedy_match_rate,
         "tf_match_rate": float(tf_matches.float().mean().item()),
-        # `mismatch_at_position` stays = greedy (back-compat with build_table_18.py).
+        # `mismatch_at_position` stays = greedy (back-compat with reconstruction_summary_table.py).
         "mismatch_at_position": greedy_mismatch_at_position[: min(3, k_max)],
         "greedy_mismatch_at_position": greedy_mismatch_at_position,
         "tf_mismatch_at_position": tf_mismatch_at_position,
@@ -183,7 +183,7 @@ def _aggregate(per_sample: list[dict], num_mismatch_positions: int) -> dict:
     greedy_conv = (sum(greedy_vals) / len(greedy_vals)) if greedy_vals else None
     tf_conv = sum(r.get("tf_match_rate", float("nan")) for r in valid) / n
 
-    # Back-compat scalar fields consumed by build_table_18.py (greedy @0/1/2).
+    # Back-compat scalar fields consumed by reconstruction_summary_table.py (greedy @0/1/2).
     mismatch = {}
     for k in (0, 1, 2):
         miss = [r["greedy_mismatch_at_position"][k] for r in valid if len(r["greedy_mismatch_at_position"]) > k]

@@ -63,7 +63,7 @@ eval_one() {
   model_short=$(basename "$model")
   local run_dir="${ARTIFACTS}/${model_short}_${seq_len}_${setup}"
 
-  python scripts/eval_table_18.py \
+  python scripts/paper/reconstruction_summary_eval.py \
     --compressed_prefixes_path "${run_dir}/compressed_prefixes" \
     --model_checkpoint "$model" \
     --dtype bfloat16
@@ -80,5 +80,5 @@ for entry in "${MODELS[@]}"; do
 done
 
 echo "==== BUILD TABLE ===="
-python scripts/build_table_18.py --artifacts_dir "$ARTIFACTS" --format both \
-  --output "${ARTIFACTS}/table_18.md"
+python scripts/paper/tables/reconstruction_summary_table.py --artifacts_dir "$ARTIFACTS" --format both \
+  --output "${ARTIFACTS}/reconstruction_summary.md"
