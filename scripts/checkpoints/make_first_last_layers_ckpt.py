@@ -109,6 +109,16 @@ def build_truncated(model_checkpoint: str, n: int, dtype: torch.dtype, keep_mode
     reindex_layers(kept)
     set_decoder_layers(model, kept)
     model.config.num_hidden_layers = len(kept)
+
+    # Some architectures (SmolLM3, Qwen3, ...) carry per-layer config lists of length
+    # num_hidden_layers -- e.g. ``layer_types`` (full/sliding attention) and SmolLM3's
+    # ``no_rope_layers`` -- which recent HF strictly validates against num_hidden_layers.
+    # Slice every such list down to the kept original indices so the truncated config stays
+    # self-consistent and reloadable. (SmolLM2/Llama have no such lists -> no-op.)
+    for attr, val in model.config.to_dict().items():
+        if isinstance(val, list) and len(val) == num_layers:
+            setattr(model.config, attr, [val[i] for i in keep])
+            print(f"    sliced config.{attr}: {num_layers} -> {len(keep)}")
     return model, num_layers, keep
 
 

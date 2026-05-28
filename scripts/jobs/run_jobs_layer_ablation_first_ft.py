@@ -37,9 +37,13 @@ BASE_IMAGE = "cr.ai.cloud.ru/aicloud-base-images/py3.12-torch2.7.0:0.0.41"
 JOB_DESC_PREFIX = "CH: layer-ablation-first-ft"
 
 # Finetuned first-only checkpoints (produced by run_jobs_finetune_first.py; -ftw suffix).
-LAYER_ABLATION_FIRST_FT_CHECKPOINTS = [f"artifacts/checkpoints/SmolLM2-1.7B-first{n}-ftw" for n in (1, 2, 4, 8)] + [
-    f"artifacts/checkpoints/Meta-Llama-3.1-8B-first{n}-ftw" for n in (1, 2, 4, 8)
-]
+LAYER_ABLATION_FIRST_FT_CHECKPOINTS = (
+    [f"artifacts/checkpoints/SmolLM2-1.7B-first{n}-ftw" for n in (1, 2, 4, 8)]
+    + [f"artifacts/checkpoints/Meta-Llama-3.1-8B-first{n}-ftw" for n in (1, 2, 4, 8)]
+    + [f"artifacts/checkpoints/SmolLM3-3B-first{n}-ftw" for n in (1, 2, 4, 8)]
+    + [f"artifacts/checkpoints/Qwen3-4B-first{n}-ftw" for n in (1, 2, 4, 8)]
+    + [f"artifacts/checkpoints/Qwen3-8B-first{n}-ftw" for n in (1, 2, 4, 8)]
+)
 
 # Baseline progressive variant only (matches the rest of the depth ablation + main matrix).
 EXPERIMENTS = [
@@ -75,6 +79,18 @@ ROW_LABELS = [
     "Llama-3.1-8B, first 2 layers (finetuned)",
     "Llama-3.1-8B, first 4 layers (finetuned)",
     "Llama-3.1-8B, first 8 layers (finetuned)",
+    "SmolLM3-3B, first 1 layer (finetuned)",
+    "SmolLM3-3B, first 2 layers (finetuned)",
+    "SmolLM3-3B, first 4 layers (finetuned)",
+    "SmolLM3-3B, first 8 layers (finetuned)",
+    "Qwen3-4B, first 1 layer (finetuned)",
+    "Qwen3-4B, first 2 layers (finetuned)",
+    "Qwen3-4B, first 4 layers (finetuned)",
+    "Qwen3-4B, first 8 layers (finetuned)",
+    "Qwen3-8B, first 1 layer (finetuned)",
+    "Qwen3-8B, first 2 layers (finetuned)",
+    "Qwen3-8B, first 4 layers (finetuned)",
+    "Qwen3-8B, first 8 layers (finetuned)",
 ]
 
 

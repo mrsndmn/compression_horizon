@@ -14,13 +14,22 @@ Each ``…-first{N}`` checkpoint is finetuned with the shared width/compression-
 with the firstlast rows in ``tab:layer_ablation``. The finetuned checkpoint is
 written as ``<checkpoint>-ftw`` and re-evaluated by run_jobs_layer_ablation_first_ft.py.
 
+Llama exception (scaled recovery): the 8B truncations recover a much smaller fraction
+of their cramming ceiling than SmolLM2 under the shared 5k-step/3M-doc recipe, so the
+Llama specs override the budget to 15k steps / 9M docs at lr 3e-4 / warmup 1000 (3x
+steps + 3x data), still at the same 256-seq (~256k-token) global batch. SmolLM2 keeps
+the 5k/3M recipe. The previous 5k/3M Llama -ftw checkpoints + their PG19 evals were
+archived under ``artifacts/**/_archive_ftw_5k3M/`` so the rerun gets a clean ``-ftw``.
+
 Per-model knobs (one ``FINETUNE_SPECS`` entry per checkpoint):
   * cache_key -- the packed fineweb-edu dataset differs by tokenizer (SmolLM2 vs
-    Llama 128k vocab); each reuses the cache already built for its firstlast runs.
+    Llama 128k vocab); the packed-cache hash also includes limit_docs, so the scaled
+    Llama 9M cache is a fresh dir (the 3M caches are untouched).
   * The 8B-derived Llama models run under plain DDP (configs/accelerate.yaml is
-    MULTI_GPU, no sharding), so they use per_device 2 x grad_accum 16 (=256 seqs/step,
-    recipe-identical), gradient_checkpointing, and no torch.compile -- conservative
-    so the larger jobs don't OOM. SmolLM2-1.7B keeps the standard per_device 8.
+    MULTI_GPU, no sharding) on a100.8gpu, so they use per_device 2 x grad_accum 16
+    (=256 seqs/step, global batch unchanged), gradient_checkpointing, and no
+    torch.compile -- conservative so the larger jobs don't OOM. SmolLM2-1.7B keeps the
+    standard per_device 8 on a100.4gpu.
 
 The submit helpers are factored out so watch_finetune_first.py can resubmit a
 failed job. Both packed caches already exist; ``--prebuild-only`` rebuilds any
@@ -48,6 +57,9 @@ DATASET_NAME = "HuggingFaceFW/fineweb-edu"
 CACHE_BASE = {
     "SmolLM2-1.7B": "HuggingFaceTB/SmolLM2-1.7B",
     "Meta-Llama-3.1-8B": "unsloth/Meta-Llama-3.1-8B",
+    "SmolLM3-3B": "HuggingFaceTB/SmolLM3-3B",
+    "Qwen3-4B": "Qwen/Qwen3-4B",
+    "Qwen3-8B": "Qwen/Qwen3-8B",
 }
 
 # Per-model knob bundles merged over DEFAULTS for each checkpoint.
@@ -68,12 +80,45 @@ _LLAMA = {
     # batch are unchanged.
     "learning_rate": 0.0003,
     "warmup_steps": 1000,
+    # Scaled recovery budget (Llama only). The 8B truncations recover a much smaller
+    # fraction of their cramming ceiling than SmolLM2 under the shared 5k-step/3M-doc
+    # recipe, so we give them 3x the steps and 3x the data and run on a100.8gpu
+    # (per_device 2 x grad_accum 16) while KEEPING the 256-seq (~256k-token) global
+    # batch. SmolLM2 stays on DEFAULTS (5k/3M/4gpu). Outputs still land at
+    # ``<ckpt>-ftw``; the previous 5k/3M Llama -ftw checkpoints+evals were archived
+    # under ``artifacts/**/_archive_ftw_5k3M/`` to free the name.
+    "num_gpus": 8,
+    "max_steps": 15000,
+    "limit_dataset_items": 9000000,
 }
 
+# Model-family size sweep added at the standard 5k-step budget: SmolLM3-3B, Qwen3-4B,
+# Qwen3-8B (all 36-layer decoders). They use the gentler lr 3e-4 / warmup 1000 recipe
+# (the one the 8B Llama needed) applied uniformly so the larger members don't hit the
+# 1e-3 warmup spike, on a100.4gpu (per_device 4 x grad_accum 16 = 256-seq global batch,
+# gradient_checkpointing, no torch.compile -- conservative for the bigger-vocab models and
+# keeps them OFF the 8-GPU slot so they run parallel to the Llama rescale). Steps/data come
+# from DEFAULTS (5k / 3M docs); each family's tokenizer gets its own packed cache.
+_NEW_5K = {
+    "per_device_train_batch_size": 4,
+    "gradient_checkpointing": True,
+    "no_torch_compile": True,
+    "learning_rate": 0.0003,
+    "warmup_steps": 1000,
+    "num_gpus": 4,
+}
+_SMOL3 = {**_NEW_5K, "cache_key": "SmolLM3-3B"}
+_QWEN3_4B = {**_NEW_5K, "cache_key": "Qwen3-4B"}
+_QWEN3_8B = {**_NEW_5K, "cache_key": "Qwen3-8B"}
+
 # First-only depth-ablated checkpoints to finetune (keep first N layers; N total).
-FINETUNE_SPECS = [{"checkpoint": f"artifacts/checkpoints/SmolLM2-1.7B-first{n}", **_SMOL} for n in (1, 2, 4, 8)] + [
-    {"checkpoint": f"artifacts/checkpoints/Meta-Llama-3.1-8B-first{n}", **_LLAMA} for n in (1, 2, 4, 8)
-]
+FINETUNE_SPECS = (
+    [{"checkpoint": f"artifacts/checkpoints/SmolLM2-1.7B-first{n}", **_SMOL} for n in (1, 2, 4, 8)]
+    + [{"checkpoint": f"artifacts/checkpoints/Meta-Llama-3.1-8B-first{n}", **_LLAMA} for n in (1, 2, 4, 8)]
+    + [{"checkpoint": f"artifacts/checkpoints/SmolLM3-3B-first{n}", **_SMOL3} for n in (1, 2, 4, 8)]
+    + [{"checkpoint": f"artifacts/checkpoints/Qwen3-4B-first{n}", **_QWEN3_4B} for n in (1, 2, 4, 8)]
+    + [{"checkpoint": f"artifacts/checkpoints/Qwen3-8B-first{n}", **_QWEN3_8B} for n in (1, 2, 4, 8)]
+)
 
 # Shared -ftw recipe; per-checkpoint specs override cache_key + the memory knobs.
 DEFAULTS = {
@@ -166,30 +211,41 @@ def build_payload(spec: dict, extra_options: dict, num_gpus: int, max_steps: int
     return payload, model_short, out_dir
 
 
-def prebuild_dataset_caches(opts: dict | None = None) -> None:
-    """Pre-build each distinct packed fineweb-edu cache on the login node (tokenizer-only, CPU).
+def prebuild_dataset_caches(specs: list[dict] | None = None, num_proc: int = 8) -> None:
+    """Pre-build each DISTINCT packed fineweb-edu cache used by ``specs`` (login node, CPU).
 
-    No-op for caches that already exist. Needs ``PYTHONPATH=./src`` (set by the watcher;
-    pass it manually for ``--prebuild-only``).
+    Distinct = ``(cache_key, limit_docs, seq_len)``. The packed-cache hash includes
+    ``limit_docs``, so SmolLM2 (3M docs) and the scaled Llama recovery (9M docs) resolve to
+    separate ``packed_<hash>`` dirs and never collide. No-op for caches that already exist.
+    Needs ``PYTHONPATH=./src`` (set by the watcher; pass it manually for ``--prebuild-only``).
     """
-    opts = opts or DEFAULTS
+    specs = specs if specs is not None else FINETUNE_SPECS
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
     from finetune_causal_lm import DEFAULT_CACHE_DIR, build_packed_dataset
     from transformers import AutoTokenizer
 
-    for cache_key in sorted({s["cache_key"] for s in FINETUNE_SPECS}):
-        base = CACHE_BASE[cache_key]
-        print(f"Prebuilding packed dataset cache (cache_key={cache_key}, base={base}) ...")
+    seen: set[tuple] = set()
+    for spec in specs:
+        o = opts_for(spec)
+        key = (o["cache_key"], o["limit_dataset_items"], o["max_sequence_length"])
+        if key in seen:
+            continue
+        seen.add(key)
+        base = CACHE_BASE[o["cache_key"]]
+        print(
+            f"Prebuilding packed dataset cache (cache_key={o['cache_key']}, base={base}, "
+            f"limit_docs={o['limit_dataset_items']}, seq_len={o['max_sequence_length']}) ..."
+        )
         tok = AutoTokenizer.from_pretrained(base)
         build_packed_dataset(
             dataset_name=DATASET_NAME,
             split="train",
             tokenizer=tok,
-            seq_len=opts["max_sequence_length"],
-            limit_docs=opts["limit_dataset_items"],
+            seq_len=o["max_sequence_length"],
+            limit_docs=o["limit_dataset_items"],
             cache_dir=DEFAULT_CACHE_DIR,
-            cache_key=cache_key,
-            num_proc=8,
+            cache_key=o["cache_key"],
+            num_proc=num_proc,
         )
 
 
@@ -230,12 +286,28 @@ def main():
     parser = argparse.ArgumentParser(description="Launch 8-GPU causal-LM finetuning for first-only truncated checkpoints.")
     parser.add_argument("--dry", action="store_true", help="Only print generated scripts, do not launch jobs.")
     parser.add_argument("--force", action="store_true", help="Resubmit even if the -ftw checkpoint dir exists.")
-    parser.add_argument("--num_gpus", type=int, default=DEFAULTS["num_gpus"])
-    parser.add_argument("--max_steps", type=int, default=DEFAULTS["max_steps"])
+    parser.add_argument(
+        "--num_gpus",
+        type=int,
+        default=None,
+        help="Override num_gpus for ALL jobs (default: per-spec, e.g. Llama=8, else DEFAULTS=4).",
+    )
+    parser.add_argument(
+        "--max_steps",
+        type=int,
+        default=None,
+        help="Override max_steps for ALL jobs (default: per-spec, e.g. Llama=15000, else DEFAULTS=5000).",
+    )
     parser.add_argument(
         "--prebuild-only",
         action="store_true",
         help="Only build the shared packed-dataset caches on the login node, then exit (no job submission).",
+    )
+    parser.add_argument(
+        "--prebuild-num-proc",
+        type=int,
+        default=8,
+        help="Worker processes for the packed-dataset tokenize/pack map during --prebuild-only (default 8).",
     )
     parser.add_argument(
         "--checkpoint",
@@ -245,14 +317,14 @@ def main():
     )
     args = parser.parse_args()
 
-    if args.prebuild_only:
-        prebuild_dataset_caches()
-        return
-
     specs = FINETUNE_SPECS
     if args.checkpoint:
         wanted = set(args.checkpoint)
         specs = [s for s in FINETUNE_SPECS if s["checkpoint"] in wanted]
+
+    if args.prebuild_only:
+        prebuild_dataset_caches(specs, num_proc=args.prebuild_num_proc)
+        return
 
     client, extra_options = make_client()
     in_progress_descs = {job.get("job_desc", "") for job in get_in_progress_jobs()}

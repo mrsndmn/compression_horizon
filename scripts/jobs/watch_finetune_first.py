@@ -29,6 +29,8 @@ Usage:
     python scripts/jobs/watch_finetune_first.py --plan            # print states, don't wait
     python scripts/jobs/watch_finetune_first.py --submit-train    # prebuild + submit + watch + eval
     python scripts/jobs/watch_finetune_first.py --max-retries 2 --poll 180
+    # Scaled Llama-only rerun on a100.8gpu (submit one finetune at a time, in priority order):
+    python scripts/jobs/watch_finetune_first.py --submit-train --only Llama --train-concurrency 1
 """
 
 from __future__ import annotations
@@ -149,11 +151,21 @@ def _ensure_client():
 
 
 # --------------------------------------------------------------------------- #
-def build_targets() -> list[dict]:
-    """One entry per first-only checkpoint (finetuned-only arm)."""
+def build_targets(only: str | None = None, skip: list[str] | None = None) -> list[dict]:
+    """One entry per first-only checkpoint (finetuned-only arm).
+
+    ``only`` (optional substring, e.g. ``Llama``) restricts to matching checkpoints, so a
+    scaled rerun can target one family without touching the others' (done) outputs. ``skip``
+    (optional list of substrings, e.g. ``["first8"]``) drops matching checkpoints. Spec
+    order is preserved and used as the training-submission priority order.
+    """
     targets: list[dict] = []
     for spec in FT.FINETUNE_SPECS:
         ck = spec["checkpoint"]
+        if only and only not in ck:
+            continue
+        if skip and any(s in ck for s in skip):
+            continue
         ft = FT.finetuned_dir(ck)
         exp = next((e for e in EV.EXPERIMENTS if e["model_checkpoint"] == ft), None)
         if exp is None:
@@ -163,6 +175,7 @@ def build_targets() -> list[dict]:
         targets.append(
             {
                 "label": os.path.basename(ck),
+                "spec": spec,
                 "checkpoint": ck,
                 "train_out": ft,
                 "train_desc": FT.job_desc_for(os.path.basename(ck)),
@@ -177,19 +190,24 @@ def build_targets() -> list[dict]:
 def classify(target: dict, jobs: list[dict]) -> tuple[str, str | None]:
     """Return (state, relevant_job_name). States:
     eval_done | eval_running | eval_failed | train_ready | train_running | train_failed | train_pending
+
+    Eval state is only meaningful once a trained checkpoint exists, so the eval-job checks
+    are gated on ``model_saved``. Otherwise a *stale* eval job from a previous run (same
+    job_desc, e.g. after archiving the old ``-ftw`` to force a rerun) would be misread as
+    ``eval_failed`` and the target would never be retrained.
     """
     if eval_has_output(target["eval_out"]):
         return "eval_done", None
 
-    ename, estatus = status_for_desc(target["eval_desc"], jobs)
-    if ename and estatus in ACTIVE:
-        return "eval_running", ename
-    if ename and estatus in FINAL_FAILED:
-        return "eval_failed", ename
-
     if model_saved(target["train_out"]):
+        ename, estatus = status_for_desc(target["eval_desc"], jobs)
+        if ename and estatus in ACTIVE:
+            return "eval_running", ename
+        if ename and estatus in FINAL_FAILED:
+            return "eval_failed", ename
         return "train_ready", None
 
+    # No saved checkpoint yet -> training territory; ignore any stale eval job.
     tname, tstatus = status_for_desc(target["train_desc"], jobs)
     if tname and tstatus in ACTIVE:
         return "train_running", tname
@@ -218,22 +236,41 @@ def submit_eval(target: dict, force: bool = False) -> None:
     log(f"  WARN: eval for {target['label']} not submitted after retries")
 
 
-def submit_training() -> None:
-    """Pre-build the shared packed-dataset caches (once) then submit the finetune jobs."""
-    log("submit-train: prebuilding shared packed-dataset caches (login node, one-time; no-op if present) ...")
+def prebuild_caches() -> None:
+    """Pre-build the packed-dataset caches on the login node (one-time; no-op if present)."""
+    log("submit-train: prebuilding packed-dataset caches (login node, one-time; no-op if present) ...")
     cp = subprocess.run([PYTHON, FT_LAUNCHER, "--prebuild-only"], env=_env(), cwd=PROJ)
     if cp.returncode != 0:
         log(f"  WARN: dataset prebuild returned {cp.returncode}; finetune jobs may race the cache build")
     else:
         log("  dataset caches ready")
 
-    log("submit-train: submitting missing causal-LM finetune jobs")
+
+def submit_all_training() -> None:
+    """Submit every missing finetune job at once (legacy, unthrottled)."""
+    log("submit-train: submitting missing causal-LM finetune jobs (unthrottled)")
     cp = subprocess.run([PYTHON, FT_LAUNCHER], capture_output=True, text=True, env=_env(), cwd=PROJ)
     for line in (cp.stdout or "").splitlines():
         if any(k in line for k in ("job_name", "Would launch", "exists, skip", "already in queue")):
             log(f"  finetune: {line.strip()}")
     if cp.returncode != 0:
         log(f"  WARN: finetune submit returned {cp.returncode}: {(cp.stderr or '').strip()[-200:]}")
+
+
+def submit_one_training(target: dict) -> bool:
+    """Submit ONE target's finetune job (per-spec budget, e.g. Llama 8gpu/15k/9M).
+
+    Returns True if a job was launched. ``FT.submit_experiment`` is idempotent: it skips
+    when the ``-ftw`` dir already exists or the source checkpoint is missing (returns None).
+    """
+    client, extra = _ensure_client()
+    result = FT.submit_experiment(target["spec"], client, extra, None, None, dry=False)
+    name = (result or {}).get("job_name")
+    if name:
+        log(f"  submitted TRAINING for {target['label']} -> {name}")
+        return True
+    log(f"  training submit for {target['label']} returned no job (dir exists / source missing?)")
+    return False
 
 
 def write_done(targets: list[dict], states: dict[str, str], status: str) -> None:
@@ -270,9 +307,28 @@ def main() -> int:
     )
     parser.add_argument("--plan", action="store_true", help="Print current target states once and exit.")
     parser.add_argument("--submit-train", action="store_true", help="Prebuild caches + submit finetune jobs at startup.")
+    parser.add_argument(
+        "--only",
+        default=None,
+        help="Restrict to checkpoints whose path contains this substring (e.g. 'Llama'). Default: all.",
+    )
+    parser.add_argument(
+        "--skip",
+        action="append",
+        default=None,
+        help="Drop checkpoints whose path contains this substring (repeatable), e.g. --skip first8.",
+    )
+    parser.add_argument(
+        "--train-concurrency",
+        type=int,
+        default=0,
+        help="Max finetune jobs in flight at once. 0 (default) = submit all at startup (legacy). "
+        "Set 1 for the a100.8gpu Llama rerun (cluster runs ~1 eight-GPU job at a time); the watcher "
+        "then submits the next, in spec/priority order, only as a slot frees.",
+    )
     args = parser.parse_args()
 
-    targets = build_targets()
+    targets = build_targets(args.only, args.skip)
 
     if args.plan:
         jobs = mls_list()
@@ -292,13 +348,21 @@ def main() -> int:
     for r in EV.REFERENCE_OUT_DIRS:
         if not eval_has_output(r):
             log(f"  NOTE: reference row has no data yet: {r}")
+    throttled = args.train_concurrency and args.train_concurrency > 0
     if args.submit_train:
-        submit_training()
+        prebuild_caches()
+        if not throttled:
+            submit_all_training()
+        else:
+            log(
+                f"submit-train: throttled mode -- will submit finetunes lazily, {args.train_concurrency} in flight (priority order)"
+            )
 
     eval_attempts: dict[str, int] = {t["label"]: 0 for t in targets}
     pending_polls: dict[str, int] = {t["label"]: 0 for t in targets}
     gave_up: set[str] = set()
     seen_train_failed: set[str] = set()
+    train_submitted: set[str] = set()
 
     while True:
         jobs = mls_list()
@@ -336,16 +400,42 @@ def main() -> int:
                     p = save_logs(name)
                     log(f"{label}: TRAINING failed (job={name}); logs -> {os.path.relpath(p, PROJ)}")
             elif state == "train_pending":
-                pending_polls[label] += 1
-                log(
-                    f"{label}: no training job/checkpoint yet "
-                    f"({pending_polls[label]}/{args.max_pending_polls} grace polls; "
-                    f"submit training or use --submit-train)"
-                )
-                if pending_polls[label] > args.max_pending_polls:
-                    log(f"{label}: still no training after grace window; giving up")
-                    gave_up.add(label)
-                    states[label] = "gaveup"
+                if throttled and label not in train_submitted:
+                    # Waiting its turn under the concurrency cap -- not submitted yet, so the
+                    # "no training job" grace window must not count against it.
+                    log(f"{label}: queued (waiting for a training slot)")
+                else:
+                    pending_polls[label] += 1
+                    log(
+                        f"{label}: no training job/checkpoint yet "
+                        f"({pending_polls[label]}/{args.max_pending_polls} grace polls; "
+                        f"submit training or use --submit-train)"
+                    )
+                    if pending_polls[label] > args.max_pending_polls:
+                        log(f"{label}: still no training after grace window; giving up")
+                        gave_up.add(label)
+                        states[label] = "gaveup"
+
+        if throttled:
+            # Lazily submit finetunes in spec/priority order, holding <=N in flight (8-GPU
+            # capacity = ~1 job at a time). A target counts as in flight while it is pending
+            # (submitted, scheduler lag) or running; it frees its slot once trained (->eval).
+            inflight = sum(
+                1
+                for t in targets
+                if t["label"] in train_submitted and states.get(t["label"]) in ("train_pending", "train_running")
+            )
+            for t in targets:
+                if inflight >= args.train_concurrency:
+                    break
+                label = t["label"]
+                if label in train_submitted or label in gave_up:
+                    continue
+                if states.get(label) != "train_pending":
+                    continue  # already trained / evaluating / done
+                if submit_one_training(t):
+                    train_submitted.add(label)
+                    inflight += 1
 
         n_done = sum(1 for s in states.values() if s == "eval_done")
         log("  states: " + ", ".join(f"{t['label']}={states[t['label']]}" for t in targets))
