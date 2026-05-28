@@ -282,7 +282,25 @@ def main() -> None:
         dest="zoom_seconds",
         type=float,
         default=1.5,
-        help="Duration (s) of the smooth camera zoom transition.",
+        help="Duration (s) of the smooth camera zoom transition. Ignored if --zoom-to is set.",
+    )
+    ap.add_argument(
+        "--zoom-from",
+        "--zoom_from",
+        dest="zoom_from",
+        type=int,
+        default=-1,
+        help="Cursor token at which the zoom transition BEGINS (default: zoom_start). "
+        "Lets the camera start moving before the framed region is reached.",
+    )
+    ap.add_argument(
+        "--zoom-to",
+        "--zoom_to",
+        dest="zoom_to",
+        type=int,
+        default=-1,
+        help="Cursor token at which the zoom transition COMPLETES. If set, the zoom span runs "
+        "from token --zoom-from to token --zoom-to (overrides --zoom-seconds).",
     )
     ap.add_argument(
         "--no-progress",
@@ -320,6 +338,14 @@ def main() -> None:
     if zoom_start < 0 or zoom_start >= n_traj:
         raise ValueError(f"--zoom-start out of range: {zoom_start} (valid: 0..{n_traj - 1})")
     zoom_enabled = zoom_start > 0
+    # Schedule tokens: the camera begins moving at zoom_from and (optionally) finishes at zoom_to,
+    # independent of which region (tokens [zoom_start:]) it frames.
+    zoom_from = int(args.zoom_from) if int(args.zoom_from) >= 0 else zoom_start
+    zoom_to = int(args.zoom_to)
+    if zoom_enabled and not (0 <= zoom_from < n_traj):
+        raise ValueError(f"--zoom-from out of range: {zoom_from} (valid: 0..{n_traj - 1})")
+    if zoom_to >= 0 and not (zoom_from < zoom_to < n_traj):
+        raise ValueError(f"--zoom-to must satisfy zoom_from({zoom_from}) < zoom_to < {n_traj}; got {zoom_to}")
 
     explained = npz["explained_variance_ratio"].astype(np.float64)
     ev_cum_2 = float(explained[0] + explained[1])
@@ -556,12 +582,18 @@ def main() -> None:
             path_effects=[withStroke(linewidth=2.6, foreground="black")],
         )
 
-    # Smooth camera-zoom schedule: start easing when the cursor reaches token zoom_start.
+    # Smooth camera-zoom schedule: start easing when the cursor reaches token zoom_from, and
+    # either run for zoom_seconds or finish exactly when the cursor reaches token zoom_to.
     heads = reveal_counts - 1
     if zoom_enabled:
-        reached = np.where(heads >= zoom_start)[0]
+        reached = np.where(heads >= zoom_from)[0]
         f_zoom_start = int(reached[0]) if reached.size else total_frames
-        zoom_span = max(int(round(args.zoom_seconds * args.fps)), 1)
+        if zoom_to >= 0:
+            reached_end = np.where(heads >= zoom_to)[0]
+            f_zoom_end = int(reached_end[0]) if reached_end.size else total_frames
+            zoom_span = max(f_zoom_end - f_zoom_start, 1)
+        else:
+            zoom_span = max(int(round(args.zoom_seconds * args.fps)), 1)
     else:
         f_zoom_start = total_frames
         zoom_span = 1
