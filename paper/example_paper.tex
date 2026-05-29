@@ -384,11 +384,11 @@ To confirm that our findings are not specific to a single corpus, we replicate t
 
 Table~\ref{tab:full_vs_progressive} compares progressive cramming (targeting 100\% reconstruction) to ``full'' cramming baselines that use fixed token budgets and may terminate below perfect accuracy.
 Because autoregressive decoding is brittle to early errors (Section~\ref{sec:prior_limitations}), we interpret this comparison primarily through the lens of \emph{perfect} reconstruction: progressive cramming trades a fixed-budget constraint for a fixed-accuracy constraint.
-In the default setting, progressive cramming underperforms full cramming in both information gain and reconstructed length for most models (e.g., Llama-3.1-8B), though Pythia-1.4B surpasses the fixed-budget full baseline on both metrics. Crucially, however, progressive cramming guarantees perfect reconstruction under autoregressive generation, whereas full cramming, which may stop below 100\% accuracy, does not.
+In the default setting, progressive cramming sightly underperforms full cramming in reconstructed length. Crucially, however, progressive cramming guarantees perfect reconstruction under autoregressive generation, whereas full cramming, does not.
 
 \begin{table}[]
     \centering
-    \caption{Full vs. progressive cramming on PG19 (mean $\pm$ std over samples). ``Full'' cramming uses a fixed token budget and may stop below perfect reconstruction \cite{kuratov2025cramming}; progressive cramming fixes reconstruction at 100\% and reports the achieved token count.}
+    \caption{Full vs. progressive cramming on PG19 (mean $\pm$ std over samples). ``Full'' cramming \cite{kuratov2025cramming} uses a fixed token budget and may stop below perfect Teacher Forcing (TF) reconstruction; progressive cramming fixes reconstruction at 100\% and guarantees perfect reconstruction under autoregressive greedy generation.}
     \label{tab:full_vs_progressive}
 
     \begin{small}

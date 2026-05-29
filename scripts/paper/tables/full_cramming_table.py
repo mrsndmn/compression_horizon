@@ -50,6 +50,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="If set, write the rendered table to <save-dir>/<slug>.tex (slug derived from --type).",
     )
+    parser.add_argument(
+        "--greedy-precision",
+        type=int,
+        default=2,
+        help="Decimal places for the greedy-accuracy percent column (default 2).",
+    )
     return parser.parse_args()
 
 
@@ -69,10 +75,9 @@ def main() -> None:
             # # {"train": "full", "id": "7359e14b"},  # 512
             # {"train": "full", "id": "ef2ea924"},  # 1024
             # {"train": "progr", "id": "sl_4096_Llama-3.2-3B_lr_0.1"},
-            # Llama-3.1-8B
-            # {"train": "full", "id": "dfbe32b8"},  # 1024
-            {"train": "full", "id": "b5aef07e"},  # 1568
-            {"train": "progr", "id": "sl_4096_Meta-Llama-3.1-8B_lr_0.1"},
+            # Llama-3.1-8B (50-sample re-run, lr matches progressive)
+            {"train": "full", "id": "eae01b69"},  # 1568, lr 0.1
+            {"train": "progr", "id": "sl_4096_Meta-Llama-3.1-8B_ds_pg19_1k_limit_50_lr_0.1"},
             # Pythia 160M
             # {"train": "full", "id": "dbced9cc"},  # 32
             # # {"train": "full", "id": "6a93af63"},  # 64
@@ -81,10 +86,10 @@ def main() -> None:
             # # {"train": "full", "id": "328bdbfb"},  # 96
             # {"train": "full", "id": "22d7b7db"},  # 128
             # {"train": "progr", "id": "sl_4096_pythia-410m_lr_0.5"},
-            # Pythia 1.4B
-            # {"train": "full", "id": "f3296f56"},  # 160
-            {"train": "full", "id": "a1e58eb5"},  # 256
-            {"train": "progr", "id": "sl_4096_pythia-1.4b_lr_0.5"},
+            # Pythia 1.4B (50-sample re-run, lr matches progressive)
+            # 256-token Full row intentionally omitted from the main body (kept in the appendix).
+            {"train": "full", "id": "eabb5144"},  # 512, lr 0.5
+            {"train": "progr", "id": "sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5"},
         ]
     elif args.type == "full_cramming_apendix":
         cache_filename = "full_cramming_table_cache.json"
@@ -167,10 +172,29 @@ def main() -> None:
             {"train": "prefix", "id": "pt_sl_16384_pythia-1.4b"},
         ]
 
+    # The full-cramming tables (main + appendix) report teacher-forcing accuracy
+    # in percent; the prefix-tuning variant keeps the [0, 1] portion.
+    accuracy_in_percent = args.type in ("full_cramming", "full_cramming_apendix")
+
+    def format_pct_cell(mean_frac, std_frac, precision: int = 2) -> str:
+        """Fixed-decimal percent cell (no trailing-zero stripping), from a [0, 1] fraction."""
+        if mean_frac is None:
+            return ""
+        mean_str = f"{mean_frac * 100:.{precision}f}"
+        if std_frac is None:
+            return mean_str
+        std_str = f"{std_frac * 100:.{precision}f}"
+        if args.tablefmt == "latex":
+            return f"{mean_str} {{\\small $\\pm$ {std_str}}}"
+        return f"{mean_str} ± {std_str}"
+
     if args.type == "prefix_tuning":
         columns = ["Experiment", "Type", "Tokens", "Accuracy"]
     else:
-        columns = ["Type", "Tokens", "Info Gain", "Accuracy"]
+        # TF / Greedy are grouped under a single "Accuracy (\%)" multicolumn header
+        # (injected below) to keep the single-column main-body table within width.
+        tf_header = "TF" if accuracy_in_percent else "Accuracy"
+        columns = ["Type", "Tokens", tf_header, "Greedy"]
 
     def format_experiment_label(summary, fallback_label: str) -> str:
         parts = []
@@ -228,7 +252,20 @@ def main() -> None:
         with open(cache_path, "w", encoding="utf-8") as cache_file:
             json.dump(payload, cache_file)
 
+    def load_greedy_cache(run_dir: str) -> tuple[float | None, float | None] | None:
+        """Read greedy_accuracy_cache.json (written by scripts/greedy_reconstruction_eval.py)."""
+        cache_path = os.path.join(run_dir, "greedy_accuracy_cache.json")
+        if not os.path.isfile(cache_path):
+            return None
+        try:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return None
+        return payload.get("greedy_match_mean"), payload.get("greedy_match_std")
+
     ordered_summaries = []
+    ordered_dirs = []
     for experiment in tqdm(experiments_list, desc="Processing Runs"):
         rows = None
         summary = None
@@ -272,29 +309,33 @@ def main() -> None:
             continue
 
         ordered_summaries.append(summary)
+        ordered_dirs.append(run_dir)
 
     result_table_rows = []
     prev_exp = None
     for i, summary in enumerate(ordered_summaries):
         experiment = format_experiment_label(summary, fallback_label=str(summary.run_hash or ""))
-        info_gain = to_mean_std_cell(
-            summary.information_gain_bits_mean,
-            summary.information_gain_bits_std,
-            use_latex=(args.tablefmt == "latex"),
-            float_precision=0,
-        )
+        # info_gain = to_mean_std_cell(
+        #     summary.information_gain_bits_mean,
+        #     summary.information_gain_bits_std,
+        #     use_latex=(args.tablefmt == "latex"),
+        #     float_precision=0,
+        # )
         is_progressive = summary.dataset_type == "progressive_prefixes"
         is_prefix_tuning = summary.dataset_type == "prefix_tuning_prefixes"
         if not is_progressive:
-            accuracy = to_mean_std_cell(
-                summary.final_convergence_mean,
-                summary.final_convergence_std,
-                use_latex=(args.tablefmt == "latex"),
-                float_precision=3,
-            )
+            if accuracy_in_percent:
+                accuracy = format_pct_cell(summary.final_convergence_mean, summary.final_convergence_std)
+            else:
+                accuracy = to_mean_std_cell(
+                    summary.final_convergence_mean,
+                    summary.final_convergence_std,
+                    use_latex=(args.tablefmt == "latex"),
+                    float_precision=3,
+                )
             max_tokens = summary.max_sequence_length
         else:
-            accuracy = "1.0"
+            accuracy = "100.00" if accuracy_in_percent else "1.0"
             # max_tokens = summary.number_of_compressed_tokens
             max_tokens = to_mean_std_cell(
                 summary.number_of_compressed_tokens,
@@ -312,7 +353,7 @@ def main() -> None:
                 result_table_rows.append(["\\midrule REMOVE "])
 
         if is_progressive:
-            exp_type = "Progr."
+            exp_type = "Prog." if args.type != "prefix_tuning" else "Progr."
         elif is_prefix_tuning:
             exp_type = "Full PrefixT."
         else:
@@ -320,7 +361,15 @@ def main() -> None:
         if args.type == "prefix_tuning":
             result_table_rows.append([experiment, exp_type, max_tokens, accuracy])
         else:
-            result_table_rows.append([exp_type, max_tokens, info_gain, accuracy])
+            if is_progressive and accuracy_in_percent:
+                greedy_cell = "100.00"
+            else:
+                greedy = load_greedy_cache(ordered_dirs[i])
+                if greedy is None or greedy[0] is None:
+                    greedy_cell = "--"
+                else:
+                    greedy_cell = format_pct_cell(greedy[0], greedy[1], precision=args.greedy_precision)
+            result_table_rows.append([exp_type, max_tokens, accuracy, greedy_cell])
         if args.type != "prefix_tuning":
             if is_progressive and i != len(ordered_summaries) - 1:
                 if "L3.1" in experiment:
@@ -348,15 +397,37 @@ def main() -> None:
 
     if args.tablefmt == "latex":
         result = hlines_to_booktabs(result)
+        if args.type in ("full_cramming", "full_cramming_apendix"):
+            # Right-align the numeric columns, tighten inter-column spacing, and
+            # group TF/Greedy under a single "Accuracy (\%)" header so the table
+            # fits the single-column width.
+            result = result.replace(
+                "\\begin{tabular}{llll}",
+                "\\begin{tabular}{llrr}",
+                1,
+            )
+            group_header = " & & \\multicolumn{2}{c}{Accuracy (\\%)} \\\\\n" "\\cmidrule(lr){3-4}\n"
+            result = result.replace("\\toprule\n", "\\toprule\n" + group_header, 1)
 
     print(result)
+
+    # Provenance stamp consumed by paper/lint_paper.py: the PG19 sample count is
+    # parsed from each source dir name (limit_<N>); main-body tables must be 50.
+    sample_counts = sorted({m.group(1) for d in ordered_dirs if (m := re.search(r"limit_(\d+)", d))})
+    if len(sample_counts) == 1:
+        n_samples_stamp = sample_counts[0]
+    elif sample_counts:
+        n_samples_stamp = ",".join(sample_counts)
+    else:
+        n_samples_stamp = "unknown"
 
     if args.save_dir is not None:
         slug = TYPE_TO_SLUG[args.type]
         out_dir = Path(args.save_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / f"{slug}.tex"
-        out_path.write_text(result + "\n", encoding="utf-8")
+        stamp = f"% paper-lint: n_samples={n_samples_stamp}\n"
+        out_path.write_text(stamp + result + "\n", encoding="utf-8")
         print(f"\nSaved 'tab:{slug}' to {out_path}")
 
 

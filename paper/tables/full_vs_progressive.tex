@@ -1,13 +1,16 @@
-\begin{tabular}{llll}
+% paper-lint: n_samples=50
+\begin{tabular}{llrr}
 \toprule
- Type                                           & Tokens                  & Info Gain                & Accuracy                   \\
+ & & \multicolumn{2}{c}{Accuracy (\%)} \\
+\cmidrule(lr){3-4}
+ Type                                           & Tokens                  & TF                        & Greedy                     \\
 \midrule
  \multicolumn{4}{l}{\textbf{Llama-3.1-8B}} \\
- Full                                           & 1568                    & 5002 {\small $\pm$ 850}  & 0.997 {\small $\pm$ 0.003} \\
- Progr.                                         & 1064 {\small $\pm$ 394} & 3028 {\small $\pm$ 1321} & 1.0                        \\
+ Full                                           & 1568                    & 99.96 {\small $\pm$ 0.04} & 20.53 {\small $\pm$ 39.74} \\
+ Prog.                                          & 1438 {\small $\pm$ 380} & 100.00                    & 100.00                     \\
  \midrule \midrule
  \multicolumn{4}{l}{\textbf{Pythia1.4b}} \\
- Full                                           & 256                     & 802 {\small $\pm$ 113}   & 0.985 {\small $\pm$ 0.031} \\
- Progr.                                         & 544 {\small $\pm$ 57}   & 1694 {\small $\pm$ 125}  & 1.0                        \\
+ Full                                           & 512                     & 99.71 {\small $\pm$ 0.65} & 44.19 {\small $\pm$ 44.82} \\
+ Prog.                                          & 430 {\small $\pm$ 65}   & 100.00                    & 100.00                     \\
 \bottomrule
 \end{tabular}

@@ -1,29 +1,32 @@
-\begin{tabular}{llll}
+% paper-lint: n_samples=10
+\begin{tabular}{llrr}
 \toprule
- Type                                           & Tokens                  & Info Gain                & Accuracy                   \\
+ & & \multicolumn{2}{c}{Accuracy (\%)} \\
+\cmidrule(lr){3-4}
+ Type                                           & Tokens                  & TF                         & Greedy                     \\
 \midrule
  \multicolumn{4}{l}{\textbf{Llama-3.2-1B}} \\
- Full                                           & 512                     & 1965 {\small $\pm$ 244}  & 0.998 {\small $\pm$ 0}     \\
- Progr.                                         & 402 {\small $\pm$ 85}   & 1500 {\small $\pm$ 282}  & 1.0                        \\
+ Full                                           & 512                     & 99.80 {\small $\pm$ 0.00}  & 1.51 {\small $\pm$ 0.94}   \\
+ Prog.                                          & 402 {\small $\pm$ 85}   & 100.00                     & 100.00                     \\
  \midrule
  \multicolumn{4}{l}{\textbf{Llama-3.2-3B}} \\
- Full                                           & 1024                    & 3572 {\small $\pm$ 549}  & 0.996 {\small $\pm$ 0.007} \\
- Progr.                                         & 902 {\small $\pm$ 207}  & 3074 {\small $\pm$ 527}  & 1.0                        \\
+ Full                                           & 1024                    & 99.60 {\small $\pm$ 0.70}  & 1.02 {\small $\pm$ 1.23}   \\
+ Prog.                                          & 902 {\small $\pm$ 207}  & 100.00                     & 100.00                     \\
  \midrule
  \multicolumn{4}{l}{\textbf{Llama-3.1-8B}} \\
- Full                                           & 1568                    & 5002 {\small $\pm$ 850}  & 0.997 {\small $\pm$ 0.003} \\
- Progr.                                         & 1064 {\small $\pm$ 394} & 3028 {\small $\pm$ 1321} & 1.0                        \\
+ Full                                           & 1568                    & 99.72 {\small $\pm$ 0.32}  & 1.29 {\small $\pm$ 1.12}   \\
+ Prog.                                          & 1064 {\small $\pm$ 394} & 100.00                     & 100.00                     \\
  \midrule \midrule
  \multicolumn{4}{l}{\textbf{Pythia160m}} \\
- Full                                           & 32                      & 105 {\small $\pm$ 20}    & 0.684 {\small $\pm$ 0.175} \\
- Progr.                                         & 11 {\small $\pm$ 2}     & 19 {\small $\pm$ 26}     & 1.0                        \\
+ Full                                           & 32                      & 68.44 {\small $\pm$ 17.54} & 26.39 {\small $\pm$ 24.08} \\
+ Prog.                                          & 11 {\small $\pm$ 2}     & 100.00                     & 100.00                     \\
  \midrule
  \multicolumn{4}{l}{\textbf{Pythia410m}} \\
- Full                                           & 128                     & 365 {\small $\pm$ 40}    & 0.891 {\small $\pm$ 0.062} \\
- Progr.                                         & 102 {\small $\pm$ 41}   & 323 {\small $\pm$ 105}   & 1.0                        \\
+ Full                                           & 128                     & 89.06 {\small $\pm$ 6.15}  & 13.95 {\small $\pm$ 23.93} \\
+ Prog.                                          & 102 {\small $\pm$ 41}   & 100.00                     & 100.00                     \\
  \midrule
  \multicolumn{4}{l}{\textbf{Pythia1.4b}} \\
- Full                                           & 256                     & 802 {\small $\pm$ 113}   & 0.985 {\small $\pm$ 0.031} \\
- Progr.                                         & 544 {\small $\pm$ 57}   & 1694 {\small $\pm$ 125}  & 1.0                        \\
+ Full                                           & 256                     & 98.48 {\small $\pm$ 3.06}  & 39.23 {\small $\pm$ 43.79} \\
+ Prog.                                          & 544 {\small $\pm$ 57}   & 100.00                     & 100.00                     \\
 \bottomrule
 \end{tabular}
