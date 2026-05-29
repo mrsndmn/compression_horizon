@@ -269,7 +269,7 @@ critical failure modes that emerge during autoregressive generation.
     collapses (Greedy ${\approx}\,0$) because the residual ${\sim}1\%$ error is
     concentrated at the first two token positions (mismatch rate at indices
     0/1). Full per-variant breakdown in
-    Table~\ref{tab:compression_reconstruction_summary} (Appendix~\ref{app:I}).}
+    Table~\ref{tab:compression_reconstruction_summary}.}
     \label{tab:compression_reconstruction_main}
 
     \begin{small}
@@ -418,10 +418,10 @@ We record the sequence of optimized embeddings $\{\mathbf{e}^{(k)}\}_{k=1}^{n}$ 
 For each sample, we run PCA on the stage embeddings $\{\mathbf{e}^{(k)}\}_{k=1}^{n}$ across $k$ (using standard PCA mean-centering across stages) and define ``PCA 99\%'' as the minimum number of components whose cumulative explained-variance ratio reaches 99\%.
 We report this quantity averaged over samples.
 Across model families, trajectories are well-approximated by low-dimensional structure: a modest number of principal components explains 99\% of the trajectory variance, even when hundreds (or thousands) of tokens are reconstructed (Table~\ref{tab:progressive_modifications}).
-We emphasize that this is a property of the optimization \emph{path}, not of the underlying solution set: in Appendix~\ref{app:solution_diversity} we show that equally-good solutions reached from the same initialization by different learning rates are far apart and nearly orthogonal, so the set of valid compression embeddings is itself wide and high-dimensional, and the low-dimensional trajectory is one thin slice of it.
-The \emph{shape} of this path is punctuated rather than smooth: progressive cramming proceeds as a ``dwell-and-leap'' walk that alternates runs of cheap tokens with occasional expensive ones, at every model scale (Appendix~\ref{app:trajectory_clusters}).
+We emphasize that this is a property of the optimization \emph{path}, not of the underlying solution set: equally-good solutions reached from the same initialization by different learning rates are far apart and nearly orthogonal, so the set of valid compression embeddings is itself wide and high-dimensional, and the low-dimensional trajectory is one thin slice of it.
+The \emph{shape} of this path is punctuated rather than smooth: progressive cramming proceeds as a ``dwell-and-leap'' walk that alternates runs of cheap tokens with occasional expensive ones, at every model scale.
 
-Notably, Gemma~3 achieves lower information gain at shorter reconstructed lengths than Llama and Pythia, consistent with architectural or training-time constraints such as logit softcapping \cite{gemma2} (Appendix~\ref{app:gemma_softcapping}).
+Notably, Gemma~3 achieves lower information gain at shorter reconstructed lengths than Llama and Pythia, consistent with architectural or training-time constraints such as logit softcapping \cite{gemma2}.
 
 Figure~\ref{fig:visual_abstract_optimization_trajectory_with_good_accuracy} visualizes a single trajectory projected onto the first two principal components.
 As the reconstructed prefix grows, the region of embeddings that attains near-perfect teacher-forced reconstruction contracts, suggesting that the optimization landscape becomes increasingly constrained at longer lengths.
@@ -517,8 +517,7 @@ Under this 4-way multiple-choice protocol, random guessing yields 25\% accuracy.
 Table~\ref{tab:semantic_evaluation} shows that prepending a crammed compression embedding consistently reduces downstream accuracy across model families, a moderate but reliable drop that nonetheless stays above chance on these multiple-choice benchmarks. Compression embeddings from progressive and full cramming perform comparably here.
 Together with the attention analysis, these results suggest that high reconstruction performance can coincide with brittle steering rather than a transferable semantic representation.
 This highlights a key limitation of using reconstruction accuracy alone: perfect reconstruction is insufficient, and future work must explicitly evaluate capability preservation in any downstream semantic evaluation and broader capability benchmarks overall.
-The drop reflects the compression embedding itself rather than residual reconstruction errors: because HellaSwag and ARC score fixed context--continuation pairs without regenerating the prefix, restricting the evaluation to perfectly reconstructed instances leaves accuracy essentially unchanged (Appendix~\ref{app:imperfect_reconstruction}).
-Varying which token logits enter the likelihood score localizes \emph{where} this information is lost---scoring the full context, only the candidate ending, or the embedding alone---yet the compressed conditions remain well below baseline under every strategy (Appendix~\ref{app:scoring_strategies}).
+The drop reflects the compression embedding itself rather than residual reconstruction errors: because HellaSwag and ARC score fixed context--continuation pairs without regenerating the prefix, restricting the evaluation to perfectly reconstructed instances leaves accuracy essentially unchanged.
 This degradation becomes a complete collapse under a \emph{generative} benchmark: on 5-shot MMLU (Appendix~\ref{app:mmlu}, Table~\ref{tab:rebuttle_mmlu}), compressing the full prefix drives accuracy to near zero with no valid parseable answers, while a random control embedding leaves accuracy nearly intact -- confirming that the degradation is specifically caused by the optimized compression embedding rather than by conditioning on an out-of-distribution token.
 
 % =============================================================================
@@ -568,7 +567,6 @@ This refines the picture: the compression embedding steers the model through ear
 
 \paragraph{The causal picture holds across model families.}
 We replicate all three knockout protocols on Pythia-1.4B and SmolLM2-1.7B and obtain consistent results: early-layer interactions causally drive the downstream collapse, the high-attention-mass late layers are not the causally important ones, and the forward/reverse cumulative asymmetry reappears in both models.
-The full per-layer and cumulative figures for both models are reported in Appendix~\ref{app:knockout_models}.
 
 
 % =============================================================================
@@ -596,7 +594,7 @@ Both axes drive compression monotonically, and they compound. \textbf{Depth:} wi
 
 We introduced progressive cramming, which grows the reconstruction target token-by-token and enables controlled measurement of when embedding-based reconstruction succeeds or fails under a fixed optimization budget.
 Across model families, progressive trajectories are low-dimensional.
-This low dimensionality is a property of the warm-started optimization \emph{path} rather than of an intrinsically small solution set: embeddings optimized independently for the same prefix end up far apart and nearly orthogonal (Appendix~\ref{app:solution_diversity}).
+This low dimensionality is a property of the warm-started optimization \emph{path} rather than of an intrinsically small solution set: embeddings optimized independently for the same prefix end up far apart and nearly orthogonal.
 Causal attention-knockout interventions localize the downstream collapse to the compression embedding's interactions in the early layers, and show that the late layers carrying the most attention mass have little causal effect -- attention mass is a symptom rather than the cause of capability loss.
 Separately, we find that how much a single embedding can store is bounded by the frozen reconstructor itself: compression capacity rises monotonically with both retained model depth and width.
 Because the two axes partly substitute for one another, it is the reconstructor's architecture---not parameter count alone---that sets the compression ceiling, so compressibility can be improved by reshaping the model and not only by scaling it.
