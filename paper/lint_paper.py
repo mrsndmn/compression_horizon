@@ -139,9 +139,6 @@ SAMPLE_COUNT_ALLOWLIST = {
     # Hand-authored benchmark table (tables/manual/): token-normalized HellaSwag/
     # ARC accuracy under different scoring strategies, not PG19 cramming samples.
     "semantic_benchmarks_token": "benchmark instances (HellaSwag/ARC), not PG19 samples",
-    # TODO: remove once the 50-sample full-cramming re-run lands. The "Full"
-    # baseline currently exists only at limit_10, so this table is 10-sample.
-    "full_vs_progressive": "pending 50-sample full-cramming re-run",
     # Hand-authored compact summary (tables/manual/) of the Llama
     # reconstruction-failure runs in tab:compression_reconstruction_summary;
     # not the 50-sample PG19 cramming protocol.

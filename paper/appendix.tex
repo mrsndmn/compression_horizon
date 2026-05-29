@@ -32,7 +32,7 @@ Each experiment ran on a single NVIDIA A100 80GB GPU, with up to 16 GPUs used in
 In Table~\ref{tab:full_vs_progressive_appendix} we present results from Section~\ref{sec:experiments} for full and progressive cramming comparison for different model sizes of Llama and Pythia families.
 
 \begin{table}[!htbp]
-    \caption{Full vs. progressive cramming on PG19. ``Full'' cramming uses a fixed token budget and may stop below perfect reconstruction \cite{kuratov2025cramming}; progressive cramming fixes reconstruction at 100\% and reports the achieved token count.}
+    \caption{Full vs. progressive cramming on PG19 (mean $\pm$ std over samples). ``Full'' cramming \cite{kuratov2025cramming} uses a fixed token budget and may stop below perfect Teacher Forcing (TF) reconstruction; progressive cramming fixes reconstruction at 100\% and guarantees perfect reconstruction under autoregressive greedy generation.}
     \label{tab:full_vs_progressive_appendix}
     \begin{center}
     \begin{small}
