@@ -421,7 +421,7 @@ For each sample, we run PCA on the stage embeddings $\{\mathbf{e}^{(k)}\}_{k=1}^
 We report this quantity averaged over samples.
 Across model families, trajectories are well-approximated by low-dimensional structure: a modest number of principal components explains 99\% of the trajectory variance, even when hundreds (or thousands) of tokens are reconstructed (Table~\ref{tab:progressive_modifications}).
 We emphasize that this is a property of the optimization \emph{path}, not of the underlying solution set: in Appendix~\ref{app:solution_diversity} we show that equally-good solutions reached from the same initialization by different learning rates are far apart and nearly orthogonal, so the set of valid compression embeddings is itself wide and high-dimensional, and the low-dimensional trajectory is one thin slice of it.
-We further characterize the \emph{shape} of this path (Appendix~\ref{app:trajectory_clusters}): measured in optimization \emph{steps}---an effort-based, model-agnostic unit---progressive cramming proceeds as a punctuated ``dwell-and-leap'' walk, alternating runs of cheap tokens with occasional expensive ones (positive lag-1 jump autocorrelation, $r_1 \approx 0.16$--$0.29$) at \emph{every} model scale rather than as a smooth glide.
+The \emph{shape} of this path is punctuated rather than smooth: progressive cramming proceeds as a ``dwell-and-leap'' walk that alternates runs of cheap tokens with occasional expensive ones, at every model scale (Appendix~\ref{app:trajectory_clusters}).
 
 Notably, Gemma~3 achieves lower information gain at shorter reconstructed lengths than Llama and Pythia, consistent with architectural or training-time constraints such as logit softcapping \cite{gemma2} (Appendix~\ref{app:gemma_softcapping}).
 
@@ -462,7 +462,7 @@ Table~\ref{tab:progressive_modifications} compares baseline progressive cramming
 The projection parameterization lets us probe whether valid compression embeddings inhabit a corpus-wide low-rank subspace or a sample-specific one.
 Training a single shared projection $(\mathbf{W}, \mathbf{b})$ jointly across 50 PG19 samples on SmolLM2-1.7B (per-sample $\mathbf{z}$, $k=256$) reaches $742 \pm 177$ compressed tokens and $2566 \pm 511$ bits of information gain---only modestly below the per-sample projection ($957 \pm 142$ tokens, $3271 \pm 309$ bits), so a single basis can serve an entire corpus.
 However, freezing this shared basis and transferring it to 50 unseen PG19 samples---optimizing only $\mathbf{z}$---collapses capacity to $8.7 \pm 6.8$ tokens and $36 \pm 29$ bits.
-The shared basis thus succeeds only because $(\mathbf{W}, \mathbf{b})$ co-adapt with the specific coefficients seen during training; the low-rank subspace of valid solutions is sample-specific rather than a universal property of the model, consistent with the wide, near-orthogonal solution set documented in Appendix~\ref{app:solution_diversity}.
+The shared basis thus succeeds only because $(\mathbf{W}, \mathbf{b})$ co-adapt with the specific coefficients seen during training; the low-rank subspace of valid solutions is sample-specific rather than a universal property of the model, consistent with the wide, near-orthogonal solution set discussed above.
 
 
 \subsection{PCA Reconstruction}
@@ -519,10 +519,9 @@ Under this 4-way multiple-choice protocol, random guessing yields 25\% accuracy.
 Table~\ref{tab:semantic_evaluation} shows that prepending a crammed compression embedding consistently reduces downstream accuracy across model families, a moderate but reliable drop that nonetheless stays above chance on these multiple-choice benchmarks. Compression embeddings from progressive and full cramming perform comparably here.
 Together with the attention analysis, these results suggest that high reconstruction performance can coincide with brittle steering rather than a transferable semantic representation.
 This highlights a key limitation of using reconstruction accuracy alone: perfect reconstruction is insufficient, and future work must explicitly evaluate capability preservation in any downstream semantic evaluation and broader capability benchmarks overall.
-Appendix~\ref{app:imperfect_reconstruction} further confirms that this drop reflects the compression embedding itself rather than residual reconstruction errors: because HellaSwag and ARC score fixed context--continuation pairs without regenerating the prefix, restricting the evaluation to perfectly reconstructed instances leaves accuracy essentially unchanged.
+The drop reflects the compression embedding itself rather than residual reconstruction errors: because HellaSwag and ARC score fixed context--continuation pairs without regenerating the prefix, restricting the evaluation to perfectly reconstructed instances leaves accuracy essentially unchanged (Appendix~\ref{app:imperfect_reconstruction}).
 Varying which token logits enter the likelihood score localizes \emph{where} this information is lost---scoring the full context, only the candidate ending, or the embedding alone---yet the compressed conditions remain well below baseline under every strategy (Appendix~\ref{app:scoring_strategies}).
 This degradation becomes a complete collapse under a \emph{generative} benchmark: on 5-shot MMLU (Appendix~\ref{app:mmlu}, Table~\ref{tab:rebuttle_mmlu}), compressing the full prefix drives accuracy to near zero with no valid parseable answers, while a random control embedding leaves accuracy nearly intact -- confirming that the degradation is specifically caused by the optimized compression embedding rather than by conditioning on an out-of-distribution token.
-Beyond fixed-choice tasks, a small LLM-as-judge study of open-ended continuations generated from the compression embedding (Appendix~\ref{app:llm_judge}) finds that activation alignment, at matched reconstruction fidelity, improves the coherence and relevance of generation beyond the compressed window.
 
 % =============================================================================
 \section{Causal Analysis: Attention Mass vs. Causal Importance}
@@ -558,7 +557,7 @@ Each condition is evaluated on teacher-forced reconstruction accuracy and on dow
 Figure~\ref{fig:knockout_per_layer} shows per-layer knockout.
 Knocking out the compression embedding at the earliest layers sharply reduces teacher-forced reconstruction accuracy: these are the layers where the embedding injects the information needed to reconstruct the prefix.
 The same early-layer interventions do not harm downstream accuracy; if anything they nudge it back toward the uncompressed baseline.
-By contrast, the layers that carry the most attention mass lie late in the network (Appendix~\ref{app:attention_concentration}), yet knocking them out individually changes neither reconstruction nor downstream accuracy appreciably.
+By contrast, the layers that carry the most attention mass lie late in the network, yet knocking them out individually changes neither reconstruction nor downstream accuracy appreciably.
 The layers with the highest attention mass are therefore not the layers with the highest causal importance for downstream behavior.
 
 \paragraph{A forward/reverse asymmetry localizes the cause.}
