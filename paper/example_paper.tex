@@ -539,8 +539,8 @@ Each condition is evaluated on teacher-forced reconstruction accuracy and on dow
 
 \begin{figure*}[t]
     \centering
-    \includegraphics[width=0.93\textwidth]{attention_knockout_per_layer.pdf}
-    \caption{Per-layer attention knockout on Llama-3.1-8B. Masking the compression embedding at a single layer, we report downstream HellaSwag accuracy (blue) and teacher-forced reconstruction accuracy (purple); orange bars show the compression embedding's attention mass per layer (Appendix~\ref{app:attention_concentration}). Dashed lines mark the uncompressed baseline (Base) and the crammed prefix without intervention (Cram). Early-layer knockout sharply degrades reconstruction yet leaves downstream accuracy at or above the crammed baseline, whereas the late layers that carry the most attention mass have negligible causal effect on either metric.}
+    \includegraphics[width=\textwidth]{attention_knockout_per_layer.pdf}
+    \caption{Per-layer attention knockout on Llama-3.1-8B. Masking the compression embedding at a single layer, we report downstream HellaSwag accuracy (blue) and teacher-forced reconstruction accuracy (purple); orange bars show the compression embedding's attention mass per layer. Dashed lines mark the uncompressed baseline (Base) and the crammed prefix without intervention (Cram). Early-layer knockout sharply degrades reconstruction yet leaves downstream accuracy at or above the crammed baseline, whereas the late layers that carry the most attention mass have negligible causal effect on either metric.}
     \label{fig:knockout_per_layer}
 \end{figure*}
 
@@ -580,11 +580,11 @@ How much a single embedding can cram is not fixed: it is bounded by the capacity
 
 Both axes drive compression monotonically, and they compound. \textbf{Depth:} within every family the number of perfectly crammed tokens rises with retained depth---roughly doubling per layer-doubling (e.g.\ Qwen3-8B: $119 \to 180 \to 304 \to 625$ at first-$1$/$2$/$4$/$8$). \textbf{Size:} at any matched truncated depth the larger model crams strictly more (Qwen3-8B $>$ Qwen3-4B $>$ SmolLM3-3B at every $N$). The two effects reinforce one another: with enough width a shallow truncation already recovers most of the full-model capacity---the $8$-of-$36$-layer Qwen3-8B and Qwen3-4B reach ${\approx}81$--$82\%$ of their untruncated references, and the $8$-layer Qwen3-8B exceeds the \emph{full} $36$-layer Qwen3-4B. Capacity is thus jointly governed by depth and width---intuitively, depth unpacks the crammed code while width stores it---so a deficit in one can be partly offset by a surplus in the other.
 
-These trends are robust to the design choices detailed in the appendix: the same monotone-in-depth behavior holds for alternative truncation schemes (keeping the first \emph{and} last layers, or only the last layers; Appendix~\ref{app:layer_ablation}), and when only width is varied at a fixed depth within one family (Appendix~\ref{app:width_ablation}).
+% These trends are robust to the design choices detailed in the appendix: the same monotone-in-depth behavior holds for alternative truncation schemes (keeping the first \emph{and} last layers, or only the last layers; Appendix~\ref{app:layer_ablation}), and when only width is varied at a fixed depth within one family (Appendix~\ref{app:width_ablation}).
 
 \begin{table}[t]
     \centering
-    \caption{Compression capacity (mean perfectly crammed tokens over $50$ PG19 samples) vs.\ model and retained depth. Columns give the number of first decoder layers kept (then finetuned); ``Full'' is the untruncated model; each model name carries its total decoder-layer count. ``--'' marks configurations we did not run. Compression rises with both retained depth (left to right) and model size (top to bottom). The full per-metric breakdown (information gain, trajectory length, PCA 99\%) and the alternative truncation/recovery schemes are in Table~\ref{tab:layer_ablation} (Appendix~\ref{app:layer_ablation}).}
+    \caption{Compression capacity (mean perfectly crammed tokens over $50$ PG19 samples) vs.\ model and retained depth. Columns give the number of first decoder layers kept (then finetuned); ``Full'' is the untruncated model; each model name carries its total decoder-layer count. ``--'' marks configurations we did not run. Compression rises with both retained depth (left to right) and model size (top to bottom).}
     \label{tab:depth_size_pivot}
     \begin{small}
     \input{tables/depth_size_pivot}
