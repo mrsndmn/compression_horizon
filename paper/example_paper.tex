@@ -214,11 +214,11 @@ Extending this line of inquiry, \citet{mezentsev2025exploring} show that frozen 
 
 \subsection{Context Compression and Distillation}
 
-A parallel line of research addresses context compression for the purpose of reducing computational costs during inference. Importantly, these approaches differ fundamentally from token cramming in their objective: they focus on \emph{semantic compression} that preserves task-relevant information for downstream use, rather than \emph{exact reconstruction} of the original token sequence.
+A parallel line of research compresses context to reduce inference cost. Unlike token cramming, these methods target \emph{semantic compression}---preserving task-relevant information for downstream use rather than \emph{exact reconstruction} of the token sequence.
 
-\citet{zhang2025activations_beacon} propose Activation Beacon, which compresses per-layer keys and values into special beacon tokens. This activation-level compression enables flexible compression ratios while preserving short-context capabilities, and supports progressive chunk-wise processing up to 400K tokens.
+\citet{zhang2025activations_beacon} propose Activation Beacon, which compresses per-layer keys and values into special beacon tokens, enabling flexible compression ratios and progressive chunk-wise processing up to 400K tokens while preserving short-context ability.
 
-\citet{chevalier-etal-2023-autocompressors} propose AutoCompressors, which learn unsupervised summary vectors that compress long contexts. These vectors act as soft prompts, letting the model condition on compressed representations of earlier segments as it processes a document sequentially.
+\citet{chevalier-etal-2023-autocompressors} propose AutoCompressors, which learn unsupervised summary vectors that act as soft prompts, letting the model condition on compressed representations of earlier segments as it reads a document sequentially.
 
 The In-Context Autoencoder (ICAE) \cite{ge2024ICAE} uses a LoRA-adapted encoder to compress contexts into memory slots that the target LLM conditions on, achieving $4\times$ compression while retaining prompt-following.
 
@@ -226,11 +226,9 @@ These methods target semantic compression for downstream tasks, whereas we study
 
 \subsection{Soft Prompts and Prefix Tuning}
 
-The optimization of continuous embeddings as model inputs originated in parameter-efficient fine-tuning research. \citet{li-liang-2021-prefix-tuning} introduce prefix-tuning, which prepends learnable continuous vectors to the input that subsequent tokens can attend to as ``virtual tokens.'' By optimizing only $0.1\%$ of parameters while keeping the language model frozen, prefix-tuning achieves comparable performance to full fine-tuning on generation tasks while enabling efficient multi-task deployment.
+The optimization of continuous embeddings as model inputs originated in parameter-efficient fine-tuning. \citet{li-liang-2021-prefix-tuning} prepend learnable ``virtual token'' vectors that subsequent tokens attend to, matching full fine-tuning on generation tasks while optimizing only $0.1\%$ of parameters with the model frozen. \citet{lester-etal-2021-prompt-tuning} simplify this to soft prompts at the input layer alone, and show they close the gap with full model tuning as scale grows---evidence that larger models develop embedding spaces rich enough for task-specific conditioning through input manipulation alone.
 
-\citet{lester-etal-2021-prompt-tuning} propose prompt tuning, a simplified approach that learns soft prompts only at the input layer rather than at every transformer layer. They demonstrate that prompt tuning becomes increasingly competitive with full model tuning as model scale increases, with billion-parameter models closing the gap entirely. This finding suggests that larger models develop embedding spaces with sufficient structure to support rich task-specific conditioning through input manipulation alone.
-
-These methods establish that frozen language models can be effectively steered through learned embeddings without modifying model parameters. Token cramming can be viewed as an extreme case of this paradigm: rather than encoding task-specific instructions, the learned embedding must encode the complete information content of an arbitrary token sequence. Our progressive cramming methodology bridges these perspectives by studying how compression embeddings interact with the model's attention and activation patterns as the encoding task becomes increasingly demanding.
+These methods establish that frozen models can be steered through learned embeddings without modifying parameters. Token cramming is an extreme case: the embedding must encode the full content of an arbitrary sequence rather than a task instruction. We study how it interacts with the model's attention and activation patterns as that demand grows.
 
 
 % =============================================================================
@@ -541,7 +539,7 @@ Each condition is evaluated on teacher-forced reconstruction accuracy and on dow
 
 \begin{figure*}[t]
     \centering
-    \includegraphics[width=\textwidth]{attention_knockout_per_layer.pdf}
+    \includegraphics[width=0.93\textwidth]{attention_knockout_per_layer.pdf}
     \caption{Per-layer attention knockout on Llama-3.1-8B. Masking the compression embedding at a single layer, we report downstream HellaSwag accuracy (blue) and teacher-forced reconstruction accuracy (purple); orange bars show the compression embedding's attention mass per layer (Appendix~\ref{app:attention_concentration}). Dashed lines mark the uncompressed baseline (Base) and the crammed prefix without intervention (Cram). Early-layer knockout sharply degrades reconstruction yet leaves downstream accuracy at or above the crammed baseline, whereas the late layers that carry the most attention mass have negligible causal effect on either metric.}
     \label{fig:knockout_per_layer}
 \end{figure*}
