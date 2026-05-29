@@ -403,7 +403,7 @@ def main() -> None:
             # fits the single-column width.
             result = result.replace(
                 "\\begin{tabular}{llll}",
-                "\\begin{tabular}{llrr}",
+                "\\begin{tabular}{lrrr}",
                 1,
             )
             group_header = " & & \\multicolumn{2}{c}{Accuracy (\\%)} \\\\\n" "\\cmidrule(lr){3-4}\n"

@@ -57,7 +57,7 @@
 
 % Labels
 \node[label, right=0.1cm of prog-train, text=successgreen!80] {0\% err};
-\node[label, right=0.1cm of prog-gen, text=successgreen!80] {100\%};
+\node[label, right=0.1cm of prog-gen, text=successgreen!80] {100\% acc};
 
 \end{tikzpicture}%
 }

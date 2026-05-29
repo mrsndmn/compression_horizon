@@ -269,7 +269,7 @@ critical failure modes that emerge during autoregressive generation.
     collapses (Greedy ${\approx}\,0$) because the residual ${\sim}1\%$ error is
     concentrated at the first two token positions (mismatch rate at indices
     0/1). Full per-variant breakdown in
-    Table~\ref{tab:compression_reconstruction_summary} (Appendix~\ref{app:I}).}
+    Table~\ref{tab:compression_reconstruction_summary}.}
     \label{tab:compression_reconstruction_main}
 
     \begin{small}
@@ -418,10 +418,10 @@ We record the sequence of optimized embeddings $\{\mathbf{e}^{(k)}\}_{k=1}^{n}$ 
 For each sample, we run PCA on the stage embeddings $\{\mathbf{e}^{(k)}\}_{k=1}^{n}$ across $k$ (using standard PCA mean-centering across stages) and define ``PCA 99\%'' as the minimum number of components whose cumulative explained-variance ratio reaches 99\%.
 We report this quantity averaged over samples.
 Across model families, trajectories are well-approximated by low-dimensional structure: a modest number of principal components explains 99\% of the trajectory variance, even when hundreds (or thousands) of tokens are reconstructed (Table~\ref{tab:progressive_modifications}).
-We emphasize that this is a property of the optimization \emph{path}, not of the underlying solution set: in Appendix~\ref{app:solution_diversity} we show that equally-good solutions reached from the same initialization by different learning rates are far apart and nearly orthogonal, so the set of valid compression embeddings is itself wide and high-dimensional, and the low-dimensional trajectory is one thin slice of it.
-The \emph{shape} of this path is punctuated rather than smooth: progressive cramming proceeds as a ``dwell-and-leap'' walk that alternates runs of cheap tokens with occasional expensive ones, at every model scale (Appendix~\ref{app:trajectory_clusters}).
+We emphasize that this is a property of the optimization \emph{path}, not of the underlying solution set: equally-good solutions reached from the same initialization by different learning rates are far apart and nearly orthogonal, so the set of valid compression embeddings is itself wide and high-dimensional, and the low-dimensional trajectory is one thin slice of it.
+The \emph{shape} of this path is punctuated rather than smooth: progressive cramming proceeds as a ``dwell-and-leap'' walk that alternates runs of cheap tokens with occasional expensive ones, at every model scale.
 
-Notably, Gemma~3 achieves lower information gain at shorter reconstructed lengths than Llama and Pythia, consistent with architectural or training-time constraints such as logit softcapping \cite{gemma2} (Appendix~\ref{app:gemma_softcapping}).
+Notably, Gemma~3 achieves lower information gain at shorter reconstructed lengths than Llama and Pythia, consistent with architectural or training-time constraints such as logit softcapping \cite{gemma2}.
 
 Figure~\ref{fig:visual_abstract_optimization_trajectory_with_good_accuracy} visualizes a single trajectory projected onto the first two principal components.
 As the reconstructed prefix grows, the region of embeddings that attains near-perfect teacher-forced reconstruction contracts, suggesting that the optimization landscape becomes increasingly constrained at longer lengths.
@@ -517,8 +517,7 @@ Under this 4-way multiple-choice protocol, random guessing yields 25\% accuracy.
 Table~\ref{tab:semantic_evaluation} shows that prepending a crammed compression embedding consistently reduces downstream accuracy across model families, a moderate but reliable drop that nonetheless stays above chance on these multiple-choice benchmarks. Compression embeddings from progressive and full cramming perform comparably here.
 Together with the attention analysis, these results suggest that high reconstruction performance can coincide with brittle steering rather than a transferable semantic representation.
 This highlights a key limitation of using reconstruction accuracy alone: perfect reconstruction is insufficient, and future work must explicitly evaluate capability preservation in any downstream semantic evaluation and broader capability benchmarks overall.
-The drop reflects the compression embedding itself rather than residual reconstruction errors: because HellaSwag and ARC score fixed context--continuation pairs without regenerating the prefix, restricting the evaluation to perfectly reconstructed instances leaves accuracy essentially unchanged (Appendix~\ref{app:imperfect_reconstruction}).
-Varying which token logits enter the likelihood score localizes \emph{where} this information is lost---scoring the full context, only the candidate ending, or the embedding alone---yet the compressed conditions remain well below baseline under every strategy (Appendix~\ref{app:scoring_strategies}).
+The drop reflects the compression embedding itself rather than residual reconstruction errors: because HellaSwag and ARC score fixed context--continuation pairs without regenerating the prefix, restricting the evaluation to perfectly reconstructed instances leaves accuracy essentially unchanged.
 This degradation becomes a complete collapse under a \emph{generative} benchmark: on 5-shot MMLU (Appendix~\ref{app:mmlu}, Table~\ref{tab:rebuttle_mmlu}), compressing the full prefix drives accuracy to near zero with no valid parseable answers, while a random control embedding leaves accuracy nearly intact -- confirming that the degradation is specifically caused by the optimized compression embedding rather than by conditioning on an out-of-distribution token.
 
 % =============================================================================
@@ -539,8 +538,8 @@ Each condition is evaluated on teacher-forced reconstruction accuracy and on dow
 
 \begin{figure*}[t]
     \centering
-    \includegraphics[width=0.93\textwidth]{attention_knockout_per_layer.pdf}
-    \caption{Per-layer attention knockout on Llama-3.1-8B. Masking the compression embedding at a single layer, we report downstream HellaSwag accuracy (blue) and teacher-forced reconstruction accuracy (purple); orange bars show the compression embedding's attention mass per layer (Appendix~\ref{app:attention_concentration}). Dashed lines mark the uncompressed baseline (Base) and the crammed prefix without intervention (Cram). Early-layer knockout sharply degrades reconstruction yet leaves downstream accuracy at or above the crammed baseline, whereas the late layers that carry the most attention mass have negligible causal effect on either metric.}
+    \includegraphics[width=0.99\textwidth]{attention_knockout_per_layer.pdf}
+    \caption{Per-layer attention knockout on Llama-3.1-8B. Masking the compression embedding at a single layer, we report downstream HellaSwag accuracy (blue) and teacher-forced reconstruction accuracy (purple); orange bars show the compression embedding's attention mass per layer. Dashed lines mark the uncompressed baseline (Base) and the crammed prefix without intervention (Cram). Early-layer knockout sharply degrades reconstruction yet leaves downstream accuracy at or above the crammed baseline, whereas the late layers that carry the most attention mass have negligible causal effect on either metric.}
     \label{fig:knockout_per_layer}
 \end{figure*}
 
@@ -568,7 +567,6 @@ This refines the picture: the compression embedding steers the model through ear
 
 \paragraph{The causal picture holds across model families.}
 We replicate all three knockout protocols on Pythia-1.4B and SmolLM2-1.7B and obtain consistent results: early-layer interactions causally drive the downstream collapse, the high-attention-mass late layers are not the causally important ones, and the forward/reverse cumulative asymmetry reappears in both models.
-The full per-layer and cumulative figures for both models are reported in Appendix~\ref{app:knockout_models}.
 
 
 % =============================================================================
@@ -580,11 +578,13 @@ How much a single embedding can cram is not fixed: it is bounded by the capacity
 
 Both axes drive compression monotonically, and they compound. \textbf{Depth:} within every family the number of perfectly crammed tokens rises with retained depth---roughly doubling per layer-doubling (e.g.\ Qwen3-8B: $119 \to 180 \to 304 \to 625$ at first-$1$/$2$/$4$/$8$). \textbf{Size:} at any matched truncated depth the larger model crams strictly more (Qwen3-8B $>$ Qwen3-4B $>$ SmolLM3-3B at every $N$). The two effects reinforce one another: with enough width a shallow truncation already recovers most of the full-model capacity---the $8$-of-$36$-layer Qwen3-8B and Qwen3-4B reach ${\approx}81$--$82\%$ of their untruncated references, and the $8$-layer Qwen3-8B exceeds the \emph{full} $36$-layer Qwen3-4B. Capacity is thus jointly governed by depth and width---intuitively, depth unpacks the crammed code while width stores it---so a deficit in one can be partly offset by a surplus in the other.
 
-These trends are robust to the design choices detailed in the appendix: the same monotone-in-depth behavior holds for alternative truncation schemes (keeping the first \emph{and} last layers, or only the last layers; Appendix~\ref{app:layer_ablation}), and when only width is varied at a fixed depth within one family (Appendix~\ref{app:width_ablation}).
+Because every truncated checkpoint is repaired with the same short finetune before we measure it, this monotone trend reflects the retained network's capacity rather than the transient damage of the cut itself. The practical reading is that compressibility is an architectural property the reconstructor can be designed for: trading depth against width, or adding either, raises the ceiling on how much a single embedding can hold, so a model can be made more compressible without simply being made larger. The substitution is only partial, however: at the shallowest truncations even the widest model recovers far less than its full-depth reference, so width cannot fully stand in for the missing layers that unpack the code. Taken together, these axes suggest that the compression ceiling tracks total reconstructor capacity rather than any single dimension of it.
+
+% These trends are robust to the design choices detailed in the appendix: the same monotone-in-depth behavior holds for alternative truncation schemes (keeping the first \emph{and} last layers, or only the last layers; Appendix~\ref{app:layer_ablation}), and when only width is varied at a fixed depth within one family (Appendix~\ref{app:width_ablation}).
 
 \begin{table}[t]
     \centering
-    \caption{Compression capacity (mean perfectly crammed tokens over $50$ PG19 samples) vs.\ model and retained depth. Columns give the number of first decoder layers kept (then finetuned); ``Full'' is the untruncated model; each model name carries its total decoder-layer count. ``--'' marks configurations we did not run. Compression rises with both retained depth (left to right) and model size (top to bottom). The full per-metric breakdown (information gain, trajectory length, PCA 99\%) and the alternative truncation/recovery schemes are in Table~\ref{tab:layer_ablation} (Appendix~\ref{app:layer_ablation}).}
+    \caption{Compression capacity (mean perfectly crammed tokens over $50$ PG19 samples) vs.\ model and retained depth. Columns give the number of first decoder layers kept (then finetuned); ``Full'' is the untruncated model; each model name carries its total decoder-layer count. ``--'' marks configurations we did not run. Compression rises with both retained depth (left to right) and model size (top to bottom).}
     \label{tab:depth_size_pivot}
     \begin{small}
     \input{tables/depth_size_pivot}
@@ -596,7 +596,7 @@ These trends are robust to the design choices detailed in the appendix: the same
 
 We introduced progressive cramming, which grows the reconstruction target token-by-token and enables controlled measurement of when embedding-based reconstruction succeeds or fails under a fixed optimization budget.
 Across model families, progressive trajectories are low-dimensional.
-This low dimensionality is a property of the warm-started optimization \emph{path} rather than of an intrinsically small solution set: embeddings optimized independently for the same prefix end up far apart and nearly orthogonal (Appendix~\ref{app:solution_diversity}).
+This low dimensionality is a property of the warm-started optimization \emph{path} rather than of an intrinsically small solution set: embeddings optimized independently for the same prefix end up far apart and nearly orthogonal.
 Causal attention-knockout interventions localize the downstream collapse to the compression embedding's interactions in the early layers, and show that the late layers carrying the most attention mass have little causal effect -- attention mass is a symptom rather than the cause of capability loss.
 Separately, we find that how much a single embedding can store is bounded by the frozen reconstructor itself: compression capacity rises monotonically with both retained model depth and width.
 Because the two axes partly substitute for one another, it is the reconstructor's architecture---not parameter count alone---that sets the compression ceiling, so compressibility can be improved by reshaping the model and not only by scaling it.
