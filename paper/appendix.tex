@@ -7,6 +7,19 @@
 \appendix
 % \onecolumn
 
+% Tighter float packing for the table-heavy appendix: prevent a single
+% (often table*) float from claiming a whole page while only half-full.
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\dbltopfraction}{0.9}
+\renewcommand{\floatpagefraction}{0.85}
+\renewcommand{\dblfloatpagefraction}{0.8}
+\renewcommand{\textfraction}{0.07}
+\setcounter{topnumber}{4}
+\setcounter{bottomnumber}{4}
+\setcounter{totalnumber}{6}
+\setcounter{dbltopnumber}{4}
+
 \section{Experimental Details}
 \label{app:part_setup}
 
