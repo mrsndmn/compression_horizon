@@ -241,6 +241,27 @@ class MyTrainingArguments(TrainingArguments):
             )
         },
     )
+    progressive_init_from_artifact: str | None = field(
+        default=None,
+        metadata={
+            "help": "Path to an experiment artifact directory (or its progressive_prefixes/ subdir) "
+            "to load initial embeddings from. Requires --progressive_init_from_stage."
+        },
+    )
+    progressive_init_from_stage: int | None = field(
+        default=None,
+        metadata={
+            "help": "Stage index in the artifact to load the converged embedding from. "
+            "The new experiment resumes progressive growth from the artifact's stage_seq_len + 1."
+        },
+    )
+    progressive_init_sample_ids: str | None = field(
+        default=None,
+        metadata={
+            "help": "Comma-separated source sample IDs to load from the artifact (default: '0'). "
+            "The i-th listed ID initializes the i-th sample in the new experiment's dataloader order."
+        },
+    )
     save_progressive_artifacts: bool = field(
         default=True,
         metadata={"help": "Whether to persist intermediate compression tokens for each stage."},
