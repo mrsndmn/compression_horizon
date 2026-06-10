@@ -2,7 +2,7 @@
 
 import copy
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import torch
 from tqdm.auto import tqdm
@@ -58,6 +58,14 @@ class _RunContext:
     # Back-off strategy after the ramp brackets the horizon: "bisect" or "linear"
     # (restore the last converged checkpoint and grow +1 token per stage until failure).
     geometric_backoff: str = "bisect"
+    # Artifact-based initialization: map from target sample index (in the new
+    # experiment's dataloader order) to the converged embedding tensor loaded from
+    # a prior experiment's progressive_prefixes dataset at a specific stage.
+    # ``None`` when no artifact init is configured.
+    artifact_init_embeddings: dict[int, torch.Tensor] = field(default_factory=dict)
+    # The seq_len to resume progressive growth from for artifact-initialized
+    # samples (artifact's ``stage_seq_len + 1``). 0 = not set.
+    artifact_init_start_seq_len: int = 0
 
 
 @dataclass
@@ -119,7 +127,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
 
         dataloader = self._create_dataloader()
         for batch in tqdm(dataloader):
-            batch_ctx = self._setup_batch(batch, ctx)
+            batch_ctx = self._setup_batch(batch, ctx, sample_id_counter=sample_id_counter)
             collected_rows.extend(self._run_progressive_stages(batch_ctx, ctx, sample_id_counter))
             sample_id_counter += batch_ctx.batch_size
             final_parametrization = batch_ctx.parametrization
@@ -225,6 +233,11 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                     num_training_steps=self.args.max_optimization_steps_per_sample,
                 )
 
+        artifact_init_embeddings: dict[int, torch.Tensor] = {}
+        artifact_init_start_seq_len = 0
+        if self.args.progressive_init_from_artifact:
+            artifact_init_embeddings, artifact_init_start_seq_len = self._load_artifact_init()
+
         return _RunContext(
             model=model,
             decode_model=decode_model,
@@ -245,13 +258,70 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             shared_scheduler=shared_scheduler,
             geometric_growth=bool(self.args.progressive_geometric_growth),
             geometric_backoff=str(self.args.progressive_geometric_backoff),
+            artifact_init_embeddings=artifact_init_embeddings,
+            artifact_init_start_seq_len=artifact_init_start_seq_len,
         )
+
+    def _load_artifact_init(self) -> tuple[dict[int, torch.Tensor], int]:
+        """Load converged embeddings from a prior experiment's progressive_prefixes dataset.
+
+        Returns ``(artifact_embeddings, start_seq_len)`` where
+        ``artifact_embeddings`` maps target sample index → embedding tensor
+        ``[num_compression_tokens, hidden_size]`` and ``start_seq_len`` is the
+        stage's ``seq_len + 1`` (the first length the resumed sample should
+        attempt).
+        """
+        from datasets import Dataset
+
+        artifact_path = self.args.progressive_init_from_artifact
+        stage = self.args.progressive_init_from_stage
+        if stage is None:
+            raise ValueError("--progressive_init_from_stage is required when --progressive_init_from_artifact is set")
+
+        # Accept either the experiment root or the progressive_prefixes subdir.
+        pp_subdir = os.path.join(artifact_path, "progressive_prefixes")
+        dataset_path = pp_subdir if os.path.isdir(pp_subdir) else artifact_path
+
+        ds = Dataset.load_from_disk(dataset_path)
+
+        sample_ids_str = self.args.progressive_init_sample_ids or "0"
+        source_sample_ids = [int(x.strip()) for x in sample_ids_str.split(",")]
+
+        artifact_embeddings: dict[int, torch.Tensor] = {}
+        start_seq_len = 0
+
+        for target_idx, source_id in enumerate(source_sample_ids):
+            # Efficient lookup: filter to the exact (sample_id, stage_index) pair.
+            matching = ds.filter(
+                lambda row: row["sample_id"] == source_id and row["stage_index"] == stage,
+                num_proc=1,
+            )
+            if len(matching) == 0:
+                raise ValueError(
+                    f"No row found for sample_id={source_id}, stage_index={stage} in {dataset_path}. "
+                    f"Available sample_ids: {sorted(set(ds['sample_id']))[:10]}..."
+                )
+            row = matching[0]
+            emb_flat = torch.tensor(row["embedding"], dtype=torch.float32)
+            hidden_size = row["hidden_size"]
+            num_compression_tokens = row["num_compression_tokens"]
+            emb = emb_flat.reshape(num_compression_tokens, hidden_size)
+            artifact_embeddings[target_idx] = emb
+            start_seq_len = max(start_seq_len, row["stage_seq_len"] + 1)
+            print(
+                f"[artifact init] target sample {target_idx} ← source sample_id={source_id} "
+                f"stage={stage} seq_len={row['stage_seq_len']} "
+                f"embedding shape={tuple(emb.shape)}"
+            )
+
+        print(f"[artifact init] loaded {len(artifact_embeddings)} embedding(s), resume from seq_len={start_seq_len}")
+        return artifact_embeddings, start_seq_len
 
     # ------------------------------------------------------------------
     # Per-batch setup.
     # ------------------------------------------------------------------
 
-    def _setup_batch(self, batch, ctx: _RunContext) -> _BatchContext:
+    def _setup_batch(self, batch, ctx: _RunContext, *, sample_id_counter: int = 0) -> _BatchContext:
         """Move batch to device, compute target hidden states, build per-sample parametrization + optimizers."""
         input_ids = batch.input_ids.squeeze(1).to(ctx.device)  # [batch, sequence]
         attention_mask = batch.attention_mask.squeeze(1).to(ctx.device)  # [batch, sequence]
@@ -295,7 +365,9 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                 mean_surprisal = sum(prefix_surprisal_bits_per_token) / len(prefix_surprisal_bits_per_token)
                 self.writer.add_scalar("prefix/surprisal_bits_per_token", mean_surprisal, self.global_step)
 
-        parametrization = self._build_parametrization(ctx, batch_size, hidden_size, ch_forward_init=ch_forward_init)
+        parametrization = self._build_parametrization(
+            ctx, batch_size, hidden_size, ch_forward_init=ch_forward_init, sample_id_counter=sample_id_counter
+        )
         per_sample_optimizers, per_sample_schedulers = self._build_per_sample_optimizers(parametrization, ctx)
         # Global mode: reuse the run-level optimizer/scheduler — they own the
         # AdamW state and LR-curve position accumulated across all previous
@@ -370,7 +442,9 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             )
         return embeds.detach().to(torch.float32)
 
-    def _build_parametrization(self, ctx: _RunContext, batch_size: int, hidden_size: int, ch_forward_init=None):
+    def _build_parametrization(
+        self, ctx: _RunContext, batch_size: int, hidden_size: int, ch_forward_init=None, sample_id_counter: int = 0
+    ):
         """Construct the per-sample parametrization (Direct, PretrainedPCA, or low-dim projected).
 
         Low-dim semantics — the trainer always builds the ``nn.Linear`` itself
@@ -395,7 +469,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             if ctx.init_method == "compression_head_forward":
                 assert ch_forward_init is not None, "compression_head_forward init tensor was not precomputed"
                 return torch.nn.Parameter(ch_forward_init.to(device=ctx.device, dtype=torch.float32))
-            return self._init_compression_tokens(
+            init_tensor = self._init_compression_tokens(
                 batch_size,
                 ctx.num_compression_tokens,
                 init_dim,
@@ -405,6 +479,19 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                 pca_mean=ctx.pca_mean,
                 loaded_embeddings=ctx.loaded_embeddings,
             )
+            # Override specific samples with embeddings loaded from a prior experiment's artifacts.
+            if ctx.artifact_init_embeddings:
+                if self.args.low_dim_projection:
+                    raise ValueError(
+                        "--progressive_init_from_artifact with --low_dim_projection is not supported: "
+                        "the artifact stores materialized (hidden-dim) embeddings but the target "
+                        "parametrization expects low-dim coefficients."
+                    )
+                for target_idx, emb in ctx.artifact_init_embeddings.items():
+                    sample_idx_in_batch = target_idx - sample_id_counter
+                    if 0 <= sample_idx_in_batch < batch_size:
+                        init_tensor.data[sample_idx_in_batch] = emb.to(init_tensor.device, init_tensor.dtype)
+            return init_tensor
 
         projection_module = None
         if self.args.low_dim_projection:
@@ -462,7 +549,22 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         if ctx.geometric_growth:
             return self._run_geometric_stages(batch_ctx, ctx, state, sample_id_counter)
 
-        seq_len = min(ctx.min_len, batch_ctx.max_len)
+        # When resuming from an artifact, start from the artifact's stage_seq_len + 1
+        # for batches that contain artifact-initialized samples.
+        effective_min = ctx.min_len
+        if ctx.artifact_init_start_seq_len > 0:
+            batch_has_artifact_sample = any(
+                sample_id_counter <= target_idx < sample_id_counter + batch_ctx.batch_size
+                for target_idx in ctx.artifact_init_embeddings
+            )
+            if batch_has_artifact_sample:
+                effective_min = max(effective_min, ctx.artifact_init_start_seq_len)
+                print(
+                    f"[artifact init] batch starting at sample_id={sample_id_counter}: "
+                    f"resuming from seq_len={effective_min}"
+                )
+
+        seq_len = min(effective_min, batch_ctx.max_len)
         stage_index = 0
         rows: list[dict] = []
 
