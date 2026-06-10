@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Progressive Cramming &mdash; ICML 2026 Poster</title>
+
+<!-- MathJax for inline equations -->
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      displayMath: [['$$', '$$'], ['\\[', '\\]']],
+      packages: {'[+]': ['ams']}
+    },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+<style>
+  /* =========================================================
+     Page setup: 36"H x 60"W landscape (ICML standard)
+     ========================================================= */
+  @page {
+    size: 60in 36in;
+    margin: 0;
+  }
+
+  :root {
+    /* Deep-blue academic palette */
+    --accent:          #1B4F72;
+    --accent-deep:     #0E2F44;
+    --accent-light:    #EBF5FB;
+    --accent-mid:      #2E86C1;
+    --gold:            #D4AC0D;
+    --gold-light:      #FFF8DC;
+    --red-alert:       #C0392B;
+
+    --text-primary:    #1A1A1A;
+    --text-secondary:  #555;
+    --text-muted:      #888;
+
+    --bg-page:         #F4F6F7;
+    --bg-card:         #FFFFFF;
+    --bg-card-tint:    #F0F8FF;
+    --bg-emphasis:     #EBF5FB;
+
+    --border-soft:     #BDC3C7;
+    --border-strong:   #1B4F72;
+
+    --u: 1.6px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: #2b2b2b;
+    font-family: "Charter", "Source Serif Pro", "Georgia", serif;
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .poster {
+    width: calc(1524 * var(--u));
+    height: calc(914 * var(--u));
+    background: var(--bg-page);
+    background-image:
+      radial-gradient(ellipse at top left, rgba(27,79,114,0.05), transparent 40%),
+      radial-gradient(ellipse at bottom right, rgba(212,172,13,0.04), transparent 50%);
+    margin: 20px auto;
+    padding: calc(10 * var(--u)) calc(14 * var(--u));
+    display: grid;
+    grid-template-rows: auto auto 1fr auto auto;
+    gap: calc(6 * var(--u));
+    box-shadow: 0 0 60px rgba(0,0,0,0.5);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .poster::before {
+    content: "";
+    position: absolute; top: 0; left: 0; right: 0;
+    height: calc(8 * var(--u));
+    background: linear-gradient(90deg,
+      var(--accent-deep) 0%,
+      var(--accent) 40%,
+      var(--accent-mid) 70%,
+      var(--gold) 100%);
+  }
+
+  /* ---- HEADER ---- */
+  .header {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: calc(16 * var(--u));
+    padding: calc(2 * var(--u)) calc(4 * var(--u)) calc(5 * var(--u)) calc(4 * var(--u));
+    border-bottom: calc(2 * var(--u)) solid var(--accent);
+  }
+
+  .conf-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(2 * var(--u));
+  }
+  .conf-badge .conf-name {
+    font-family: "Inter", sans-serif;
+    font-size: calc(28 * var(--u));
+    font-weight: 900;
+    color: var(--accent);
+    letter-spacing: 2px;
+  }
+  .conf-badge .conf-sub {
+    font-family: "Inter", sans-serif;
+    font-size: calc(10 * var(--u));
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: 1.2px;
+  }
+
+  .title-block { text-align: center; min-width: 0; }
+  .title {
+    font-family: "Inter", "Helvetica Neue", sans-serif;
+    font-weight: 800;
+    font-size: calc(32 * var(--u));
+    line-height: 1.1;
+    color: var(--accent-deep);
+    letter-spacing: -0.5px;
+  }
+  .title .accent { color: var(--gold); }
+  .subtitle {
+    font-family: "Inter", sans-serif;
+    font-weight: 500;
+    font-size: calc(14 * var(--u));
+    color: var(--text-secondary);
+    margin-top: calc(2 * var(--u));
+    font-style: italic;
+  }
+  .authors-line {
+    font-family: "Inter", sans-serif;
+    font-size: calc(14 * var(--u));
+    color: var(--accent);
+    font-weight: 600;
+    margin-top: calc(3 * var(--u));
+  }
+  .authors-line .author { margin: 0 calc(4 * var(--u)); }
+  .authors-line sup { font-size: 0.7em; color: var(--accent); }
+  .authors-line .aff {
+    color: var(--text-secondary);
+    font-weight: 400;
+    display: block;
+    margin-top: calc(2 * var(--u));
+    font-size: calc(12 * var(--u));
+  }
+
+  .right-stack {
+    display: flex;
+    align-items: center;
+    gap: calc(10 * var(--u));
+  }
+  .qr-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: calc(2 * var(--u));
+  }
+  .qr-block img {
+    width: calc(85 * var(--u));
+    height: calc(85 * var(--u));
+    border: calc(2 * var(--u)) solid var(--accent);
+    border-radius: calc(4 * var(--u));
+    background: white;
+    padding: calc(2 * var(--u));
+  }
+  .qr-label {
+    font-family: "Inter", sans-serif;
+    font-size: calc(11 * var(--u));
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* ---- BANNER ---- */
+  .framework-banner {
+    display: flex;
+    align-items: center;
+    gap: calc(16 * var(--u));
+    background: linear-gradient(90deg, var(--bg-emphasis) 0%, white 50%, var(--bg-emphasis) 100%);
+    border: calc(1 * var(--u)) solid var(--border-soft);
+    border-left: calc(6 * var(--u)) solid var(--accent);
+    border-radius: calc(6 * var(--u));
+    padding: calc(5 * var(--u)) calc(14 * var(--u));
+  }
+  .framework-banner .fb-text {
+    flex: 1;
+    font-family: "Charter", "Source Serif Pro", "Georgia", serif;
+    font-size: calc(14 * var(--u));
+    line-height: 1.4;
+    color: var(--text-primary);
+    text-wrap: balance;
+    text-align: center;
+  }
+  .framework-banner .fb-text strong { color: var(--accent-deep); }
+  .framework-banner .fb-label {
+    display: inline-block;
+    background: var(--accent);
+    color: white;
+    font-family: "Inter", sans-serif;
+    font-size: calc(13 * var(--u));
+    font-weight: 700;
+    padding: calc(2 * var(--u)) calc(8 * var(--u));
+    border-radius: calc(4 * var(--u));
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    vertical-align: middle;
+    line-height: 1;
+    position: relative;
+    top: calc(-1 * var(--u));
+  }
+  .banner-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: calc(6 * var(--u));
+  }
+  .bs-item {
+    background: white;
+    border: calc(1 * var(--u)) solid var(--border-soft);
+    border-left: calc(3 * var(--u)) solid var(--accent);
+    border-radius: calc(3 * var(--u));
+    padding: calc(2 * var(--u)) calc(8 * var(--u));
+    text-align: center;
+  }
+  .bs-num {
+    font-family: "Inter", sans-serif;
+    font-weight: 800;
+    font-size: calc(20 * var(--u));
+    color: var(--accent);
+    line-height: 1;
+  }
+  .bs-label {
+    font-family: "Inter", sans-serif;
+    font-size: calc(10 * var(--u));
+    color: var(--text-secondary);
+    margin-top: calc(2 * var(--u));
+    line-height: 1.2;
+  }
+
+  /* ---- BODY GRID ---- */
+  .body-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.05fr 1.05fr 1fr;
+    gap: calc(10 * var(--u));
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .column {
+    display: flex;
+    flex-direction: column;
+    gap: calc(6 * var(--u));
+    min-height: 0;
+    height: 100%;
+    padding-bottom: calc(4 * var(--u));
+  }
+
+  .card {
+    background: var(--bg-card);
+    border-radius: calc(5 * var(--u));
+    padding: calc(4 * var(--u)) calc(9 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border-soft);
+    box-shadow: 0 calc(2 * var(--u)) calc(6 * var(--u)) rgba(27,79,114,0.05);
+    position: relative;
+  }
+  .card.tinted { background: var(--bg-card-tint); }
+  .card.highlight {
+    border-left: calc(6 * var(--u)) solid var(--accent);
+    background: linear-gradient(90deg, var(--bg-emphasis) 0%, var(--bg-card) 30%);
+  }
+  .card.alert {
+    border-left: calc(6 * var(--u)) solid var(--red-alert);
+    background: linear-gradient(90deg, #FDEDEC 0%, var(--bg-card) 30%);
+  }
+  .card.grow { flex-grow: 1; }
+
+  .section-title {
+    font-family: "Inter", "Helvetica Neue", sans-serif;
+    font-weight: 700;
+    font-size: calc(16 * var(--u));
+    color: var(--accent-deep);
+    margin-bottom: calc(3 * var(--u));
+    display: flex;
+    align-items: center;
+    gap: calc(5 * var(--u));
+    flex-wrap: wrap;
+  }
+  .section-title .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(22 * var(--u));
+    height: calc(22 * var(--u));
+    background: var(--accent);
+    color: white;
+    border-radius: 50%;
+    font-size: calc(13 * var(--u));
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .body-text, .card p, .card li {
+    font-family: "Charter", "Source Serif Pro", "Georgia", serif;
+    font-size: calc(12 * var(--u));
+    line-height: 1.3;
+    color: var(--text-primary);
+  }
+
+  .card ul, .card ol { padding-left: calc(18 * var(--u)); }
+  .card li { margin-bottom: calc(2 * var(--u)); }
+
+  .keyword { color: var(--accent); font-weight: 700; }
+  .keyword-gold { color: var(--gold); font-weight: 700; }
+  .keyword-red { color: var(--red-alert); font-weight: 700; }
+
+  .eqn {
+    background: var(--bg-emphasis);
+    border-left: calc(3 * var(--u)) solid var(--accent);
+    padding: calc(4 * var(--u)) calc(10 * var(--u));
+    margin: calc(4 * var(--u)) 0;
+    font-size: calc(13 * var(--u));
+    overflow-x: hidden;
+  }
+  .eqn .label {
+    display: block;
+    font-family: "Inter", sans-serif;
+    font-size: calc(10 * var(--u));
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: calc(2 * var(--u));
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .callout {
+    background: var(--accent);
+    color: white;
+    padding: calc(5 * var(--u)) calc(10 * var(--u));
+    border-radius: calc(4 * var(--u));
+    font-size: calc(12 * var(--u));
+    margin: calc(4 * var(--u)) 0;
+  }
+  .callout strong { color: var(--gold); }
+  .callout.gold {
+    background: linear-gradient(135deg, var(--gold) 0%, #B8860B 100%);
+    color: var(--accent-deep);
+  }
+  .callout.gold strong { color: var(--accent-deep); }
+  .callout.red {
+    background: linear-gradient(135deg, var(--red-alert) 0%, #922B21 100%);
+  }
+
+  .figure {
+    margin: calc(4 * var(--u)) 0;
+    text-align: center;
+  }
+  .figure img {
+    width: 100%;
+    border-radius: calc(4 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border-soft);
+    background: white;
+  }
+  .figure .caption {
+    font-family: "Inter", sans-serif;
+    font-size: calc(11 * var(--u));
+    color: var(--text-secondary);
+    margin-top: calc(3 * var(--u));
+    line-height: 1.3;
+    text-align: left;
+  }
+  .figure .caption strong { color: var(--accent-deep); }
+
+  .result-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: "Inter", sans-serif;
+    font-size: calc(11 * var(--u));
+    margin-top: calc(3 * var(--u));
+  }
+  .result-table th, .result-table td {
+    padding: calc(2 * var(--u)) calc(4 * var(--u));
+    text-align: center;
+    border-bottom: calc(1 * var(--u)) solid var(--border-soft);
+  }
+  .result-table thead th {
+    background: var(--accent);
+    color: white;
+    font-weight: 600;
+    font-size: calc(10 * var(--u));
+  }
+  .result-table tbody tr.ours td {
+    background: var(--gold-light);
+    font-weight: 700;
+  }
+  .result-table .method { text-align: left; padding-left: calc(8 * var(--u)); }
+  .result-table .best { color: var(--accent); font-weight: 700; }
+
+  .keybox {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: calc(4 * var(--u));
+    margin: calc(4 * var(--u)) 0 0 0;
+  }
+  .keybox .kb-item {
+    background: var(--bg-emphasis);
+    border-top: calc(2 * var(--u)) solid var(--accent);
+    padding: calc(3 * var(--u)) calc(3 * var(--u));
+    text-align: center;
+    border-radius: 0 0 calc(3 * var(--u)) calc(3 * var(--u));
+  }
+  .kb-item .kb-num {
+    font-family: "Inter", sans-serif;
+    font-weight: 800;
+    font-size: calc(15 * var(--u));
+    color: var(--accent);
+    line-height: 1;
+  }
+  .kb-item .kb-label {
+    font-family: "Inter", sans-serif;
+    font-size: calc(9 * var(--u));
+    color: var(--text-secondary);
+    margin-top: calc(2 * var(--u));
+    line-height: 1.1;
+  }
+
+  .stat-pop {
+    display: inline-block;
+    background: var(--accent);
+    color: white;
+    padding: calc(1 * var(--u)) calc(6 * var(--u));
+    border-radius: calc(3 * var(--u));
+    font-weight: 700;
+    font-family: "Inter", sans-serif;
+    font-size: calc(11 * var(--u));
+  }
+  .stat-pop.gold { background: var(--gold); color: var(--accent-deep); }
+  .stat-pop.red { background: var(--red-alert); color: white; }
+
+  /* ---- TAKEAWAYS ---- */
+  .takeaways-strip {
+    display: grid;
+    grid-template-columns: auto repeat(3, 1fr);
+    align-items: center;
+    gap: calc(10 * var(--u));
+    background: linear-gradient(90deg, var(--bg-emphasis) 0%, white 50%, var(--bg-emphasis) 100%);
+    border: calc(1 * var(--u)) solid var(--border-soft);
+    border-radius: calc(5 * var(--u));
+    padding: calc(8 * var(--u)) calc(12 * var(--u));
+  }
+  .takeaways-strip .ts-title {
+    font-family: "Inter", sans-serif;
+    font-size: calc(15 * var(--u));
+    font-weight: 800;
+    color: var(--accent-deep);
+    display: flex;
+    align-items: center;
+    gap: calc(6 * var(--u));
+  }
+  .takeaways-strip .ts-title .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(22 * var(--u));
+    height: calc(22 * var(--u));
+    background: var(--accent);
+    color: white;
+    border-radius: 50%;
+    font-size: calc(13 * var(--u));
+    font-weight: 700;
+  }
+  .takeaways-strip .ts-item {
+    border-left: calc(3 * var(--u)) solid var(--accent);
+    padding-left: calc(8 * var(--u));
+    line-height: 1.3;
+    text-align: center;
+    text-wrap: balance;
+  }
+  .takeaways-strip .ts-key {
+    font-family: "Inter", sans-serif;
+    font-size: calc(11 * var(--u));
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .takeaways-strip .ts-text {
+    font-family: "Charter", "Source Serif Pro", "Georgia", serif;
+    font-size: calc(12 * var(--u));
+    color: var(--text-primary);
+    margin-left: calc(4 * var(--u));
+  }
+
+  /* ---- FOOTER ---- */
+  .footer {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: calc(8 * var(--u));
+    border-top: calc(1 * var(--u)) solid var(--border-soft);
+    font-family: "Inter", sans-serif;
+    font-size: calc(13 * var(--u));
+    color: var(--text-muted);
+  }
+  .footer .repo { color: var(--accent); font-weight: 600; }
+
+  @media print {
+    html, body { background: white; }
+    .poster {
+      margin: 0;
+      box-shadow: none;
+      width: 60in;
+      height: 36in;
+      page-break-after: avoid;
+    }
+    :root { --u: 1mm; }
+  }
+</style>
+</head>
+<body>
+
+<div class="poster" data-measure-role="poster">
+
+  <!-- =========================== HEADER =========================== -->
+  <header class="header" data-measure-role="header">
+    <div class="conf-badge">
+      <div class="conf-name">ICML</div>
+      <div class="conf-sub">2026 &middot; POSTER</div>
+    </div>
+
+    <div class="title-block">
+      <div class="title">Progressive Cramming: Reliable Token <span class="accent">Compression</span><br>and What It Reveals</div>
+      <div class="subtitle">A frozen LM can compress &gt;1000 tokens into one embedding &mdash; but perfect reconstruction is brittle steering, not transferable semantics.</div>
+      <div class="authors-line">
+        <span class="author">Dmitrii Tarasov<sup>1,2</sup></span> &middot;
+        <span class="author">Timofei Lashukov<sup>2</sup></span> &middot;
+        <span class="author">Elizaveta Goncharova<sup>1,2</sup></span> &middot;
+        <span class="author">Andrey Kuznetsov<sup>1,3</sup></span>
+        <span class="aff"><sup>1</sup>FusionBrain Lab &nbsp;&middot;&nbsp; <sup>2</sup>HSE University, Moscow &nbsp;&middot;&nbsp; <sup>3</sup>Innopolis University</span>
+      </div>
+    </div>
+
+    <div class="right-stack">
+      <div class="qr-block">
+        <img src="images/qr_code.png" alt="GitHub QR code">
+        <div class="qr-label">Code &amp; Data</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- =========================== BANNER =========================== -->
+  <section class="framework-banner" data-measure-role="banner">
+    <div class="fb-text">
+      <span class="fb-label">Key Idea</span>
+      &nbsp;Fix <strong>reconstruction quality</strong> (require perfection), grow the target <strong>one token at a time</strong>, and use the resulting trajectory to probe what the model actually learns. Result: <span class="keyword-red" style="color:var(--red-alert)">100% generation</span> where prior work collapses to <span class="keyword-red" style="color:var(--red-alert)">0%</span>.
+    </div>
+    <div class="banner-stats">
+      <div class="bs-item">
+        <div class="bs-num">1,568</div>
+        <div class="bs-label">tokens in 1<br>embedding (Llama-8B)</div>
+      </div>
+      <div class="bs-item">
+        <div class="bs-num">100%</div>
+        <div class="bs-label">greedy generation<br>(progressive)</div>
+      </div>
+      <div class="bs-item">
+        <div class="bs-num">65.7%</div>
+        <div class="bs-label">variance in 2 PCA<br>components</div>
+      </div>
+      <div class="bs-item">
+        <div class="bs-num">5 families</div>
+        <div class="bs-label">Llama, Pythia, SmolLM,<br>Gemma, Qwen</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================== BODY (4 columns) =========================== -->
+  <div class="body-grid" data-measure-role="body">
+
+    <!-- =================== COLUMN 1: Problem + Method =================== -->
+    <div class="column" data-measure-role="column">
+
+      <!-- 1. The Problem -->
+      <div class="card alert" data-measure-role="card">
+        <div class="section-title"><span class="num">1</span> The Problem: 99% Is an Illusion</div>
+        <p class="body-text">
+          Token cramming (Kuratov et al., 2025) optimizes a single embedding $\mathbf{e}$ so a frozen LM reconstructs a long sequence via teacher forcing. Reported accuracy: <span class="keyword">~99%</span>.
+        </p>
+        <p class="body-text" style="margin-top: calc(3 * var(--u))">
+          But the missing 1% lands on <span class="keyword-red">early token positions</span>. In autoregressive generation, one early miss&nbsp;cascades:
+        </p>
+        <table class="result-table" style="margin-top: calc(4 * var(--u))">
+          <thead>
+            <tr>
+              <th class="method" style="text-align:left">Model</th>
+              <th>TF Acc.</th>
+              <th>Greedy</th>
+              <th>Err @0</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="method">Llama-3.2-1B</td><td>99.0%</td><td style="color:var(--red-alert); font-weight:700">0.2%</td><td>86%</td></tr>
+            <tr><td class="method">Llama-3.2-3B</td><td>99.0%</td><td style="color:var(--red-alert); font-weight:700">0.2%</td><td>100%</td></tr>
+            <tr><td class="method">Llama-3.1-8B</td><td>99.1%</td><td style="color:var(--red-alert); font-weight:700">0.4%</td><td>100%</td></tr>
+          </tbody>
+        </table>
+        <div class="callout red" style="margin-top: calc(4 * var(--u))">
+          <strong>99% teacher-forced &rarr; 0% greedy.</strong> The last 1% is the first token &mdash; and it breaks everything.
+        </div>
+      </div>
+
+      <!-- 2. Progressive Cramming -->
+      <div class="card highlight grow" data-measure-role="card">
+        <div class="section-title"><span class="num">2</span> Progressive Cramming</div>
+        <p class="body-text">
+          Instead of fixing the token budget, we fix <span class="keyword">100% reconstruction</span> and grow the target one token at a&nbsp;time:
+        </p>
+        <ul style="margin-top: calc(3 * var(--u)); font-size: calc(11 * var(--u))">
+          <li>Start with 1 target token, warm-start from previous solution</li>
+          <li>Extend by 1 upon <strong>perfect</strong> convergence</li>
+          <li>Halt when perfect reconstruction fails &rarr; sharp capacity boundary</li>
+        </ul>
+        <div class="eqn" style="margin-top: calc(4 * var(--u))">
+          <span class="label">Low-dimensional projection</span>
+          $$\mathbf{e} = W\mathbf{z} + \mathbf{b}, \quad \mathbf{z} \in \mathbb{R}^k,\; k \ll d$$
+        </div>
+        <p class="body-text" style="font-size: calc(11 * var(--u)); margin-top: calc(2 * var(--u))">
+          Guarantees <span class="stat-pop" style="font-size: calc(10 * var(--u))">100% greedy generation</span> and yields honest per-sample capacity + full optimizer&nbsp;trajectory.
+        </p>
+      </div>
+
+    </div>
+
+    <!-- =================== COLUMN 2: Trajectory + Results =================== -->
+    <div class="column" data-measure-role="column">
+
+      <!-- 3. Low-Dimensional Trajectories -->
+      <div class="card highlight" data-measure-role="card">
+        <div class="section-title"><span class="num">3</span> Low-Dimensional Trajectories <span style="color:var(--gold); font-size: calc(10 * var(--u))">&#9733; KEY FINDING</span></div>
+        <div class="figure" style="margin: calc(2*var(--u)) 0">
+          <img src="images/visual_abstract_pc1_pc2_joined.png" alt="PCA trajectory visualization for Llama-3.1-8B">
+          <div class="caption">
+            <strong>Llama-3.1-8B:</strong> Optimizer trajectories in PC1&ndash;PC2. Just 2 components capture <strong>65.7%</strong> of variance across 4,096 dimensions. Colored by accuracy landscape.
+          </div>
+        </div>
+        <p class="body-text" style="margin-top: calc(2 * var(--u))">
+          Across model families, trajectories occupy remarkably <span class="keyword">low-dimensional subspaces</span>:
+        </p>
+        <div class="keybox">
+          <div class="kb-item">
+            <div class="kb-num">30&ndash;100</div>
+            <div class="kb-label">PCA components<br>for 99% variance</div>
+          </div>
+          <div class="kb-item">
+            <div class="kb-num">~log</div>
+            <div class="kb-label">growth with<br>sequence length</div>
+          </div>
+          <div class="kb-item">
+            <div class="kb-num">&perp;</div>
+            <div class="kb-label">solutions are<br>near-orthogonal</div>
+          </div>
+        </div>
+        <p class="body-text" style="margin-top: calc(3 * var(--u)); font-size: calc(11 * var(--u))">
+          Low dimensionality is a <em>path</em> property, not a solution-set property: equally-good solutions are 1.5&ndash;1.6&times; apart and&nbsp;near-orthogonal.
+        </p>
+      </div>
+
+      <!-- 4. Full vs Progressive -->
+      <div class="card grow" data-measure-role="card">
+        <div class="section-title"><span class="num">4</span> Full vs. Progressive</div>
+        <table class="result-table">
+          <thead>
+            <tr>
+              <th class="method" style="text-align:left">Model / Type</th>
+              <th>Tokens</th>
+              <th>TF Acc</th>
+              <th>Greedy</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="method">Llama-8B / Full</td><td>1568</td><td>99.96%</td><td style="color:var(--red-alert)">40.4%</td></tr>
+            <tr class="ours"><td class="method">Llama-8B / Progr.</td><td>1438</td><td class="best">100%</td><td class="best">100%</td></tr>
+            <tr><td class="method">Pythia / Full</td><td>512</td><td>99.71%</td><td style="color:var(--red-alert)">44.2%</td></tr>
+            <tr class="ours"><td class="method">Pythia / Progr.</td><td>430</td><td class="best">100%</td><td class="best">100%</td></tr>
+          </tbody>
+        </table>
+        <p class="body-text" style="margin-top: calc(3 * var(--u)); font-size: calc(11 * var(--u))">
+          Progressive cramming trades &lt;10% capacity for <strong>guaranteed perfect&nbsp;generation</strong>.
+        </p>
+        <p class="body-text" style="margin-top: calc(3 * var(--u)); font-size: calc(11 * var(--u))">
+          Solutions are 1.5&times; apart and near-orthogonal (diverse).
+        </p>
+      </div>
+
+    </div>
+
+    <!-- =================== COLUMN 3: Downstream + Knockout =================== -->
+    <div class="column" data-measure-role="column">
+
+      <!-- 5. Downstream Collapse -->
+      <div class="card alert" data-measure-role="card">
+        <div class="section-title"><span class="num">5</span> Perfect Reconstruction &ne;&nbsp;Understanding</div>
+        <p class="body-text">
+          Prepending a crammed embedding <span class="keyword-red">drops</span> benchmark accuracy, even with the original prefix in context:
+        </p>
+        <table class="result-table" style="margin-top: calc(3 * var(--u))">
+          <thead>
+            <tr>
+              <th class="method" style="text-align:left">Model</th>
+              <th>HS Base</th>
+              <th>HS +Emb</th>
+              <th>ARC Base</th>
+              <th>ARC +Emb</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="method">Pythia-1.4b</td><td>44.0%</td><td style="color:var(--red-alert)">37.6%</td><td>53.1%</td><td style="color:var(--red-alert)">49.1%</td></tr>
+            <tr><td class="method">SmolLM2-1.7B</td><td>53.6%</td><td style="color:var(--red-alert)">37.0%</td><td>67.3%</td><td style="color:var(--red-alert)">56.0%</td></tr>
+            <tr><td class="method">Llama-3.1-8B</td><td>61.9%</td><td style="color:var(--red-alert)">40.8%</td><td>63.5%</td><td style="color:var(--red-alert)">43.3%</td></tr>
+          </tbody>
+        </table>
+        <div class="callout red" style="margin-top: calc(4 * var(--u))">
+          On <strong>generative 5-shot MMLU</strong>: accuracy drops to <strong>~0%</strong> with the optimized embedding. A random control stays at baseline.
+        </div>
+      </div>
+
+      <!-- 6. Attention Knockout -->
+      <div class="card highlight grow" data-measure-role="card">
+        <div class="section-title"><span class="num">6</span> Causal Analysis: Attention Knockout</div>
+        <div class="figure" style="margin: calc(2*var(--u)) 0">
+          <img src="images/attention_knockout_cumulative.png" alt="Forward vs reverse cumulative knockout on Llama-3.1-8B">
+          <div class="caption">
+            <strong>Llama-3.1-8B cumulative knockout.</strong> <strong style="color:var(--accent-mid)">Forward</strong> (mask early layers first) restores downstream accuracy while destroying reconstruction. <strong style="color:var(--red-alert)">Reverse</strong> fails to recover until early layers are&nbsp;reached.
+          </div>
+        </div>
+        <p class="body-text" style="margin-top: calc(2 * var(--u))">
+          <span class="keyword">Early layers</span> are causally responsible for both reconstruction <em>and</em> capability collapse. Late-layer attention mass (20&ndash;60%) is a <em>symptom</em>, not the cause.
+        </p>
+        <p class="body-text" style="margin-top: calc(2 * var(--u)); font-size: calc(11 * var(--u))">
+          Consistent across Llama-3.1-8B, Pythia-1.4B, and&nbsp;SmolLM2-1.7B.
+        </p>
+        <p class="body-text" style="margin-top: calc(3 * var(--u)); font-size: calc(11 * var(--u))">
+          Embedding attracts 20&ndash;60% attention mass (sink), but masking late layers has negligible causal&nbsp;effect.
+        </p>
+      </div>
+
+    </div>
+
+    <!-- =================== COLUMN 4: Capacity Scaling + Conclusion =================== -->
+    <div class="column" data-measure-role="column">
+
+      <!-- 7. Capacity Scales -->
+      <div class="card highlight" data-measure-role="card">
+        <div class="section-title"><span class="num">7</span> Capacity Scales with Depth &amp; Width</div>
+        <p class="body-text">
+          Truncate models to first $N$ layers, finetune, then run progressive cramming. Capacity rises <span class="keyword">monotonically</span> with both depth and width:
+        </p>
+        <table class="result-table" style="margin-top: calc(3 * var(--u))">
+          <thead>
+            <tr>
+              <th class="method" style="text-align:left">Model</th>
+              <th>N=1</th>
+              <th>N=2</th>
+              <th>N=4</th>
+              <th>N=8</th>
+              <th>Full</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="method">SmolLM2-1.7B</td><td>50</td><td>241</td><td>404</td><td>455</td><td>335</td></tr>
+            <tr><td class="method">SmolLM3-3B</td><td>20</td><td>39</td><td>114</td><td>300</td><td>&mdash;</td></tr>
+            <tr><td class="method">Qwen3-4B</td><td>79</td><td>147</td><td>192</td><td>421</td><td>512</td></tr>
+            <tr><td class="method">Qwen3-8B</td><td>119</td><td>180</td><td>304</td><td>625</td><td>774</td></tr>
+            <tr><td class="method">Llama-3.1-8B</td><td>97</td><td>184</td><td>400</td><td>&mdash;</td><td>1438</td></tr>
+          </tbody>
+        </table>
+        <p class="body-text" style="margin-top: calc(3 * var(--u)); font-size: calc(11 * var(--u))">
+          Depth and width <strong>compound and partially substitute</strong>: a wide shallow model can partly compensate for missing&nbsp;depth.
+        </p>
+      </div>
+
+      <!-- 8. Cross-Model Comparison -->
+      <div class="card grow" data-measure-role="card">
+        <div class="section-title"><span class="num">8</span> Across Model Families</div>
+        <table class="result-table">
+          <thead>
+            <tr>
+              <th class="method" style="text-align:left">Model</th>
+              <th>Tokens</th>
+              <th>Info Gain</th>
+              <th>PCA 99%</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="method">Llama-3.1-8B</td><td class="best">1438</td><td class="best">4391</td><td>83</td></tr>
+            <tr><td class="method">Pythia-1.4b</td><td>430</td><td>1639</td><td>50</td></tr>
+            <tr><td class="method">SmolLM2-1.7B</td><td>335</td><td>1208</td><td>33</td></tr>
+            <tr><td class="method">Gemma-3-4B</td><td>214</td><td>783</td><td>31</td></tr>
+          </tbody>
+        </table>
+        <p class="body-text" style="margin-top: calc(3 * var(--u)); font-size: calc(11 * var(--u))">
+          Gemma&rsquo;s logit softcapping limits information gain. Low-dim projection boosts capacity (up to 3&times; for&nbsp;SmolLM2).
+        </p>
+
+        <div style="margin-top: calc(6 * var(--u)); border-top: calc(1 * var(--u)) solid var(--border-soft); padding-top: calc(4 * var(--u))">
+          <div class="section-title" style="font-size: calc(14 * var(--u))">Contributions</div>
+          <ul style="font-size: calc(11 * var(--u))">
+            <li><span class="keyword">Progressive cramming</span> &mdash; 100% generation&nbsp;guarantee</li>
+            <li><span class="keyword">Low-dim trajectories</span> &mdash; 30&ndash;100 PCA components for 99% variance</li>
+            <li><span class="keyword">Downstream collapse</span> &mdash; HellaSwag/ARC drop, MMLU&nbsp;&rarr;&nbsp;0%</li>
+            <li><span class="keyword">Causal analysis</span> &mdash; early layers drive collapse</li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- =========================== TAKEAWAYS STRIP =========================== -->
+  <section class="takeaways-strip" data-measure-role="footer-strip">
+    <div class="ts-title"><span class="num">&#10003;</span> Takeaways</div>
+    <div class="ts-item">
+      <span class="ts-key">Brittle Steering.</span><span class="ts-text">Perfect reconstruction stores nothing the model can use &mdash; downstream benchmarks drop, generative MMLU collapses to ~0%.</span>
+    </div>
+    <div class="ts-item">
+      <span class="ts-key">Early Layers.</span><span class="ts-text">Across all model families, the embedding&rsquo;s causal influence concentrates in the first few layers. Late-layer attention mass is a symptom.</span>
+    </div>
+    <div class="ts-item">
+      <span class="ts-key">Capacity = Architecture.</span><span class="ts-text">Compression capacity scales monotonically with both depth and width &mdash; it&rsquo;s bought with the reconstructor&rsquo;s compute.</span>
+    </div>
+  </section>
+
+  <!-- =========================== FOOTER =========================== -->
+  <div class="footer" data-measure-role="footer">
+    <div>
+      <strong style="color:var(--accent-deep)">Progressive Cramming</strong> &middot; ICML 2026
+    </div>
+    <div>
+      Code: <span class="repo">github.com/mrsndmn/cramming_optimizer_trajectory</span> &nbsp;&middot;&nbsp;
+      Contact: <span class="repo">d.tarasov@fusionbrain.ai</span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
