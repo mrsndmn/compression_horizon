@@ -23,6 +23,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 from tabulate import tabulate
 from tqdm.auto import tqdm
 
@@ -580,6 +581,8 @@ def plot_cumulative_knockout(
         data: Loaded intervention results JSON.
         output_path: Path to save the plot.
         model_label: Optional label for the model.
+        vertical: If True, stack subplots vertically (poster layout) with
+            visual-abstract-matching style (seaborn whitegrid, larger fonts).
     """
     summary = data["intervention_summary"]
     has_forward = "cumulative_knockout" in summary
@@ -599,94 +602,111 @@ def plot_cumulative_knockout(
     base_acc = data.get("baseline", {}).get("accuracy")
     cram_acc = data.get("compressed", {}).get("accuracy")
 
+    # ---- Style: match visual_abstract.py when in poster/vertical mode ----
     if vertical:
-        fig, (ax_fwd, ax_rev) = plt.subplots(2, 1, figsize=(8, 8), sharey=True)
+        sns.set_theme(style="whitegrid")
+        fs = 28  # base font size (visual_abstract uses 35 on a 10.5×8.5 canvas)
+        matplotlib.rcParams.update(
+            {
+                "font.size": fs,
+                "axes.titlesize": fs,
+                "xtick.labelsize": fs - 4,
+                "ytick.labelsize": fs - 4,
+                "axes.labelsize": fs,
+                "legend.fontsize": fs - 8,
+            }
+        )
+        lw = 2.5
+        ms = 7
+        grid_alpha = 0.15
+        ref_lw = 1.8
+        # Academic palette (matches poster CSS deep-blue scheme)
+        c_fwd = "#1B4F72"  # accent-deep
+        c_fwd_recon = "#2E86C1"  # accent-mid
+        c_rev = "#7D3C98"  # deep purple
+        c_rev_recon = "#AF7AC5"  # light purple
+        c_base = "#16a34a"
+        c_cram = "#C0392B"  # red-alert
+        fig, (ax_fwd, ax_rev) = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
     else:
+        lw = 1.5
+        ms = 4
+        grid_alpha = 0.3
+        ref_lw = 1.0
+        c_fwd = "#2563eb"
+        c_fwd_recon = "#60a5fa"
+        c_rev = "#9333ea"
+        c_rev_recon = "#c084fc"
+        c_base = "#16a34a"
+        c_cram = "#dc2626"
         fig, (ax_fwd, ax_rev) = plt.subplots(1, 2, figsize=(16, 4), sharey=True)
 
-    # --- Left subplot: Forward cumulative knockout (layers 0..k) ---
+    label_fontsize = matplotlib.rcParams.get("axes.labelsize", 18)
+    tick_fontsize = matplotlib.rcParams.get("xtick.labelsize", 15)
+    legend_fontsize = matplotlib.rcParams.get("legend.fontsize", 14)
+    title_fontsize = matplotlib.rcParams.get("axes.titlesize", 18)
+
+    # --- Top/Left subplot: Forward cumulative knockout (layers 0..k) ---
     if has_forward:
         cumulative = summary["cumulative_knockout"]
         x_fwd = [0] + [li + 1 for li in range(num_layers)]
         y_fwd = [cram_acc if cram_acc is not None else 0.0] + [cumulative[str(li)]["accuracy"] for li in range(num_layers)]
-        ax_fwd.plot(
-            x_fwd,
-            y_fwd,
-            "o-",
-            color="#2563eb",
-            linewidth=1.5,
-            markersize=4,
-            label="Forward knockout HellaSwag Accuracy (layers 0..k)",
-        )
+        ax_fwd.plot(x_fwd, y_fwd, "o-", color=c_fwd, linewidth=lw, markersize=ms, label="HellaSwag accuracy")
 
     if "cumulative_reconstruction" in summary:
         cum_recon = summary["cumulative_reconstruction"]
         x_fwd_r = [0] + [li + 1 for li in range(num_layers)]
         y_fwd_r = [1.0] + [cum_recon[str(li)]["avg_accuracy"] for li in range(num_layers)]
         ax_fwd.plot(
-            x_fwd_r,
-            y_fwd_r,
-            "o--",
-            color="#60a5fa",
-            linewidth=1.5,
-            markersize=4,
-            alpha=0.8,
-            label="Forward Teacher-Forcing reconstruction Accuracy",
+            x_fwd_r, y_fwd_r, "o--", color=c_fwd_recon, linewidth=lw, markersize=ms, alpha=0.8, label="TF reconstruction"
         )
 
     if base_acc is not None:
-        ax_fwd.axhline(y=base_acc, color="#16a34a", linestyle="--", linewidth=1, label=f"Base = {base_acc:.3f}")
+        ax_fwd.axhline(y=base_acc, color=c_base, linestyle="--", linewidth=ref_lw, label=f"Baseline = {base_acc:.3f}")
     if cram_acc is not None:
-        ax_fwd.axhline(y=cram_acc, color="#dc2626", linestyle="--", linewidth=1, label=f"Cram = {cram_acc:.3f}")
-    ax_fwd.set_xlabel("Number of layers knocked out (0 = Cram, L = Base)", fontsize=18)
-    ax_fwd.set_ylabel("Accuracy", fontsize=18)
+        ax_fwd.axhline(y=cram_acc, color=c_cram, linestyle="--", linewidth=ref_lw, label=f"Cram = {cram_acc:.3f}")
+    ax_fwd.set_xlabel("Layers knocked out", fontsize=label_fontsize)
+    ax_fwd.set_ylabel("Accuracy", fontsize=label_fontsize)
     ax_fwd.set_xlim(-0.5, num_layers + 0.5)
-    ax_fwd.set_title("Forward knockout HellaSwag Accuracy (layers 0..k)", fontsize=18)
-    ax_fwd.tick_params(labelsize=15)
-    ax_fwd.legend(loc="best", fontsize=14)
-    ax_fwd.grid(True, alpha=0.3)
+    ax_fwd.set_title("Forward (mask layers 0 → k)", fontsize=title_fontsize)
+    ax_fwd.tick_params(labelsize=tick_fontsize)
+    ax_fwd.legend(loc="best", fontsize=legend_fontsize, framealpha=0.9)
+    ax_fwd.grid(True, alpha=grid_alpha)
 
-    # --- Right subplot: Reverse cumulative knockout (layers k..L-1) ---
+    # --- Bottom/Right subplot: Reverse cumulative knockout (layers k..L-1) ---
     if has_reverse:
         reverse_cumulative = summary["reverse_cumulative_knockout"]
         x_rev = [0] + [num_layers - li for li in range(num_layers - 1, -1, -1)]
         y_rev = [cram_acc if cram_acc is not None else 0.0] + [
             reverse_cumulative[str(li)]["accuracy"] for li in range(num_layers - 1, -1, -1)
         ]
-        ax_rev.plot(x_rev, y_rev, "s-", color="#9333ea", linewidth=1.5, markersize=4, label="Reverse knockout (layers k..L-1)")
+        ax_rev.plot(x_rev, y_rev, "s-", color=c_rev, linewidth=lw, markersize=ms, label="HellaSwag accuracy")
 
     if "reverse_cumulative_reconstruction" in summary:
         rev_recon = summary["reverse_cumulative_reconstruction"]
         x_rev_r = [0] + [num_layers - li for li in range(num_layers - 1, -1, -1)]
         y_rev_r = [1.0] + [rev_recon[str(li)]["avg_accuracy"] for li in range(num_layers - 1, -1, -1)]
         ax_rev.plot(
-            x_rev_r,
-            y_rev_r,
-            "s--",
-            color="#c084fc",
-            linewidth=1.5,
-            markersize=4,
-            alpha=0.8,
-            label="Reverse Teacher-Forcing reconstruction Acc",
+            x_rev_r, y_rev_r, "s--", color=c_rev_recon, linewidth=lw, markersize=ms, alpha=0.8, label="TF reconstruction"
         )
 
     if base_acc is not None:
-        ax_rev.axhline(y=base_acc, color="#16a34a", linestyle="--", linewidth=1, label=f"Base = {base_acc:.3f}")
+        ax_rev.axhline(y=base_acc, color=c_base, linestyle="--", linewidth=ref_lw, label=f"Baseline = {base_acc:.3f}")
     if cram_acc is not None:
-        ax_rev.axhline(y=cram_acc, color="#dc2626", linestyle="--", linewidth=1, label=f"Cram = {cram_acc:.3f}")
-    ax_rev.set_xlabel("Number of layers knocked out (0 = Cram, L = Base)", fontsize=18)
+        ax_rev.axhline(y=cram_acc, color=c_cram, linestyle="--", linewidth=ref_lw, label=f"Cram = {cram_acc:.3f}")
+    ax_rev.set_xlabel("Layers knocked out", fontsize=label_fontsize)
     if vertical:
-        ax_rev.set_ylabel("Accuracy", fontsize=18)
+        ax_rev.set_ylabel("Accuracy", fontsize=label_fontsize)
     ax_rev.set_xlim(-0.5, num_layers + 0.5)
-    ax_rev.set_title("Reverse knockout (layers k..L-1)", fontsize=18)
-    ax_rev.tick_params(labelsize=15)
-    ax_rev.legend(loc="best", fontsize=14)
-    ax_rev.grid(True, alpha=0.3)
+    ax_rev.set_title("Reverse (mask layers k → L)", fontsize=title_fontsize)
+    ax_rev.tick_params(labelsize=tick_fontsize)
+    ax_rev.legend(loc="best", fontsize=legend_fontsize, framealpha=0.9)
+    ax_rev.grid(True, alpha=grid_alpha)
 
     fig.tight_layout()
     if vertical:
-        fig.subplots_adjust(hspace=0.55)
-    fig.savefig(output_path, dpi=200 if vertical else 150, bbox_inches="tight")
+        fig.subplots_adjust(hspace=0.35)
+    fig.savefig(output_path, dpi=250 if vertical else 150, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved cumulative knockout plot to {output_path}")
 
