@@ -594,7 +594,7 @@
       <div class="card alert" data-measure-role="card">
         <div class="section-title"><span class="num">1</span> The Problem: 99% Is an Illusion</div>
         <p class="body-text">
-          Token cramming (Kuratov et al., 2025) optimizes a single embedding $\mathbf{e}$ so a frozen LM reconstructs a long sequence via teacher forcing. Reported accuracy: <span class="keyword">~99%</span>.
+          Token cramming (Kuratov et al., 2025) optimizes a single embedding $\mathbf{e}$ so a frozen LM reconstructs a long sequence via teacher forcing. Optimization stops when TF accuracy reaches a <span class="keyword">99% threshold</span>.
         </p>
         <p class="body-text" style="margin-top: calc(3 * var(--u))">
           But the missing 1% lands on <span class="keyword-red">early token positions</span>. In autoregressive generation, one early miss&nbsp;cascades:
@@ -614,29 +614,22 @@
             <tr><td class="method">Llama-3.1-8B</td><td>99.1%</td><td style="color:var(--red-alert); font-weight:700">0.4%</td><td>100%</td></tr>
           </tbody>
         </table>
-        <div class="callout red" style="margin-top: calc(4 * var(--u))">
-          <strong>99% teacher-forced &rarr; 0% greedy.</strong> The last 1% is the first token &mdash; and it breaks everything.
+        <div class="callout red" style="margin-top: calc(3 * var(--u))">
+          <strong>&gt;99% teacher-forced &rarr; ~0% greedy.</strong> The last 1% is the first token &mdash; and it breaks everything.
         </div>
       </div>
 
       <!-- 2. Progressive Cramming -->
       <div class="card highlight grow" data-measure-role="card">
         <div class="section-title"><span class="num">2</span> Progressive Cramming</div>
-        <p class="body-text">
-          Instead of fixing the token budget, we fix <span class="keyword">100% reconstruction</span> and grow the target one token at a&nbsp;time:
-        </p>
-        <ul style="margin-top: calc(3 * var(--u)); font-size: calc(11 * var(--u))">
-          <li>Start with 1 target token, warm-start from previous solution</li>
-          <li>Extend by 1 upon <strong>perfect</strong> convergence</li>
-          <li>Halt when perfect reconstruction fails &rarr; sharp capacity boundary</li>
-        </ul>
-        <div class="eqn" style="margin-top: calc(4 * var(--u))">
-          <span class="label">Low-dimensional projection</span>
-          $$\mathbf{e} = W\mathbf{z} + \mathbf{b}, \quad \mathbf{z} \in \mathbb{R}^k,\; k \ll d$$
+        <div class="figure" style="margin: calc(2*var(--u)) 0">
+          <img src="images/visual_abstract_full_vs_progressive.png" alt="Full cramming vs Progressive cramming">
         </div>
-        <p class="body-text" style="font-size: calc(11 * var(--u)); margin-top: calc(2 * var(--u))">
-          Guarantees <span class="stat-pop" style="font-size: calc(10 * var(--u))">100% greedy generation</span> and yields honest per-sample capacity + full optimizer&nbsp;trajectory.
-        </p>
+        <ul style="margin-top: calc(2 * var(--u)); font-size: calc(11 * var(--u))">
+          <li>Fix <strong>100% reconstruction</strong>, grow target one token at a&nbsp;time</li>
+          <li>Warm-start from previous solution; halt when perfect reconstruction&nbsp;fails</li>
+          <li>Guarantees <span class="keyword">100% greedy generation</span> + honest per-sample&nbsp;capacity</li>
+        </ul>
       </div>
 
     </div>
@@ -759,68 +752,45 @@
     <!-- =================== COLUMN 4: Capacity Scaling + Conclusion =================== -->
     <div class="column" data-measure-role="column">
 
-      <!-- 7. Capacity Scales -->
+      <!-- 7. Cross-Model + Low-Dim Projection -->
       <div class="card highlight" data-measure-role="card">
-        <div class="section-title"><span class="num">7</span> Capacity Scales with Depth &amp; Width</div>
-        <p class="body-text">
-          Truncate models to first $N$ layers, finetune, then run progressive cramming. Capacity rises <span class="keyword">monotonically</span> with both depth and width:
-        </p>
-        <table class="result-table" style="margin-top: calc(3 * var(--u))">
-          <thead>
-            <tr>
-              <th class="method" style="text-align:left">Model</th>
-              <th>N=1</th>
-              <th>N=2</th>
-              <th>N=4</th>
-              <th>N=8</th>
-              <th>Full</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td class="method">SmolLM2-1.7B</td><td>50</td><td>241</td><td>404</td><td>455</td><td>335</td></tr>
-            <tr><td class="method">SmolLM3-3B</td><td>20</td><td>39</td><td>114</td><td>300</td><td>&mdash;</td></tr>
-            <tr><td class="method">Qwen3-4B</td><td>79</td><td>147</td><td>192</td><td>421</td><td>512</td></tr>
-            <tr><td class="method">Qwen3-8B</td><td>119</td><td>180</td><td>304</td><td>625</td><td>774</td></tr>
-            <tr><td class="method">Llama-3.1-8B</td><td>97</td><td>184</td><td>400</td><td>&mdash;</td><td>1438</td></tr>
-          </tbody>
-        </table>
-        <p class="body-text" style="margin-top: calc(3 * var(--u)); font-size: calc(11 * var(--u))">
-          Depth and width <strong>compound and partially substitute</strong>: a wide shallow model can partly compensate for missing&nbsp;depth.
-        </p>
-      </div>
-
-      <!-- 8. Cross-Model Comparison -->
-      <div class="card grow" data-measure-role="card">
-        <div class="section-title"><span class="num">8</span> Across Model Families</div>
+        <div class="section-title"><span class="num">7</span> Across Model Families</div>
         <table class="result-table">
           <thead>
             <tr>
               <th class="method" style="text-align:left">Model</th>
               <th>Tokens</th>
-              <th>Info Gain</th>
-              <th>PCA 99%</th>
+              <th>+LowDim</th>
+              <th>Boost</th>
+              <th>IG</th>
             </tr>
           </thead>
           <tbody>
-            <tr><td class="method">Llama-3.1-8B</td><td class="best">1438</td><td class="best">4391</td><td>83</td></tr>
-            <tr><td class="method">Pythia-1.4b</td><td>430</td><td>1639</td><td>50</td></tr>
-            <tr><td class="method">SmolLM2-1.7B</td><td>335</td><td>1208</td><td>33</td></tr>
-            <tr><td class="method">Gemma-3-4B</td><td>214</td><td>783</td><td>31</td></tr>
+            <tr><td class="method">Llama-3.1-8B</td><td>1438</td><td class="best">1697</td><td>1.2&times;</td><td class="best">4814</td></tr>
+            <tr><td class="method">Pythia-1.4b</td><td>430</td><td>500</td><td>1.2&times;</td><td>1874</td></tr>
+            <tr><td class="method">SmolLM2-1.7B</td><td>335</td><td>957</td><td class="best">2.9&times;</td><td>3271</td></tr>
+            <tr><td class="method">Gemma-3-4B</td><td>214</td><td>697</td><td>3.3&times;</td><td>2141</td></tr>
           </tbody>
         </table>
-        <p class="body-text" style="margin-top: calc(3 * var(--u)); font-size: calc(11 * var(--u))">
-          Gemma&rsquo;s logit softcapping limits information gain. Low-dim projection boosts capacity (up to 3&times; for&nbsp;SmolLM2).
-        </p>
-
-        <div style="margin-top: calc(6 * var(--u)); border-top: calc(1 * var(--u)) solid var(--border-soft); padding-top: calc(4 * var(--u))">
-          <div class="section-title" style="font-size: calc(14 * var(--u))">Contributions</div>
-          <ul style="font-size: calc(11 * var(--u))">
-            <li><span class="keyword">Progressive cramming</span> &mdash; 100% generation&nbsp;guarantee</li>
-            <li><span class="keyword">Low-dim trajectories</span> &mdash; 30&ndash;100 PCA components for 99% variance</li>
-            <li><span class="keyword">Downstream collapse</span> &mdash; HellaSwag/ARC drop, MMLU&nbsp;&rarr;&nbsp;0%</li>
-            <li><span class="keyword">Causal analysis</span> &mdash; early layers drive collapse</li>
-          </ul>
+        <div class="eqn" style="margin-top: calc(4 * var(--u))">
+          <span class="label">Low-dimensional projection</span>
+          $$\mathbf{e} = W\mathbf{z} + \mathbf{b}, \quad \mathbf{z} \in \mathbb{R}^k,\; k \ll d$$
         </div>
+        <p class="body-text" style="margin-top: calc(2 * var(--u)); font-size: calc(11 * var(--u))">
+          Low-dim projection over-parametrises the embedding and boosts capacity across all families &mdash; up to <strong>3.3&times;</strong> for Gemma. Capacity scales with both depth and&nbsp;width.
+        </p>
+      </div>
+
+      <!-- 8. Contributions -->
+      <div class="card grow" data-measure-role="card">
+        <div class="section-title"><span class="num">8</span> Contributions</div>
+        <ul style="font-size: calc(11 * var(--u))">
+          <li><span class="keyword">Progressive cramming</span> &mdash; 100% generation guarantee with honest per-sample&nbsp;capacity</li>
+          <li><span class="keyword">Low-dim trajectories</span> &mdash; 30&ndash;100 PCA components for 99% variance; solutions near-orthogonal</li>
+          <li><span class="keyword">Downstream collapse</span> &mdash; HellaSwag/ARC drop, generative MMLU&nbsp;&rarr;&nbsp;0%</li>
+          <li><span class="keyword">Causal analysis</span> &mdash; early layers causally responsible for&nbsp;collapse</li>
+          <li><span class="keyword">Low-dim projection</span> &mdash; up to 3.3&times; capacity boost across model&nbsp;families</li>
+        </ul>
       </div>
 
     </div>
