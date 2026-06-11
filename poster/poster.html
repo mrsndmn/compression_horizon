@@ -632,7 +632,7 @@
     <div class="column" data-measure-role="column">
 
       <!-- 3. Low-Dimensional Trajectories -->
-      <div class="card highlight" data-measure-role="card">
+      <div class="card highlight grow" data-measure-role="card">
         <div class="section-title"><span class="num">3</span> Optimisation Trajectories</div>
         <div class="figure" style="margin: calc(2*var(--u)) 0">
           <img src="images/visual_abstract_pc1_pc2_joined.png" alt="PCA trajectory visualization for Llama-3.1-8B">
@@ -652,8 +652,13 @@
         </div>
       </div>
 
+    </div>
+
+    <!-- =================== COLUMN 3: Downstream + Knockout =================== -->
+    <div class="column" data-measure-role="column">
+
       <!-- 4. Downstream Collapse -->
-      <div class="card alert grow" data-measure-role="card">
+      <div class="card alert" data-measure-role="card">
         <div class="section-title"><span class="num">4</span> Reconstruction &ne;&nbsp;Understanding</div>
 
         <p class="body-text" style="font-family:'Inter',sans-serif; font-weight:700; color:var(--accent); margin-top:calc(2*var(--u))">Likelihood evaluation</p>
@@ -685,11 +690,6 @@
           On <strong>generative 5-shot MMLU</strong>: accuracy drops to <strong>~0%</strong> with the optimized embedding. A random control stays at baseline.
         </div>
       </div>
-
-    </div>
-
-    <!-- =================== COLUMN 3: Downstream + Knockout =================== -->
-    <div class="column" data-measure-role="column">
 
       <!-- 5. Attention Knockout -->
       <div class="card highlight grow" data-measure-role="card">
