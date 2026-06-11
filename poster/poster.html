@@ -635,38 +635,9 @@
     <!-- =================== COLUMN 2: Cross-Model + Trajectory =================== -->
     <div class="column" data-measure-role="column">
 
-      <!-- 3. Cross-Model + Low-Dim Projection -->
+      <!-- 3. Low-Dimensional Trajectories -->
       <div class="card highlight" data-measure-role="card">
-        <div class="section-title"><span class="num">3</span> Across Model Families</div>
-        <table class="result-table">
-          <thead>
-            <tr>
-              <th class="method" style="text-align:left">Model</th>
-              <th>Tokens</th>
-              <th>+LowDim</th>
-              <th>Boost</th>
-              <th>IG</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td class="method">Llama-3.1-8B</td><td>1438</td><td class="best">1697</td><td>1.2&times;</td><td class="best">4814</td></tr>
-            <tr><td class="method">Pythia-1.4b</td><td>430</td><td>500</td><td>1.2&times;</td><td>1874</td></tr>
-            <tr><td class="method">SmolLM2-1.7B</td><td>335</td><td>957</td><td>2.9&times;</td><td>3271</td></tr>
-            <tr><td class="method">Gemma-3-4B</td><td>214</td><td>697</td><td class="best">3.3&times;</td><td>2141</td></tr>
-          </tbody>
-        </table>
-        <div class="eqn" style="margin-top: calc(4 * var(--u))">
-          <span class="label">Low-dimensional projection</span>
-          $$\mathbf{e} = W\mathbf{z} + \mathbf{b}, \quad \mathbf{z} \in \mathbb{R}^k,\; k \ll d$$
-        </div>
-        <p class="body-text" style="margin-top: calc(2 * var(--u)); font-size: calc(11 * var(--u))">
-          Low-dim projection over-parametrises the embedding and boosts capacity across all families &mdash; up to <strong>3.3&times;</strong> for Gemma. Capacity scales with both depth and&nbsp;width.
-        </p>
-      </div>
-
-      <!-- 4. Low-Dimensional Trajectories -->
-      <div class="card highlight grow" data-measure-role="card">
-        <div class="section-title"><span class="num">4</span> Low-Dimensional Trajectories <span style="color:var(--gold); font-size: calc(10 * var(--u))">&#9733; KEY FINDING</span></div>
+        <div class="section-title"><span class="num">3</span> Low-Dimensional Trajectories</div>
         <div class="figure" style="margin: calc(2*var(--u)) 0">
           <img src="images/visual_abstract_pc1_pc2_joined.png" alt="PCA trajectory visualization for Llama-3.1-8B">
           <div class="caption">
@@ -689,13 +660,8 @@
         </div>
       </div>
 
-    </div>
-
-    <!-- =================== COLUMN 3: Downstream + Knockout =================== -->
-    <div class="column" data-measure-role="column">
-
       <!-- 4. Downstream Collapse -->
-      <div class="card alert" data-measure-role="card">
+      <div class="card alert grow" data-measure-role="card">
         <div class="section-title"><span class="num">4</span> Perfect Reconstruction &ne;&nbsp;Understanding</div>
         <p class="body-text">
           Prepending a crammed embedding <span class="keyword-red">drops</span> benchmark accuracy, even with the original prefix in context:
@@ -721,27 +687,59 @@
         </div>
       </div>
 
+    </div>
+
+    <!-- =================== COLUMN 3: Downstream + Knockout =================== -->
+    <div class="column" data-measure-role="column">
+
       <!-- 5. Attention Knockout -->
       <div class="card highlight grow" data-measure-role="card">
         <div class="section-title"><span class="num">5</span> Causal Analysis: Attention Knockout</div>
-        <div class="figure" style="margin: calc(2*var(--u)) 0">
-          <img src="images/attention_knockout_cumulative_vertical.png" alt="Forward vs reverse cumulative knockout on Llama-3.1-8B" style="max-height: calc(160 * var(--u)); object-fit: contain">
+        <div class="figure" style="margin: calc(2*var(--u)) 0; flex: 1 1 auto; display: flex; flex-direction: column; align-items: center">
+          <img src="images/attention_knockout_cumulative_vertical.png" alt="Forward vs reverse cumulative knockout on Llama-3.1-8B" style="max-height: calc(450 * var(--u)); object-fit: contain">
           <div class="caption">
             <strong>Llama-3.1-8B.</strong> <strong style="color:var(--accent-mid)">Forward</strong> (mask early layers) restores downstream accuracy. <strong style="color:var(--red-alert)">Reverse</strong> fails until early layers are&nbsp;reached.
           </div>
         </div>
-        <p class="body-text" style="margin-top: calc(2 * var(--u)); font-size: calc(11 * var(--u))">
-          <span class="keyword">Early layers</span> are causally responsible for both reconstruction <em>and</em> capability collapse. Late-layer attention mass (20&ndash;60%) is a symptom, not the cause. Consistent across Llama-3.1-8B, Pythia-1.4B, and&nbsp;SmolLM2-1.7B.
+        <p class="body-text" style="margin-top: calc(1 * var(--u)); font-size: calc(10 * var(--u))">
+          <span class="keyword">Early layers</span> cause both reconstruction <em>and</em> capability collapse. Late-layer attention mass (20&ndash;60%) is a symptom. Consistent across Llama-3.1-8B, Pythia-1.4B, SmolLM2-1.7B.
         </p>
       </div>
 
+
     </div>
 
-    <!-- =================== COLUMN 4: Contributions =================== -->
+    <!-- =================== COLUMN 4: Cross-Model + Contributions =================== -->
     <div class="column" data-measure-role="column">
 
+      <!-- 6. Cross-Model + Low-Dim Projection -->
+      <div class="card highlight" data-measure-role="card">
+        <div class="section-title"><span class="num">6</span> Across Model Families</div>
+        <table class="result-table">
+          <thead>
+            <tr>
+              <th class="method" style="text-align:left">Model</th>
+              <th>Tokens</th>
+              <th>+LowDim</th>
+              <th>Boost</th>
+              <th>IG</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="method">Llama-3.1-8B</td><td>1438</td><td class="best">1697</td><td>1.2&times;</td><td class="best">4814</td></tr>
+            <tr><td class="method">Pythia-1.4b</td><td>430</td><td>500</td><td>1.2&times;</td><td>1874</td></tr>
+            <tr><td class="method">SmolLM2-1.7B</td><td>335</td><td>957</td><td>2.9&times;</td><td>3271</td></tr>
+            <tr><td class="method">Gemma-3-4B</td><td>214</td><td>697</td><td class="best">3.3&times;</td><td>2141</td></tr>
+          </tbody>
+        </table>
+        <div class="eqn" style="margin-top: calc(3 * var(--u))">
+          <span class="label">Low-dimensional projection</span>
+          $$\mathbf{e} = W\mathbf{z} + \mathbf{b}, \quad \mathbf{z} \in \mathbb{R}^k,\; k \ll d$$
+        </div>
+      </div>
+
       <!-- 7. Contributions -->
-      <div class="card grow" data-measure-role="card">
+      <div class="card" data-measure-role="card">
         <div class="section-title"><span class="num">7</span> Contributions</div>
         <ul style="font-size: calc(11 * var(--u))">
           <li><span class="keyword">Progressive cramming</span> &mdash; 100% generation guarantee with honest per-sample&nbsp;capacity</li>
@@ -752,25 +750,23 @@
         </ul>
       </div>
 
+      <!-- 8. Takeaways -->
+      <div class="card alert grow" data-measure-role="card">
+        <div class="section-title"><span class="num">&#10003;</span> Takeaways</div>
+        <ul style="font-size: calc(11 * var(--u))">
+          <li><span class="keyword">Brittle Steering</span> &mdash; perfect reconstruction stores nothing the model can use; downstream benchmarks drop, generative MMLU collapses to&nbsp;~0%</li>
+          <li><span class="keyword">Early Layers</span> &mdash; across all model families, the embedding&rsquo;s causal influence concentrates in the first few layers; late-layer attention mass is a&nbsp;symptom</li>
+          <li><span class="keyword">Capacity = Architecture</span> &mdash; compression capacity scales monotonically with both depth and width; it&rsquo;s bought with the reconstructor&rsquo;s&nbsp;compute</li>
+        </ul>
+      </div>
+
     </div>
 
   </div>
 
-  <!-- =========================== TAKEAWAYS STRIP =========================== -->
-  <section class="takeaways-strip" data-measure-role="footer-strip">
-    <div class="ts-title"><span class="num">&#10003;</span> Takeaways</div>
-    <div class="ts-item">
-      <span class="ts-key">Brittle Steering.</span><span class="ts-text">Perfect reconstruction stores nothing the model can use &mdash; downstream benchmarks drop, generative MMLU collapses to ~0%.</span>
-    </div>
-    <div class="ts-item">
-      <span class="ts-key">Early Layers.</span><span class="ts-text">Across all model families, the embedding&rsquo;s causal influence concentrates in the first few layers. Late-layer attention mass is a symptom.</span>
-    </div>
-    <div class="ts-item">
-      <span class="ts-key">Capacity = Architecture.</span><span class="ts-text">Compression capacity scales monotonically with both depth and width &mdash; it&rsquo;s bought with the reconstructor&rsquo;s compute.</span>
-    </div>
-  </section>
-
-  <!-- footer removed -->
+  <div class="footer" data-measure-role="footer" style="min-height: calc(4 * var(--u))">
+    <div><strong style="color:var(--accent-deep)">Progressive Cramming</strong> &middot; ICML 2026</div>
+  </div>
 
 </div>
 
