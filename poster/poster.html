@@ -590,88 +590,29 @@
     <!-- =================== COLUMN 1: Problem + Method =================== -->
     <div class="column" data-measure-role="column">
 
-      <!-- 1. The Problem -->
-      <div class="card alert" data-measure-role="card">
-        <div class="section-title"><span class="num">1</span> The Problem: 99% Is an Illusion</div>
+      <!-- 1. Progressive Cramming -->
+      <div class="card highlight" data-measure-role="card">
+        <div class="section-title"><span class="num">1</span> Progressive Cramming</div>
         <p class="body-text">
-          Token cramming (Kuratov et al., 2025) optimizes a single embedding $\mathbf{e}$ so a frozen LM reconstructs a long sequence via teacher forcing. Optimization stops when TF accuracy reaches a <span class="keyword">99% threshold</span>.
+          For each text sample, optimize <strong>its own</strong> embedding $\mathbf{e}$ so a <span class="keyword">frozen LM</span> reconstructs the token sequence. Extend the target <strong>one token at a time</strong>, advancing only after <strong>perfect</strong>&nbsp;convergence:
         </p>
-        <p class="body-text" style="margin-top: calc(3 * var(--u))">
-          But the missing 1% lands on <span class="keyword-red">early token positions</span>. In autoregressive generation, one early miss&nbsp;cascades:
-        </p>
-        <table class="result-table" style="margin-top: calc(4 * var(--u))">
-          <thead>
-            <tr>
-              <th class="method" style="text-align:left">Model</th>
-              <th>TF Acc.</th>
-              <th>Greedy</th>
-              <th>Err @0</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td class="method">Llama-3.2-1B</td><td>99.0%</td><td style="color:var(--red-alert); font-weight:700">0.2%</td><td>86%</td></tr>
-            <tr><td class="method">Llama-3.2-3B</td><td>99.0%</td><td style="color:var(--red-alert); font-weight:700">0.2%</td><td>100%</td></tr>
-            <tr><td class="method">Llama-3.1-8B</td><td>99.1%</td><td style="color:var(--red-alert); font-weight:700">0.4%</td><td>100%</td></tr>
-          </tbody>
-        </table>
-        <div class="callout red" style="margin-top: calc(3 * var(--u))">
-          <strong>&gt;99% teacher-forced &rarr; ~0% greedy.</strong> The last 1% is the first token &mdash; and it breaks everything.
-        </div>
-      </div>
-
-      <!-- 2. Progressive Cramming -->
-      <div class="card highlight grow" data-measure-role="card">
-        <div class="section-title"><span class="num">2</span> Progressive Cramming</div>
         <div class="figure" style="margin: calc(2*var(--u)) 0">
-          <img src="images/visual_abstract_full_vs_progressive.png" alt="Full cramming vs Progressive cramming">
+          <img src="images/figure_progressive_cramming.png" alt="Progressive cramming: frozen LM, trainable embedding, warm-start between stages">
         </div>
-        <ul style="margin-top: calc(2 * var(--u)); font-size: calc(11 * var(--u))">
-          <li>Fix <strong>100% reconstruction</strong>, grow target one token at a&nbsp;time</li>
-          <li>Warm-start from previous solution; halt when perfect reconstruction&nbsp;fails</li>
+        <ul style="margin-top: calc(1 * var(--u)); font-size: calc(11 * var(--u))">
+          <li>Halt when perfect reconstruction fails &rarr; <span class="keyword">sharp capacity&nbsp;boundary</span></li>
           <li>Guarantees <span class="keyword">100% greedy generation</span> + honest per-sample&nbsp;capacity</li>
+          <li>Saving $\mathbf{e}$ at each step yields a per-sample <span class="keyword">optimizer&nbsp;trajectory</span> to&nbsp;analyze</li>
         </ul>
       </div>
 
-    </div>
-
-    <!-- =================== COLUMN 2: Trajectory + Results =================== -->
-    <div class="column" data-measure-role="column">
-
-      <!-- 3. Low-Dimensional Trajectories -->
-      <div class="card highlight" data-measure-role="card">
-        <div class="section-title"><span class="num">3</span> Low-Dimensional Trajectories <span style="color:var(--gold); font-size: calc(10 * var(--u))">&#9733; KEY FINDING</span></div>
-        <div class="figure" style="margin: calc(2*var(--u)) 0">
-          <img src="images/visual_abstract_pc1_pc2_joined.png" alt="PCA trajectory visualization for Llama-3.1-8B">
-          <div class="caption">
-            <strong>Llama-3.1-8B:</strong> Optimizer trajectories in PC1&ndash;PC2. Just 2 components capture <strong>65.7%</strong> of variance across 4,096 dimensions. Colored by accuracy landscape.
-          </div>
-        </div>
-        <p class="body-text" style="margin-top: calc(2 * var(--u))">
-          Across model families, trajectories occupy remarkably <span class="keyword">low-dimensional subspaces</span>:
-        </p>
-        <div class="keybox">
-          <div class="kb-item">
-            <div class="kb-num">30&ndash;100</div>
-            <div class="kb-label">PCA components<br>for 99% variance</div>
-          </div>
-          <div class="kb-item">
-            <div class="kb-num">~log</div>
-            <div class="kb-label">growth with<br>sequence length</div>
-          </div>
-          <div class="kb-item">
-            <div class="kb-num">&perp;</div>
-            <div class="kb-label">solutions are<br>near-orthogonal</div>
-          </div>
-        </div>
-        <p class="body-text" style="margin-top: calc(3 * var(--u)); font-size: calc(11 * var(--u))">
-          Low dimensionality is a <em>path</em> property, not a solution-set property: equally-good solutions are 1.5&ndash;1.6&times; apart and&nbsp;near-orthogonal.
-        </p>
-      </div>
-
-      <!-- 4. Full vs Progressive -->
+      <!-- 2. Why Not Full Cramming? -->
       <div class="card grow" data-measure-role="card">
-        <div class="section-title"><span class="num">4</span> Full vs. Progressive</div>
-        <table class="result-table">
+        <div class="section-title"><span class="num">2</span> Why Not Full Cramming?</div>
+        <p class="body-text" style="font-size: calc(11 * var(--u))">
+          Full cramming (Kuratov et al., 2025) optimizes all tokens at once. Higher capacity &mdash; but residual errors concentrate on <span class="keyword-red">early positions</span>, and one early miss cascades through autoregressive&nbsp;generation:
+        </p>
+        <table class="result-table" style="margin-top: calc(2 * var(--u))">
           <thead>
             <tr>
               <th class="method" style="text-align:left">Model / Type</th>
@@ -687,12 +628,65 @@
             <tr class="ours"><td class="method">Pythia / Progr.</td><td>430</td><td class="best">100%</td><td class="best">100%</td></tr>
           </tbody>
         </table>
-        <p class="body-text" style="margin-top: calc(3 * var(--u)); font-size: calc(11 * var(--u))">
-          Progressive cramming trades &lt;10% capacity for <strong>guaranteed perfect&nbsp;generation</strong>.
+      </div>
+
+    </div>
+
+    <!-- =================== COLUMN 2: Cross-Model + Trajectory =================== -->
+    <div class="column" data-measure-role="column">
+
+      <!-- 3. Cross-Model + Low-Dim Projection -->
+      <div class="card highlight" data-measure-role="card">
+        <div class="section-title"><span class="num">3</span> Across Model Families</div>
+        <table class="result-table">
+          <thead>
+            <tr>
+              <th class="method" style="text-align:left">Model</th>
+              <th>Tokens</th>
+              <th>+LowDim</th>
+              <th>Boost</th>
+              <th>IG</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="method">Llama-3.1-8B</td><td>1438</td><td class="best">1697</td><td>1.2&times;</td><td class="best">4814</td></tr>
+            <tr><td class="method">Pythia-1.4b</td><td>430</td><td>500</td><td>1.2&times;</td><td>1874</td></tr>
+            <tr><td class="method">SmolLM2-1.7B</td><td>335</td><td>957</td><td>2.9&times;</td><td>3271</td></tr>
+            <tr><td class="method">Gemma-3-4B</td><td>214</td><td>697</td><td class="best">3.3&times;</td><td>2141</td></tr>
+          </tbody>
+        </table>
+        <div class="eqn" style="margin-top: calc(4 * var(--u))">
+          <span class="label">Low-dimensional projection</span>
+          $$\mathbf{e} = W\mathbf{z} + \mathbf{b}, \quad \mathbf{z} \in \mathbb{R}^k,\; k \ll d$$
+        </div>
+        <p class="body-text" style="margin-top: calc(2 * var(--u)); font-size: calc(11 * var(--u))">
+          Low-dim projection over-parametrises the embedding and boosts capacity across all families &mdash; up to <strong>3.3&times;</strong> for Gemma. Capacity scales with both depth and&nbsp;width.
         </p>
-        <p class="body-text" style="margin-top: calc(3 * var(--u)); font-size: calc(11 * var(--u))">
-          Solutions are 1.5&times; apart and near-orthogonal (diverse).
-        </p>
+      </div>
+
+      <!-- 4. Low-Dimensional Trajectories -->
+      <div class="card highlight grow" data-measure-role="card">
+        <div class="section-title"><span class="num">4</span> Low-Dimensional Trajectories <span style="color:var(--gold); font-size: calc(10 * var(--u))">&#9733; KEY FINDING</span></div>
+        <div class="figure" style="margin: calc(2*var(--u)) 0">
+          <img src="images/visual_abstract_pc1_pc2_joined.png" alt="PCA trajectory visualization for Llama-3.1-8B">
+          <div class="caption">
+            <strong>Llama-3.1-8B:</strong> PC1&ndash;PC2 capture <strong>65.7%</strong> of variance across 4,096&nbsp;dims.
+          </div>
+        </div>
+        <div class="keybox">
+          <div class="kb-item">
+            <div class="kb-num">30&ndash;100</div>
+            <div class="kb-label">PCA components<br>for 99% variance</div>
+          </div>
+          <div class="kb-item">
+            <div class="kb-num">~log</div>
+            <div class="kb-label">growth with<br>sequence length</div>
+          </div>
+          <div class="kb-item">
+            <div class="kb-num">&perp;</div>
+            <div class="kb-label">solutions are<br>near-orthogonal</div>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -700,9 +694,9 @@
     <!-- =================== COLUMN 3: Downstream + Knockout =================== -->
     <div class="column" data-measure-role="column">
 
-      <!-- 5. Downstream Collapse -->
+      <!-- 4. Downstream Collapse -->
       <div class="card alert" data-measure-role="card">
-        <div class="section-title"><span class="num">5</span> Perfect Reconstruction &ne;&nbsp;Understanding</div>
+        <div class="section-title"><span class="num">4</span> Perfect Reconstruction &ne;&nbsp;Understanding</div>
         <p class="body-text">
           Prepending a crammed embedding <span class="keyword-red">drops</span> benchmark accuracy, even with the original prefix in context:
         </p>
@@ -727,63 +721,28 @@
         </div>
       </div>
 
-      <!-- 6. Attention Knockout -->
+      <!-- 5. Attention Knockout -->
       <div class="card highlight grow" data-measure-role="card">
-        <div class="section-title"><span class="num">6</span> Causal Analysis: Attention Knockout</div>
+        <div class="section-title"><span class="num">5</span> Causal Analysis: Attention Knockout</div>
         <div class="figure" style="margin: calc(2*var(--u)) 0">
-          <img src="images/attention_knockout_cumulative.png" alt="Forward vs reverse cumulative knockout on Llama-3.1-8B">
+          <img src="images/attention_knockout_cumulative_vertical.png" alt="Forward vs reverse cumulative knockout on Llama-3.1-8B" style="max-height: calc(160 * var(--u)); object-fit: contain">
           <div class="caption">
-            <strong>Llama-3.1-8B cumulative knockout.</strong> <strong style="color:var(--accent-mid)">Forward</strong> (mask early layers first) restores downstream accuracy while destroying reconstruction. <strong style="color:var(--red-alert)">Reverse</strong> fails to recover until early layers are&nbsp;reached.
+            <strong>Llama-3.1-8B.</strong> <strong style="color:var(--accent-mid)">Forward</strong> (mask early layers) restores downstream accuracy. <strong style="color:var(--red-alert)">Reverse</strong> fails until early layers are&nbsp;reached.
           </div>
         </div>
-        <p class="body-text" style="margin-top: calc(2 * var(--u))">
-          <span class="keyword">Early layers</span> are causally responsible for both reconstruction <em>and</em> capability collapse. Late-layer attention mass (20&ndash;60%) is a <em>symptom</em>, not the cause.
-        </p>
         <p class="body-text" style="margin-top: calc(2 * var(--u)); font-size: calc(11 * var(--u))">
-          Consistent across Llama-3.1-8B, Pythia-1.4B, and&nbsp;SmolLM2-1.7B.
-        </p>
-        <p class="body-text" style="margin-top: calc(3 * var(--u)); font-size: calc(11 * var(--u))">
-          Embedding attracts 20&ndash;60% attention mass (sink), but masking late layers has negligible causal&nbsp;effect.
+          <span class="keyword">Early layers</span> are causally responsible for both reconstruction <em>and</em> capability collapse. Late-layer attention mass (20&ndash;60%) is a symptom, not the cause. Consistent across Llama-3.1-8B, Pythia-1.4B, and&nbsp;SmolLM2-1.7B.
         </p>
       </div>
 
     </div>
 
-    <!-- =================== COLUMN 4: Capacity Scaling + Conclusion =================== -->
+    <!-- =================== COLUMN 4: Contributions =================== -->
     <div class="column" data-measure-role="column">
 
-      <!-- 7. Cross-Model + Low-Dim Projection -->
-      <div class="card highlight" data-measure-role="card">
-        <div class="section-title"><span class="num">7</span> Across Model Families</div>
-        <table class="result-table">
-          <thead>
-            <tr>
-              <th class="method" style="text-align:left">Model</th>
-              <th>Tokens</th>
-              <th>+LowDim</th>
-              <th>Boost</th>
-              <th>IG</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td class="method">Llama-3.1-8B</td><td>1438</td><td class="best">1697</td><td>1.2&times;</td><td class="best">4814</td></tr>
-            <tr><td class="method">Pythia-1.4b</td><td>430</td><td>500</td><td>1.2&times;</td><td>1874</td></tr>
-            <tr><td class="method">SmolLM2-1.7B</td><td>335</td><td>957</td><td class="best">2.9&times;</td><td>3271</td></tr>
-            <tr><td class="method">Gemma-3-4B</td><td>214</td><td>697</td><td>3.3&times;</td><td>2141</td></tr>
-          </tbody>
-        </table>
-        <div class="eqn" style="margin-top: calc(4 * var(--u))">
-          <span class="label">Low-dimensional projection</span>
-          $$\mathbf{e} = W\mathbf{z} + \mathbf{b}, \quad \mathbf{z} \in \mathbb{R}^k,\; k \ll d$$
-        </div>
-        <p class="body-text" style="margin-top: calc(2 * var(--u)); font-size: calc(11 * var(--u))">
-          Low-dim projection over-parametrises the embedding and boosts capacity across all families &mdash; up to <strong>3.3&times;</strong> for Gemma. Capacity scales with both depth and&nbsp;width.
-        </p>
-      </div>
-
-      <!-- 8. Contributions -->
+      <!-- 7. Contributions -->
       <div class="card grow" data-measure-role="card">
-        <div class="section-title"><span class="num">8</span> Contributions</div>
+        <div class="section-title"><span class="num">7</span> Contributions</div>
         <ul style="font-size: calc(11 * var(--u))">
           <li><span class="keyword">Progressive cramming</span> &mdash; 100% generation guarantee with honest per-sample&nbsp;capacity</li>
           <li><span class="keyword">Low-dim trajectories</span> &mdash; 30&ndash;100 PCA components for 99% variance; solutions near-orthogonal</li>
@@ -811,16 +770,7 @@
     </div>
   </section>
 
-  <!-- =========================== FOOTER =========================== -->
-  <div class="footer" data-measure-role="footer">
-    <div>
-      <strong style="color:var(--accent-deep)">Progressive Cramming</strong> &middot; ICML 2026
-    </div>
-    <div>
-      Code: <span class="repo">github.com/mrsndmn/cramming_optimizer_trajectory</span> &nbsp;&middot;&nbsp;
-      Contact: <span class="repo">d.tarasov@fusionbrain.ai</span>
-    </div>
-  </div>
+  <!-- footer removed -->
 
 </div>
 
