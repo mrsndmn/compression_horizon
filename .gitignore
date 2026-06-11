@@ -38,3 +38,8 @@ supplemetnary.zip
 **/.omc/
 
 worktrees
+
+# Untracked local files
+poster/poster_preview.png
+scripts/paper/_make_trajectory_npz_nofield.py
+scripts/paper/refit_pca_and_animate.py
