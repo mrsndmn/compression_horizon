@@ -419,7 +419,7 @@
 
   .keybox {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     gap: calc(4 * var(--u));
     margin: calc(4 * var(--u)) 0 0 0;
   }
@@ -576,31 +576,6 @@
     </div>
   </header>
 
-  <!-- =========================== BANNER =========================== -->
-  <section class="framework-banner" data-measure-role="banner">
-    <div class="fb-text">
-      <span class="fb-label">Key Idea</span>
-      &nbsp;Fix <strong>reconstruction quality</strong> (require perfection), grow the target <strong>one token at a time</strong>, and use the resulting trajectory to probe what the model actually learns. Result: <span class="keyword-red" style="color:var(--red-alert)">100% generation</span> where prior work collapses to <span class="keyword-red" style="color:var(--red-alert)">0%</span>.
-    </div>
-    <div class="banner-stats">
-      <div class="bs-item">
-        <div class="bs-num">1,568</div>
-        <div class="bs-label">tokens in 1<br>embedding (Llama-8B)</div>
-      </div>
-      <div class="bs-item">
-        <div class="bs-num">100%</div>
-        <div class="bs-label">greedy generation<br>(progressive)</div>
-      </div>
-      <div class="bs-item">
-        <div class="bs-num">65.7%</div>
-        <div class="bs-label">variance in 2 PCA<br>components</div>
-      </div>
-      <div class="bs-item">
-        <div class="bs-num">5 families</div>
-        <div class="bs-label">Llama, Pythia, SmolLM,<br>Gemma, Qwen</div>
-      </div>
-    </div>
-  </section>
 
   <!-- =========================== BODY (4 columns) =========================== -->
   <div class="body-grid" data-measure-role="body">
@@ -617,7 +592,7 @@
         <div class="figure" style="margin: calc(2*var(--u)) 0">
           <img src="images/figure_progressive_cramming.png" alt="Progressive cramming: frozen LM, trainable embedding, warm-start between stages">
         </div>
-        <ul style="margin-top: calc(1 * var(--u)); font-size: calc(11 * var(--u))">
+        <ul style="margin-top: calc(1 * var(--u))">
           <li>Halt when perfect reconstruction fails &rarr; <span class="keyword">sharp capacity&nbsp;boundary</span></li>
           <li>Guarantees <span class="keyword">100% greedy generation</span> + honest per-sample&nbsp;capacity</li>
           <li>Saving $\mathbf{e}$ at each step yields a per-sample <span class="keyword">optimizer&nbsp;trajectory</span> to&nbsp;analyze</li>
@@ -627,7 +602,7 @@
       <!-- 2. Why Not Full Cramming? -->
       <div class="card grow" data-measure-role="card">
         <div class="section-title"><span class="num">2</span> Why Not Full Cramming?</div>
-        <p class="body-text" style="font-size: calc(11 * var(--u))">
+        <p class="body-text">
           Full cramming (Kuratov et al., 2025) optimizes all tokens at once. Higher capacity &mdash; but residual errors concentrate on <span class="keyword-red">early positions</span>, and one early miss cascades through autoregressive&nbsp;generation:
         </p>
         <table class="result-table" style="margin-top: calc(2 * var(--u))">
@@ -659,7 +634,7 @@
         <div class="figure" style="margin: calc(2*var(--u)) 0">
           <img src="images/visual_abstract_pc1_pc2_joined.png" alt="PCA trajectory visualization for Llama-3.1-8B">
           <div class="caption">
-            <strong>Llama-3.1-8B:</strong> PC1&ndash;PC2 capture <strong>65.7%</strong> of variance across 4,096&nbsp;dims.
+            <strong>Llama-3.1-8B</strong> trajectory projected onto PC1&ndash;PC2 (<strong>65.7%</strong> variance). <strong>Black dots:</strong> optimized embedding at each prefix length. <strong>Colored regions:</strong> local accuracy landscape at lengths {100, 200, 400, 800, 1000}; saturation &prop; reconstruction accuracy. Basins <strong>shrink</strong> as sequence length grows.
           </div>
         </div>
         <div class="keybox">
@@ -670,10 +645,6 @@
           <div class="kb-item">
             <div class="kb-num">~log</div>
             <div class="kb-label">growth with<br>sequence length</div>
-          </div>
-          <div class="kb-item">
-            <div class="kb-num">&perp;</div>
-            <div class="kb-label">solutions are<br>near-orthogonal</div>
           </div>
         </div>
       </div>
@@ -719,7 +690,7 @@
             <strong>Llama-3.1-8B.</strong> <strong style="color:var(--accent-mid)">Forward</strong> (mask early layers) restores downstream accuracy. <strong style="color:var(--red-alert)">Reverse</strong> fails until early layers are&nbsp;reached.
           </div>
         </div>
-        <p class="body-text" style="margin-top: calc(1 * var(--u)); font-size: calc(10 * var(--u))">
+        <p class="body-text" style="margin-top: calc(1 * var(--u))">
           <span class="keyword">Early layers</span> cause both reconstruction <em>and</em> capability collapse. Late-layer attention mass (20&ndash;60%) is a symptom. Consistent across Llama-3.1-8B, Pythia-1.4B, SmolLM2-1.7B.
         </p>
       </div>
@@ -759,7 +730,7 @@
       <!-- 7. Contributions -->
       <div class="card" data-measure-role="card">
         <div class="section-title"><span class="num">7</span> Contributions</div>
-        <ul style="font-size: calc(11 * var(--u))">
+        <ul>
           <li><span class="keyword">Progressive cramming</span> &mdash; 100% generation guarantee with honest per-sample&nbsp;capacity</li>
           <li><span class="keyword">Low-dim trajectories</span> &mdash; 30&ndash;100 PCA components for 99% variance; solutions near-orthogonal</li>
           <li><span class="keyword">Downstream collapse</span> &mdash; HellaSwag/ARC drop, generative MMLU&nbsp;&rarr;&nbsp;0%</li>
@@ -771,7 +742,7 @@
       <!-- 8. Takeaways -->
       <div class="card alert grow" data-measure-role="card">
         <div class="section-title"><span class="num">&#10003;</span> Takeaways</div>
-        <ul style="font-size: calc(11 * var(--u))">
+        <ul>
           <li><span class="keyword">Brittle Steering</span> &mdash; perfect reconstruction stores nothing the model can use; downstream benchmarks drop, generative MMLU collapses to&nbsp;~0%</li>
           <li><span class="keyword">Early Layers</span> &mdash; across all model families, the embedding&rsquo;s causal influence concentrates in the first few layers; late-layer attention mass is a&nbsp;symptom</li>
         </ul>
