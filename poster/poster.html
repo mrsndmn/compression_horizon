@@ -155,6 +155,18 @@
     margin-top: calc(2 * var(--u));
     font-size: calc(12 * var(--u));
   }
+  .affiliations-logos {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: calc(16 * var(--u));
+    margin-top: calc(3 * var(--u));
+  }
+  .affiliations-logos img {
+    height: calc(18 * var(--u));
+    width: auto;
+    object-fit: contain;
+  }
 
   .right-stack {
     display: flex;
@@ -546,14 +558,20 @@
         <span class="author">Timofei Lashukov<sup>2</sup></span> &middot;
         <span class="author">Elizaveta Goncharova<sup>1,2</sup></span> &middot;
         <span class="author">Andrey Kuznetsov<sup>1,3</sup></span>
-        <span class="aff"><sup>1</sup>FusionBrain Lab &nbsp;&middot;&nbsp; <sup>2</sup>HSE University, Moscow &nbsp;&middot;&nbsp; <sup>3</sup>Innopolis University</span>
+        <span class="aff"><sup>1</sup>FusionBrain Lab, AIRI &nbsp;&middot;&nbsp; <sup>2</sup>HSE University, Moscow &nbsp;&middot;&nbsp; <sup>3</sup>Innopolis University</span>
+      </div>
+      <div class="affiliations-logos">
+        <img src="https://storage.yandexcloud.net/papers-drafts/fusionbrain_combined.svg" alt="FusionBrain Lab" style="height: calc(24 * var(--u))">
+        <img src="images/airi_logo.svg" alt="AIRI">
+        <img src="images/hse_logo.svg" alt="HSE University">
+        <img src="https://storage.yandexcloud.net/papers-drafts/innopolis_logo.svg" alt="Innopolis University">
       </div>
     </div>
 
     <div class="right-stack">
       <div class="qr-block">
         <img src="images/qr_code.png" alt="GitHub QR code">
-        <div class="qr-label">Code &amp; Data</div>
+        <div class="qr-label">Project Page</div>
       </div>
     </div>
   </header>
@@ -662,7 +680,7 @@
 
       <!-- 4. Downstream Collapse -->
       <div class="card alert grow" data-measure-role="card">
-        <div class="section-title"><span class="num">4</span> Perfect Reconstruction &ne;&nbsp;Understanding</div>
+        <div class="section-title"><span class="num">4</span> Reconstruction &ne;&nbsp;Understanding</div>
         <p class="body-text">
           Prepending a crammed embedding <span class="keyword-red">drops</span> benchmark accuracy, even with the original prefix in context:
         </p>
@@ -694,7 +712,7 @@
 
       <!-- 5. Attention Knockout -->
       <div class="card highlight grow" data-measure-role="card">
-        <div class="section-title"><span class="num">5</span> Causal Analysis: Attention Knockout</div>
+        <div class="section-title"><span class="num">5</span> Attention Knockout</div>
         <div class="figure" style="margin: calc(2*var(--u)) 0; flex: 1 1 auto; display: flex; flex-direction: column; align-items: center">
           <img src="images/attention_knockout_cumulative_vertical.png" alt="Forward vs reverse cumulative knockout on Llama-3.1-8B" style="max-height: calc(450 * var(--u)); object-fit: contain">
           <div class="caption">
@@ -756,7 +774,6 @@
         <ul style="font-size: calc(11 * var(--u))">
           <li><span class="keyword">Brittle Steering</span> &mdash; perfect reconstruction stores nothing the model can use; downstream benchmarks drop, generative MMLU collapses to&nbsp;~0%</li>
           <li><span class="keyword">Early Layers</span> &mdash; across all model families, the embedding&rsquo;s causal influence concentrates in the first few layers; late-layer attention mass is a&nbsp;symptom</li>
-          <li><span class="keyword">Capacity = Architecture</span> &mdash; compression capacity scales monotonically with both depth and width; it&rsquo;s bought with the reconstructor&rsquo;s&nbsp;compute</li>
         </ul>
       </div>
 

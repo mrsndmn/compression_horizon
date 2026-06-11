@@ -55,3 +55,14 @@ its own file under `paper/tables/` (generated) or `paper/tables/manual/`
 `\begin{tabular...}`/`\begin{longtable}` appears in the body sources
 (`BODY_TEX`). `rebuttle.tex` is a standalone reviewer-response document, not part
 of the compiled paper, so it is exempt.
+
+## Building the poster
+
+Source: `poster/poster.html`. After editing, validate layout and render a preview:
+
+1. **Measure gate** (validates column alignment, gaps, overflow):
+   `python .claude/posterly/tools/poster_check.py measure poster/poster.html`
+2. **Render PNG preview**:
+   `python .claude/posterly/tools/render_preview.py poster/poster.html --png poster/poster_preview.png`
+
+Do not read rendered images yourself — the user reviews visually.
