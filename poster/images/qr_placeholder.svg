@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+    <rect width="200" height="200" fill="white" stroke="black" stroke-width="2"/>
+    <text x="100" y="90" text-anchor="middle" font-size="14" font-family="sans-serif">SCAN ME</text>
+    <text x="100" y="115" text-anchor="middle" font-size="10" font-family="sans-serif">github.com/mrsndmn/</text>
+    <text x="100" y="130" text-anchor="middle" font-size="10" font-family="sans-serif">cramming_optimizer_trajectory</text>
+    </svg>

@@ -279,6 +279,20 @@ def render_job(experiment):
         cmd_args.append(f"--progressive_prefix_len {prefix_len}")
         exp_suffix = f"{exp_suffix}_prefix_{prefix_len}"
 
+    # Initialization from a prior experiment's artifacts at a specific stage.
+    init_artifact = experiment.get("progressive_init_from_artifact")
+    init_stage = experiment.get("progressive_init_from_stage")
+    init_sample_ids = experiment.get("progressive_init_sample_ids")
+    if init_artifact and init_stage is not None:
+        cmd_args.append(f"--progressive_init_from_artifact {init_artifact}")
+        cmd_args.append(f"--progressive_init_from_stage {init_stage}")
+        # Derive a short suffix from the artifact directory basename.
+        artifact_short = os.path.basename(init_artifact.rstrip("/"))
+        exp_suffix = f"{exp_suffix}_initfrom_{artifact_short}_stage{init_stage}"
+        if init_sample_ids is not None:
+            cmd_args.append(f"--progressive_init_sample_ids {init_sample_ids}")
+            exp_suffix = f"{exp_suffix}_s{init_sample_ids}"
+
     out_dir_name = f"artifacts/experiments_progressive/{exp_suffix}"
     cmd_args.append(f"--output_dir {out_dir_name}")
     return cmd_args, exp_suffix, out_dir_name
