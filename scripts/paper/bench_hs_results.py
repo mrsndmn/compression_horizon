@@ -568,6 +568,7 @@ def plot_cumulative_knockout(
     data: Dict,
     output_path: str,
     model_label: Optional[str] = None,
+    vertical: bool = False,
 ) -> None:
     """Cumulative knockout curve: x=number of layers knocked out (0..L), y=accuracy.
 
@@ -598,7 +599,10 @@ def plot_cumulative_knockout(
     base_acc = data.get("baseline", {}).get("accuracy")
     cram_acc = data.get("compressed", {}).get("accuracy")
 
-    fig, (ax_fwd, ax_rev) = plt.subplots(1, 2, figsize=(16, 4), sharey=True)
+    if vertical:
+        fig, (ax_fwd, ax_rev) = plt.subplots(2, 1, figsize=(8, 8), sharey=True)
+    else:
+        fig, (ax_fwd, ax_rev) = plt.subplots(1, 2, figsize=(16, 4), sharey=True)
 
     # --- Left subplot: Forward cumulative knockout (layers 0..k) ---
     if has_forward:
@@ -671,6 +675,8 @@ def plot_cumulative_knockout(
     if cram_acc is not None:
         ax_rev.axhline(y=cram_acc, color="#dc2626", linestyle="--", linewidth=1, label=f"Cram = {cram_acc:.3f}")
     ax_rev.set_xlabel("Number of layers knocked out (0 = Cram, L = Base)", fontsize=18)
+    if vertical:
+        ax_rev.set_ylabel("Accuracy", fontsize=18)
     ax_rev.set_xlim(-0.5, num_layers + 0.5)
     ax_rev.set_title("Reverse knockout (layers k..L-1)", fontsize=18)
     ax_rev.tick_params(labelsize=15)
@@ -678,7 +684,9 @@ def plot_cumulative_knockout(
     ax_rev.grid(True, alpha=0.3)
 
     fig.tight_layout()
-    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    if vertical:
+        fig.subplots_adjust(hspace=0.55)
+    fig.savefig(output_path, dpi=200 if vertical else 150, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved cumulative knockout plot to {output_path}")
 

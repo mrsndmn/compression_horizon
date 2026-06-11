@@ -13,6 +13,10 @@ Reads a HellaSwag evaluation ``results.json`` that contains an
 Defaults target the Llama-3.1-8B run reported in the paper. Regenerate with:
 
     python scripts/paper/figures_attention_knockout.py
+
+For the poster (vertical layout, PNG at 200 DPI):
+
+    python scripts/paper/figures_attention_knockout.py --poster
 """
 from __future__ import annotations
 
@@ -27,6 +31,7 @@ from bench_hs_results import (
 
 DEFAULT_RESULTS = "artifacts/hellaswag_evaluation/" "hellaswag_Meta-Llama-3.1-8B_samples_512_lr_0.1_batch_128/results.json"
 DEFAULT_FIGDIR = "paper/figures"
+DEFAULT_POSTER_FIGDIR = "poster/images"
 DEFAULT_LABEL = "Llama-3.1-8B"
 
 
@@ -35,9 +40,22 @@ def main() -> int:
     parser.add_argument("--results", default=DEFAULT_RESULTS, help="results.json with intervention_summary")
     parser.add_argument("--figdir", default=DEFAULT_FIGDIR, help="output directory for the PDFs")
     parser.add_argument("--model-label", default=DEFAULT_LABEL, help="model label for plot titles")
+    parser.add_argument("--poster", action="store_true", help="generate vertical PNG for poster instead of paper PDFs")
     args = parser.parse_args()
 
     data = load_intervention_results(args.results)
+
+    if args.poster:
+        figdir = Path(args.figdir) if args.figdir != DEFAULT_FIGDIR else Path(DEFAULT_POSTER_FIGDIR)
+        figdir.mkdir(parents=True, exist_ok=True)
+        plot_cumulative_knockout(
+            data,
+            str(figdir / "attention_knockout_cumulative_vertical.png"),
+            model_label=args.model_label,
+            vertical=True,
+        )
+        return 0
+
     figdir = Path(args.figdir)
     figdir.mkdir(parents=True, exist_ok=True)
 
