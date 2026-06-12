@@ -457,6 +457,10 @@ independent initializations can only increase diversity, and leave it to future 
 %        --dataset_path artifacts/experiments_progressive/sl_4096_pythia-1.4b_lr_0.1/progressive_prefixes \
 %        --sample_ids 0 1 2 3 4 5 6 7 8 9 --num_anchors 8 --mesh_resolution 60 --batch_size 32 \
 %        --output artifacts/experiments_progressive/sl_4096_pythia-1.4b_lr_0.1/visualizations/basin_area_vs_stage_normalised.png
+%      python scripts/paper/plot_basin_area_vs_stage.py \
+%        --dataset_path artifacts/experiments_progressive/sl_4096_SmolLM2-135M_lr_0.1/progressive_prefixes \
+%        --sample_ids 0 1 2 3 4 5 6 7 8 9 --num_anchors 8 --mesh_resolution 60 --batch_size 32 \
+%        --output artifacts/experiments_progressive/sl_4096_SmolLM2-135M_lr_0.1/visualizations/basin_area_vs_stage_normalised.png
 %
 %   2. Generate multi-model comparison figure:
 %      python scripts/paper/plot_basin_area_vs_stage.py --plot_multi \
@@ -464,18 +468,19 @@ independent initializations can only increase diversity, and leave it to future 
 %          artifacts/experiments_progressive/sl_4096_Meta-Llama-3.1-8B_lr_0.1 \
 %          artifacts/experiments_progressive/sl_4096_SmolLM2-1.7B_lr_0.1 \
 %          artifacts/experiments_progressive/sl_4096_pythia-1.4b_lr_0.1 \
-%        --multi_model_names "Llama-3.1-8B" "SmolLM2-1.7B" "Pythia-1.4B" \
+%          artifacts/experiments_progressive/sl_4096_SmolLM2-135M_lr_0.1 \
+%        --multi_model_names "Llama-3.1-8B" "SmolLM2-1.7B" "Pythia-1.4B" "SmolLM2-135M" \
 %        --sample_ids 0 1 2 3 4 5 6 7 8 9 \
 %        --output paper/figures/basin_area_vs_stage_multi.png
 
-The visual abstract (Figure~\ref{fig:visual_abstract}) shows that the accuracy basin around the optimized embedding shrinks as the compressed prefix grows. To quantify this, we measure the basin area in the PC1--PC2 subspace at uniformly spaced stages across all $10$ PG19 samples for three models: Llama-3.1-8B, SmolLM2-1.7B, and Pythia-1.4B. For each sample, we fit PCA to the full embedding trajectory, select $8$ anchor points at uniform fractions of the sample's maximum capacity, and evaluate reconstruction accuracy on a $60\times60$ mesh centered on the trajectory in PC1--PC2 space. The basin area is the fraction of mesh cells with teacher-forced accuracy $>0.9$.
+The visual abstract (Figure~\ref{fig:visual_abstract}) shows that the accuracy basin around the optimized embedding shrinks as the compressed prefix grows. To quantify this, we measure the basin area in the PC1--PC2 subspace at uniformly spaced stages across all $10$ PG19 samples for four models: Llama-3.1-8B, SmolLM2-1.7B, Pythia-1.4B, and SmolLM2-135M. For each sample, we fit PCA to the full embedding trajectory, select $8$ anchor points at uniform fractions of the sample's maximum capacity, and evaluate reconstruction accuracy on a $60\times60$ mesh centered on the trajectory in PC1--PC2 space. The basin area is the fraction of mesh cells with teacher-forced accuracy $>0.9$.
 
-Figure~\ref{fig:basin_area_vs_stage} plots the mean basin fraction (with $\pm1$ standard deviation bands over $10$ samples) against the normalised stage (stage index divided by the sample's maximum compressed-token count). Across all three models, the basin fraction decays monotonically---and approximately log-linearly---with the normalised stage: the optimizer's room for error shrinks by roughly two orders of magnitude between the beginning and the end of the trajectory. The trend is consistent across model families, with Llama-3.1-8B exhibiting smaller basins overall (likely due to its higher dimensionality) and SmolLM2-1.7B and Pythia-1.4B following similar trajectories. This provides a quantitative basis for the claim that accuracy basins contract with sequence length, and demonstrates that this contraction is a general phenomenon not specific to a particular model architecture.
+Figure~\ref{fig:basin_area_vs_stage} plots the mean basin fraction (with $\pm1$ standard deviation bands over $10$ samples) against the normalised stage (stage index divided by the sample's maximum compressed-token count). Across all four models, the basin fraction decays monotonically---and approximately log-linearly---with the normalised stage: the optimizer's room for error shrinks by roughly two orders of magnitude between the beginning and the end of the trajectory. The trend is consistent across model families and scales, from 135M to 8B parameters, demonstrating that basin contraction with sequence length is a general phenomenon not specific to a particular model architecture or scale.
 
 \begin{figure}[t]
     \centering
     \includegraphics[width=\linewidth]{basin_area_vs_stage_multi.pdf}
-    \caption{Mean accuracy basin fraction ($\pm1$ std over $10$ PG19 samples) versus normalised stage for three model families. The basin fraction (cells with $>90\%$ accuracy in a $60{\times}60$ PC1--PC2 mesh) decays log-linearly across all models, with consistent ${\sim}2$ orders-of-magnitude contraction from first to last stage.}
+    \caption{Mean accuracy basin fraction ($\pm1$ std over $10$ PG19 samples) versus normalised stage for four models spanning 135M--8B parameters. The basin fraction (cells with $>90\%$ accuracy in a $60{\times}60$ PC1--PC2 mesh) decays log-linearly across all models, with consistent ${\sim}2$ orders-of-magnitude contraction from first to last stage.}
     \label{fig:basin_area_vs_stage}
 \end{figure}
 
