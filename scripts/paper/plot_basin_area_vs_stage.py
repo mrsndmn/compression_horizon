@@ -59,16 +59,17 @@ def _flatten_embedding(row: Dict[str, Any]) -> np.ndarray:
 
 
 def _filter_rows(ds, sample_id: int) -> List[Dict[str, Any]]:
-    from tqdm.auto import tqdm
-
-    drop = [c for c in ["orig_embedding", "initialization_embedding"] if c in ds.column_names]
+    # Fast filter: read only sample_id column to find matching indices,
+    # then select only the needed rows (avoids loading all embeddings).
+    sids = ds.select_columns(["sample_id"])
+    indices = [i for i in range(len(sids)) if int(sids[i]["sample_id"]) == int(sample_id)]
+    if not indices:
+        return []
+    subset = ds.select(indices)
+    drop = [c for c in ["orig_embedding", "initialization_embedding"] if c in subset.column_names]
     if drop:
-        ds = ds.remove_columns(drop)
-    rows = []
-    for i in tqdm(range(len(ds)), desc=f"Filtering sample_id={sample_id}", leave=False):
-        r = ds[i]
-        if int(r.get("sample_id", -1)) == int(sample_id):
-            rows.append(r)
+        subset = subset.remove_columns(drop)
+    rows = [subset[i] for i in range(len(subset))]
     return sorted(rows, key=lambda r: int(r.get("stage_index", 0)))
 
 
@@ -210,10 +211,8 @@ def _compute_basin_areas_for_sample(
         acc = _compute_accuracy_batch(recon_t, original_shape, model, device, ids, te, am, batch_size, torch_dtype)
         acc_2d = acc.reshape(Xm.shape)
 
-        dx = float(np.median(np.diff(xr)))
-        dy = float(np.median(np.diff(yr)))
-        cell_area = dx * dy
-        area = float((acc_2d > threshold).sum()) * cell_area
+        # Store basin fraction: count of cells above threshold / total cells
+        area = float((acc_2d > threshold).sum()) / float(Xm.size)
 
         stages_out.append(stage_idx)
         seq_lens_out.append(seq_len)
@@ -258,13 +257,8 @@ def _plot_normalised(all_results: List[Dict[str, Any]], threshold: float, output
 
         normalised = stages / max_stage
 
-        # Normalise area: fraction of cell count (resolution-independent)
-        mesh_res = int(res["mesh_resolution"].ravel()[0])
-        total_cells = mesh_res * mesh_res
-        area_frac = areas / total_cells if total_cells > 0 else areas
-
         label = f"Sample {sid} (cap={max_stage})"
-        ax.plot(normalised, area_frac, "o-", color=palette[k], markersize=5, linewidth=1.5, label=label, zorder=3, alpha=0.8)
+        ax.plot(normalised, areas, "o-", color=palette[k], markersize=5, linewidth=1.5, label=label, zorder=3, alpha=0.8)
 
     ax.set_yscale("log")
     ax.set_xlabel("Normalised stage (stage / max capacity)", fontsize=13)
@@ -326,14 +320,11 @@ def _plot_multi_model(
             stages = res["stages"].ravel().astype(float)
             areas = res["areas"].ravel()
             max_stage = int(res["max_stage"].ravel()[0])
-            mesh_res = int(res["mesh_resolution"].ravel()[0])
-            total_cells = mesh_res * mesh_res
 
             normalised = stages / max_stage
-            area_frac = areas / total_cells if total_cells > 0 else areas
 
             order = np.argsort(normalised)
-            interp_fracs.append(_interpolate_to_grid(normalised[order], area_frac[order], grid))
+            interp_fracs.append(_interpolate_to_grid(normalised[order], areas[order], grid))
 
         mat = np.stack(interp_fracs)  # (n_samples, n_grid)
         mean = mat.mean(axis=0)
