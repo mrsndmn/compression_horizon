@@ -59,10 +59,10 @@ def _flatten_embedding(row: Dict[str, Any]) -> np.ndarray:
 
 
 def _filter_rows(ds, sample_id: int) -> List[Dict[str, Any]]:
-    # Fast filter: read only sample_id column to find matching indices,
-    # then select only the needed rows (avoids loading all embeddings).
-    sids = ds.select_columns(["sample_id"])
-    indices = [i for i in range(len(sids)) if int(sids[i]["sample_id"]) == int(sample_id)]
+    # Fast filter: read the whole sample_id column in one shot to find matching
+    # indices, then select only the needed rows (avoids loading all embeddings).
+    sid_col = ds.select_columns(["sample_id"])["sample_id"]
+    indices = [i for i, s in enumerate(sid_col) if int(s) == int(sample_id)]
     if not indices:
         return []
     subset = ds.select(indices)
@@ -244,7 +244,7 @@ def _compute_basin_areas_for_sample(
 # ---------------------------------------------------------------------------
 
 
-def _plot_normalised(all_results: List[Dict[str, Any]], threshold: float, output: str, dpi: int):
+def _plot_normalised(all_results: List[Dict[str, Any]], threshold: float, output: str, dpi: int, model_name: str = ""):
     sns.set_theme(style="whitegrid")
     fig, ax = plt.subplots(figsize=(9, 5.5))
 
@@ -262,8 +262,11 @@ def _plot_normalised(all_results: List[Dict[str, Any]], threshold: float, output
 
     ax.set_yscale("log")
     ax.set_xlabel("Normalised stage (stage / max capacity)", fontsize=13)
-    ax.set_ylabel(f"Basin fraction (cells with acc > {threshold}) / total cells", fontsize=13)
-    ax.set_title("Accuracy basin size vs. normalised stage — Llama-3.1-8B", fontsize=14, fontweight="bold")
+    ax.set_ylabel(f"Basin fraction (acc > {threshold})", fontsize=13)
+    title = "Accuracy basin size vs. normalised stage"
+    if model_name:
+        title += f" — {model_name}"
+    ax.set_title(title, fontsize=14, fontweight="bold")
     ax.legend(fontsize=9, ncol=2)
     ax.set_xlim(-0.02, 1.05)
     ax.tick_params(labelsize=11)
@@ -365,6 +368,7 @@ def main():
     parser.add_argument("--recompute", action="store_true")
     parser.add_argument("--output", type=str, default=None)
     parser.add_argument("--dpi", type=int, default=200)
+    parser.add_argument("--model_name", type=str, default="", help="Title suffix for single-model per-sample plot")
     # Multi-model plot mode (reads cached NPZs, no GPU needed)
     parser.add_argument("--plot_multi", action="store_true", help="Plot mean+STD for multiple models")
     parser.add_argument("--multi_exp_dirs", type=str, nargs="+", default=None)
@@ -411,7 +415,7 @@ def main():
         )
         all_results.append(res)
 
-    _plot_normalised(all_results, threshold=args.threshold, output=output, dpi=args.dpi)
+    _plot_normalised(all_results, threshold=args.threshold, output=output, dpi=args.dpi, model_name=args.model_name)
 
 
 if __name__ == "__main__":
