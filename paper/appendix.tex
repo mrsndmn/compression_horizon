@@ -442,26 +442,40 @@ independent initializations can only increase diversity, and leave it to future 
 \subsection{Accuracy Basin Area Shrinks with Sequence Length}
 \label{app:basin_area}
 
-% Regeneration commands (GPU required, ~2h total on 1xA100-80GB):
+% Regeneration commands (GPU required, ~30min per model on 1xA100-80GB):
 %
-%   1. Precompute accuracy regions for 10 PG19 samples (saves per-sample NPZ caches):
+%   1. Precompute accuracy regions for 10 PG19 samples per model:
 %      python scripts/paper/plot_basin_area_vs_stage.py \
 %        --dataset_path artifacts/experiments_progressive/sl_4096_Meta-Llama-3.1-8B_lr_0.1/progressive_prefixes \
 %        --sample_ids 0 1 2 3 4 5 6 7 8 9 --num_anchors 8 --mesh_resolution 60 --batch_size 32 \
 %        --output artifacts/experiments_progressive/sl_4096_Meta-Llama-3.1-8B_lr_0.1/visualizations/basin_area_vs_stage_normalised.png
+%      python scripts/paper/plot_basin_area_vs_stage.py \
+%        --dataset_path artifacts/experiments_progressive/sl_4096_SmolLM2-1.7B_lr_0.1/progressive_prefixes \
+%        --sample_ids 0 1 2 3 4 5 6 7 8 9 --num_anchors 8 --mesh_resolution 60 --batch_size 32 \
+%        --output artifacts/experiments_progressive/sl_4096_SmolLM2-1.7B_lr_0.1/visualizations/basin_area_vs_stage_normalised.png
+%      python scripts/paper/plot_basin_area_vs_stage.py \
+%        --dataset_path artifacts/experiments_progressive/sl_4096_pythia-1.4b_lr_0.1/progressive_prefixes \
+%        --sample_ids 0 1 2 3 4 5 6 7 8 9 --num_anchors 8 --mesh_resolution 60 --batch_size 32 \
+%        --output artifacts/experiments_progressive/sl_4096_pythia-1.4b_lr_0.1/visualizations/basin_area_vs_stage_normalised.png
 %
-%   2. Copy to paper figures:
-%      cp artifacts/experiments_progressive/sl_4096_Meta-Llama-3.1-8B_lr_0.1/visualizations/basin_area_vs_stage_normalised.pdf \
-%        paper/figures/basin_area_vs_stage_normalised.pdf
+%   2. Generate multi-model comparison figure:
+%      python scripts/paper/plot_basin_area_vs_stage.py --plot_multi \
+%        --multi_exp_dirs \
+%          artifacts/experiments_progressive/sl_4096_Meta-Llama-3.1-8B_lr_0.1 \
+%          artifacts/experiments_progressive/sl_4096_SmolLM2-1.7B_lr_0.1 \
+%          artifacts/experiments_progressive/sl_4096_pythia-1.4b_lr_0.1 \
+%        --multi_model_names "Llama-3.1-8B" "SmolLM2-1.7B" "Pythia-1.4B" \
+%        --sample_ids 0 1 2 3 4 5 6 7 8 9 \
+%        --output paper/figures/basin_area_vs_stage_multi.png
 
-The visual abstract (Figure~\ref{fig:visual_abstract}) shows that the accuracy basin around the optimized embedding shrinks as the compressed prefix grows. To quantify this, we measure the basin area in the PC1--PC2 subspace at uniformly spaced stages across all $10$ PG19 samples used for Llama-3.1-8B progressive cramming. For each sample, we fit PCA to the full embedding trajectory, select $8$ anchor points at uniform fractions of the sample's maximum capacity, and evaluate reconstruction accuracy on a $60\times60$ mesh centered on the trajectory in PC1--PC2 space. The basin area is the fraction of mesh cells with teacher-forced accuracy $>0.9$.
+The visual abstract (Figure~\ref{fig:visual_abstract}) shows that the accuracy basin around the optimized embedding shrinks as the compressed prefix grows. To quantify this, we measure the basin area in the PC1--PC2 subspace at uniformly spaced stages across all $10$ PG19 samples for three models: Llama-3.1-8B, SmolLM2-1.7B, and Pythia-1.4B. For each sample, we fit PCA to the full embedding trajectory, select $8$ anchor points at uniform fractions of the sample's maximum capacity, and evaluate reconstruction accuracy on a $60\times60$ mesh centered on the trajectory in PC1--PC2 space. The basin area is the fraction of mesh cells with teacher-forced accuracy $>0.9$.
 
-Figure~\ref{fig:basin_area_vs_stage} plots this fraction against the normalised stage (stage index divided by the sample's maximum compressed-token count), making samples with different capacities ($656$--$2035$ tokens) directly comparable. Across all $10$ samples, the basin fraction decays monotonically---and approximately log-linearly---with the normalised stage: the optimizer's room for error shrinks by roughly two orders of magnitude between the beginning and the end of the trajectory. This is consistent with the visual impression from Figure~\ref{fig:visual_abstract} and provides a quantitative basis for the claim that accuracy basins contract with sequence length.
+Figure~\ref{fig:basin_area_vs_stage} plots the mean basin fraction (with $\pm1$ standard deviation bands over $10$ samples) against the normalised stage (stage index divided by the sample's maximum compressed-token count). Across all three models, the basin fraction decays monotonically---and approximately log-linearly---with the normalised stage: the optimizer's room for error shrinks by roughly two orders of magnitude between the beginning and the end of the trajectory. The trend is consistent across model families, with Llama-3.1-8B exhibiting smaller basins overall (likely due to its higher dimensionality) and SmolLM2-1.7B and Pythia-1.4B following similar trajectories. This provides a quantitative basis for the claim that accuracy basins contract with sequence length, and demonstrates that this contraction is a general phenomenon not specific to a particular model architecture.
 
 \begin{figure}[t]
     \centering
-    \includegraphics[width=\linewidth]{basin_area_vs_stage_normalised.pdf}
-    \caption{Accuracy basin fraction (cells with $>90\%$ teacher-forced accuracy in a $60{\times}60$ PC1--PC2 mesh) versus normalised progressive-cramming stage for $10$ PG19 samples on Llama-3.1-8B. The x-axis is normalised by each sample's maximum capacity; the y-axis is log-scaled. All curves decay monotonically, spanning roughly two orders of magnitude.}
+    \includegraphics[width=\linewidth]{basin_area_vs_stage_multi.pdf}
+    \caption{Mean accuracy basin fraction ($\pm1$ std over $10$ PG19 samples) versus normalised stage for three model families. The basin fraction (cells with $>90\%$ accuracy in a $60{\times}60$ PC1--PC2 mesh) decays log-linearly across all models, with consistent ${\sim}2$ orders-of-magnitude contraction from first to last stage.}
     \label{fig:basin_area_vs_stage}
 \end{figure}
 

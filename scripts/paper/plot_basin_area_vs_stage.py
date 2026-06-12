@@ -2,11 +2,21 @@
 Compute accuracy-basin area in PC1-PC2 space for multiple samples of a
 progressive-cramming experiment, then plot basin area vs normalised stage.
 
-Usage (GPU required for recomputation):
+Single-model (GPU required for recomputation):
     python scripts/paper/plot_basin_area_vs_stage.py \
         --dataset_path artifacts/experiments_progressive/sl_4096_Meta-Llama-3.1-8B_lr_0.1/progressive_prefixes \
         --sample_ids 0 1 2 --num_anchors 8 --mesh_resolution 60 --batch_size 32 \
-        --output artifacts/experiments_progressive/sl_4096_Meta-Llama-3.1-8B_lr_0.1/visualizations/basin_area_vs_stage_normalised.png
+        --output out.png
+
+Multi-model (mean+STD bands, reads cached NPZs):
+    python scripts/paper/plot_basin_area_vs_stage.py --plot_multi \
+        --multi_exp_dirs \
+            artifacts/experiments_progressive/sl_4096_Meta-Llama-3.1-8B_lr_0.1 \
+            artifacts/experiments_progressive/sl_4096_SmolLM2-1.7B_lr_0.1 \
+            artifacts/experiments_progressive/sl_4096_pythia-1.4b_lr_0.1 \
+        --multi_model_names "Llama-3.1-8B" "SmolLM2-1.7B" "Pythia-1.4B" \
+        --sample_ids 0 1 2 3 4 5 6 7 8 9 \
+        --output paper/figures/basin_area_vs_stage_multi.png
 
 If a precomputed NPZ exists for a sample it is reused (pass --recompute to force).
 """
@@ -272,9 +282,87 @@ def _plot_normalised(all_results: List[Dict[str, Any]], threshold: float, output
     print(f"Saved: {output.rsplit('.', 1)[0]}.pdf")
 
 
+def _load_cached_results(exp_dir: str, sample_ids: List[int]) -> List[Dict[str, Any]]:
+    """Load precomputed basin NPZs for the given samples."""
+    viz_dir = os.path.join(exp_dir, "visualizations")
+    results = []
+    for sid in sample_ids:
+        path = os.path.join(viz_dir, f"basin_area_sample_{sid}.npz")
+        if not os.path.isfile(path):
+            print(f"  WARNING: missing {path}, skipping sample {sid}")
+            continue
+        results.append(dict(np.load(path, allow_pickle=True)))
+    return results
+
+
+def _interpolate_to_grid(normalised: np.ndarray, values: np.ndarray, grid: np.ndarray) -> np.ndarray:
+    """Linearly interpolate values onto a common normalised-stage grid."""
+    return np.interp(grid, normalised, values)
+
+
+def _plot_multi_model(
+    model_names: List[str],
+    model_results: List[List[Dict[str, Any]]],
+    threshold: float,
+    output: str,
+    dpi: int,
+    n_grid: int = 50,
+):
+    """Plot mean + STD band per model on one figure."""
+    sns.set_theme(style="whitegrid")
+    fig, ax = plt.subplots(figsize=(9, 5.5))
+
+    palette = sns.color_palette("colorblind", n_colors=len(model_names))
+    grid = np.linspace(0, 1, n_grid)
+
+    for idx, (name, results) in enumerate(zip(model_names, model_results)):
+        if not results:
+            print(f"  No data for {name}, skipping")
+            continue
+
+        # Interpolate each sample onto common grid
+        interp_fracs = []
+        for res in results:
+            stages = res["stages"].ravel().astype(float)
+            areas = res["areas"].ravel()
+            max_stage = int(res["max_stage"].ravel()[0])
+            mesh_res = int(res["mesh_resolution"].ravel()[0])
+            total_cells = mesh_res * mesh_res
+
+            normalised = stages / max_stage
+            area_frac = areas / total_cells if total_cells > 0 else areas
+
+            order = np.argsort(normalised)
+            interp_fracs.append(_interpolate_to_grid(normalised[order], area_frac[order], grid))
+
+        mat = np.stack(interp_fracs)  # (n_samples, n_grid)
+        mean = mat.mean(axis=0)
+        std = mat.std(axis=0)
+
+        color = palette[idx]
+        ax.plot(grid, mean, "-", color=color, linewidth=2.5, label=name, zorder=4)
+        ax.fill_between(grid, np.clip(mean - std, 1e-6, None), mean + std, color=color, alpha=0.2, zorder=2)
+
+    ax.set_yscale("log")
+    ax.set_xlabel("Normalised stage (stage / max capacity)", fontsize=13)
+    ax.set_ylabel(f"Basin fraction (acc > {threshold})", fontsize=13)
+    ax.set_title("Accuracy basin area vs. normalised stage", fontsize=14, fontweight="bold")
+    ax.legend(fontsize=12)
+    ax.set_xlim(-0.02, 1.05)
+    ax.tick_params(labelsize=11)
+
+    plt.tight_layout()
+    plt.savefig(output, dpi=dpi, bbox_inches="tight")
+    plt.savefig(output.rsplit(".", 1)[0] + ".pdf", dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved: {output}")
+    print(f"Saved: {output.rsplit('.', 1)[0]}.pdf")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--dataset_path", type=str, required=True)
+    # Single-model compute mode
+    parser.add_argument("--dataset_path", type=str, default=None)
     parser.add_argument("--sample_ids", type=int, nargs="+", default=[0, 1, 2])
     parser.add_argument("--num_anchors", type=int, default=8)
     parser.add_argument("--mesh_resolution", type=int, default=60)
@@ -286,8 +374,28 @@ def main():
     parser.add_argument("--recompute", action="store_true")
     parser.add_argument("--output", type=str, default=None)
     parser.add_argument("--dpi", type=int, default=200)
+    # Multi-model plot mode (reads cached NPZs, no GPU needed)
+    parser.add_argument("--plot_multi", action="store_true", help="Plot mean+STD for multiple models")
+    parser.add_argument("--multi_exp_dirs", type=str, nargs="+", default=None)
+    parser.add_argument("--multi_model_names", type=str, nargs="+", default=None)
     args = parser.parse_args()
 
+    if args.plot_multi:
+        assert args.multi_exp_dirs, "--multi_exp_dirs required with --plot_multi"
+        names = args.multi_model_names or [os.path.basename(d) for d in args.multi_exp_dirs]
+        assert len(names) == len(args.multi_exp_dirs), "model names must match exp dirs"
+        output = args.output or "basin_area_vs_stage_multi.png"
+
+        model_results = []
+        for exp_dir in args.multi_exp_dirs:
+            results = _load_cached_results(exp_dir, args.sample_ids)
+            print(f"  {exp_dir}: loaded {len(results)} samples")
+            model_results.append(results)
+
+        _plot_multi_model(names, model_results, threshold=args.threshold, output=output, dpi=args.dpi)
+        return
+
+    assert args.dataset_path, "--dataset_path required for single-model compute mode"
     exp_dir = os.path.dirname(args.dataset_path)
     viz_dir = os.path.join(exp_dir, "visualizations")
     output = args.output or os.path.join(viz_dir, "basin_area_vs_stage_normalised.png")
