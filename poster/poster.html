@@ -294,6 +294,10 @@
     border-left: calc(6 * var(--u)) solid var(--red-alert);
     background: linear-gradient(90deg, #FDEDEC 0%, var(--bg-card) 30%);
   }
+  .card.conclusion {
+    border-left: calc(6 * var(--u)) solid #7D3C98;
+    background: linear-gradient(90deg, #F4ECF7 0%, var(--bg-card) 30%);
+  }
   .card.grow { flex-grow: 1; }
 
   .section-title {
@@ -592,7 +596,7 @@
         <div class="figure" style="margin: calc(1*var(--u)) 0">
           <img src="images/figure_progressive_cramming.png" alt="Progressive cramming: frozen LM, trainable embedding, warm-start between stages">
         </div>
-        <ul style="margin-top: calc(1 * var(--u))">
+        <ul style="margin-top: 0">
           <li>Halt on first failure &rarr; <span class="keyword">sharp capacity&nbsp;boundary</span></li>
           <li><span class="keyword">100% greedy generation</span> + honest per-sample&nbsp;capacity</li>
           <li>Saved $\mathbf{e}$ at each step &rarr; <span class="keyword">optimizer&nbsp;trajectory</span></li>
@@ -602,6 +606,9 @@
       <!-- 2. Across Model Families -->
       <div class="card highlight grow" data-measure-role="card">
         <div class="section-title"><span class="num">2</span> Across Model Families</div>
+        <p class="body-text">
+          Maximum number of tokens a frozen model can <span class="keyword">perfectly reconstruct</span> from a single embedding via progressive&nbsp;cramming:
+        </p>
         <table class="result-table">
           <thead>
             <tr>
@@ -618,8 +625,8 @@
             <tr><td class="method">Gemma-3-4B</td><td>214</td><td>697</td><td class="best">3.3&times;</td></tr>
           </tbody>
         </table>
-        <div class="figure" style="margin: calc(2 * var(--u)) 0 0 0">
-          <div class="caption" style="margin-bottom: calc(2 * var(--u))">
+        <div class="figure" style="margin: calc(1 * var(--u)) 0 0 0">
+          <div class="caption" style="margin-bottom: calc(1 * var(--u))">
             <strong>Low-dim projection.</strong> Optimize $\mathbf{z} \in \mathbb{R}^k$ with per-sample $W, \mathbf{b}$; $\mathbf{e} = W\mathbf{z} + \mathbf{b} \in \mathbb{R}^d$, $k \ll d$.
           </div>
           <img src="images/figure_lowdim_projection.png" alt="Low-dim projection: z in R^k mapped through per-sample W,b to embedding e in R^d" style="padding: 0 calc(2*var(--u))">
@@ -634,13 +641,7 @@
       <!-- 3. Low-Dimensional Trajectories -->
       <div class="card highlight grow" data-measure-role="card">
         <div class="section-title"><span class="num">3</span> Optimisation Trajectories</div>
-        <div class="figure" style="margin: calc(2*var(--u)) 0">
-          <img src="images/visual_abstract_pc1_pc2_joined.png" alt="PCA trajectory visualization for Llama-3.1-8B">
-          <div class="caption">
-            <strong>Llama-3.1-8B</strong> trajectory projected onto PC1&ndash;PC2 (<strong>65.7%</strong> variance). <strong>Black dots:</strong> optimized embedding at each prefix length. <strong>Colored regions:</strong> local accuracy landscape at lengths {100, 200, 400, 800, 1000}; saturation &prop; reconstruction accuracy. Basins <strong>shrink</strong> as sequence length grows.
-          </div>
-        </div>
-        <div class="keybox">
+        <div class="keybox" style="margin: 0 0 calc(2*var(--u)) 0">
           <div class="kb-item">
             <div class="kb-num">30&ndash;100</div>
             <div class="kb-label">PCA components<br>for 99% variance</div>
@@ -648,6 +649,46 @@
           <div class="kb-item">
             <div class="kb-num">~log</div>
             <div class="kb-label">growth with<br>sequence length</div>
+          </div>
+        </div>
+        <ul style="margin: calc(2*var(--u)) 0 0 0">
+          <li>Embedding trajectories are <span class="keyword">intrinsically low-dimensional</span> despite living in $\mathbb{R}^{4096}$</li>
+          <li>Accuracy basins <span class="keyword">shrink</span> with sequence length &mdash; longer sequences leave less room for&nbsp;error</li>
+        </ul>
+        <div class="figure" style="margin: calc(2*var(--u)) 0">
+          <img src="images/visual_abstract_pc1_pc2_joined.png" alt="PCA trajectory visualization for Llama-3.1-8B">
+          <div class="caption">
+            <strong>Llama-3.1-8B</strong> trajectory projected onto PC1&ndash;PC2 (<strong>65.7%</strong> variance). <strong>Black dots:</strong> optimized embedding at each prefix length. <strong>Colored regions:</strong> local accuracy landscape at lengths {100, 200, 400, 800, 1000}; saturation &prop; reconstruction accuracy. Basins <strong>shrink</strong> as sequence length grows.
+          </div>
+        </div>
+        <!--
+          Regenerate step-100 figure (80×80 mesh):
+
+          1. Regenerate NPZ cache (requires GPU, ~1h):
+             python scripts/paper/visualize_landscale_2pca.py \
+               --dataset_path artifacts/experiments_progressive/sl_4096_Meta-Llama-3.1-8B_ds_pg19_1k_limit_50_lowdim_256_lowproj_lr_0.1/progressive_prefixes \
+               --sample_id 0 --mesh_resolution 80 --num-frames 19 \
+               --anchor-indices 0 50 100 150 200 250 300 350 400 450 500 550 600 650 700 750 800 850 866 \
+               --batch_size 32 --save-npz-only \
+               --output_dir artifacts/experiments_progressive/sl_4096_Meta-Llama-3.1-8B_ds_pg19_1k_limit_50_lowdim_256_lowproj_lr_0.1/visualizations
+
+          2. Rename output to from692 variant:
+             mv .../visualizations/landscape_pca_pairs.npz .../visualizations/landscape_pca_pairs_from692.npz
+
+          3. Render visual abstract (CPU only):
+             python scripts/paper/visual_abstract.py \
+               --npz_path artifacts/experiments_progressive/sl_4096_Meta-Llama-3.1-8B_ds_pg19_1k_limit_50_lowdim_256_lowproj_lr_0.1/visualizations/landscape_pca_pairs_from692.npz \
+               --zoom_in_start_point 692 --skip_first_anchor --num_anchors 10 \
+               --scatter_alpha 0.05 --threshold 0.9 --dpi 250 \
+               --output artifacts/experiments_progressive/sl_4096_Meta-Llama-3.1-8B_ds_pg19_1k_limit_50_lowdim_256_lowproj_lr_0.1/visualizations/visual_abstract_pc1_pc2.png
+
+          4. Copy joined image to poster:
+             cp .../visualizations/visual_abstract_pc1_pc2_joined.png poster/images/visual_abstract_pc1_pc2_joined_step100.png
+        -->
+        <div class="figure" style="margin: calc(2*var(--u)) 0">
+          <img src="images/visual_abstract_pc1_pc2_joined_step100.png" alt="PCA accuracy landscape with step-100 anchors for Llama-3.1-8B">
+          <div class="caption">
+            <strong>Llama-3.1-8B + low-dim projection</strong> projected onto PC1&ndash;PC2 (<strong>61.0%</strong> variance). <strong>Colored regions:</strong> &gt;90% accuracy basin at every 100th stage. Basin area contracts monotonically with prefix length. <span class="keyword">Low-dim projection</span> enables the optimizer to escape local minima and explore multiple basins.
           </div>
         </div>
       </div>
@@ -686,9 +727,9 @@
         </table>
 
         <p class="body-text" style="font-family:'Inter',sans-serif; font-weight:700; color:var(--accent); margin-top:calc(4*var(--u))">Generative evaluation</p>
-        <div class="callout red" style="margin-top: calc(2 * var(--u))">
-          On <strong>generative 5-shot MMLU</strong>: accuracy drops to <strong>~0%</strong> with the optimized embedding. A random control stays at baseline.
-        </div>
+        <p class="body-text" style="margin-top: calc(2 * var(--u))">
+          On <strong>generative 5-shot MMLU</strong>: accuracy drops to <span class="keyword-red">~0%</span> with the optimized embedding. A random control stays at baseline.
+        </p>
       </div>
 
       <!-- 5. Attention Knockout -->
@@ -715,8 +756,11 @@
       <div class="card" data-measure-role="card">
         <div class="section-title"><span class="num">6</span> Why Not Full Cramming?</div>
         <p class="body-text">
-          Full cramming (Kuratov et al., 2025) optimizes all tokens at once. Higher capacity &mdash; but residual errors concentrate on <span class="keyword-red">early positions</span>, and one early miss cascades through autoregressive&nbsp;generation:
+          Full cramming (Kuratov et al., 2025) fixes the <span class="keyword">number of tokens</span> and optimizes all at once; progressive cramming fixes <span class="keyword">reconstruction accuracy</span> at 100% and grows the sequence. Full cramming reaches higher capacity &mdash; but residual errors concentrate on <span class="keyword-red">early positions</span>, and one early miss cascades through autoregressive&nbsp;generation:
         </p>
+        <div class="figure" style="margin: calc(2*var(--u)) 0">
+          <img src="images/figure_full_cramming.png" alt="Full cramming: TF accuracy ~99% but greedy accuracy ~1% due to early-position error cascade">
+        </div>
         <table class="result-table" style="margin-top: calc(2 * var(--u))">
           <thead>
             <tr>
@@ -735,21 +779,18 @@
         </table>
       </div>
 
-      <!-- 7. Contributions -->
+      <!-- 7. Limitations & Future Work -->
       <div class="card" data-measure-role="card">
-        <div class="section-title"><span class="num">7</span> Contributions</div>
+        <div class="section-title"><span class="num">7</span> Limitations &amp; Future Work</div>
         <ul>
-          <li><span class="keyword">Progressive cramming</span> &mdash; 100% generation guarantee with honest per-sample&nbsp;capacity</li>
-          <li><span class="keyword">Low-dim trajectories</span> &mdash; 30&ndash;100 PCA components for 99% variance; solutions near-orthogonal</li>
-          <li><span class="keyword">Downstream collapse</span> &mdash; HellaSwag/ARC drop, generative MMLU&nbsp;&rarr;&nbsp;0%</li>
-          <li><span class="keyword">Causal analysis</span> &mdash; early layers causally responsible for&nbsp;collapse</li>
-          <li><span class="keyword">Low-dim projection</span> &mdash; up to 3.3&times; capacity boost across model&nbsp;families</li>
+          <li><span class="keyword">Reconstruction &ne; semantics</span> &mdash; we do not yet know how to make a single embedding both perfectly reconstructable and semantically&nbsp;faithful</li>
+          <li><span class="keyword">Optimizer headroom</span> &mdash; low-dim projection results suggest better optimizers could compress longer sequences than we&nbsp;reach</li>
         </ul>
       </div>
 
       <!-- 8. Takeaways -->
-      <div class="card alert grow" data-measure-role="card">
-        <div class="section-title"><span class="num">&#10003;</span> Takeaways</div>
+      <div class="card conclusion grow" data-measure-role="card">
+        <div class="section-title"><span class="num" style="background:#7D3C98">&#10003;</span> Takeaways</div>
         <ul>
           <li><span class="keyword">Brittle Steering</span> &mdash; perfect reconstruction stores nothing the model can use; downstream benchmarks drop, generative MMLU collapses to&nbsp;~0%</li>
           <li><span class="keyword">Early Layers</span> &mdash; across all model families, the embedding&rsquo;s causal influence concentrates in the first few layers; late-layer attention mass is a&nbsp;symptom</li>

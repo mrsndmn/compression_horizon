@@ -1,0 +1,16 @@
+<svg width="520" height="101" viewBox="0 0 520 101" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_3442_1316)">
+<!-- Green iU mark (unchanged from original) -->
+<path d="M28.1168 36.3975L-3.05176e-05 36.3975L-3.08518e-05 100.792L28.1168 100.792L28.1168 36.3975Z" fill="#40BA21"/>
+<path d="M73.1016 1.89707e-07L73.1016 72.7895L64.6598 72.7895L64.6598 1.45895e-07L36.5482 0L36.5482 100.781L42.5299 100.781L64.6598 100.781L73.1016 100.781L92.1292 100.781L101.213 100.781L101.213 3.35602e-07L73.1016 1.89707e-07Z" fill="#40BA21"/>
+<path d="M28.1168 1.45922e-07L0 0L-1.45299e-07 27.9967L28.1168 27.9967L28.1168 1.45922e-07Z" fill="#40BA21"/>
+<!-- English text -->
+<text x="134" y="40" font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif" font-weight="900" font-size="38" fill="black" letter-spacing="1.5">INNOPOLIS</text>
+<text x="134" y="86" font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif" font-weight="900" font-size="38" fill="black" letter-spacing="1.5">UNIVERSITY</text>
+</g>
+<defs>
+<clipPath id="clip0_3442_1316">
+<rect width="520" height="100.786" fill="white"/>
+</clipPath>
+</defs>
+</svg>
