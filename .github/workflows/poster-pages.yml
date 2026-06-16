@@ -1,0 +1,54 @@
+name: Deploy Poster to Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'poster/poster.html'
+      - 'poster/images/**'
+      - '.github/workflows/poster-pages.yml'
+  workflow_dispatch:
+
+# Permissions required by the GitHub Pages deploy actions.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; newer pushes supersede in-progress ones.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage poster site
+        run: |
+          set -euo pipefail
+          rm -rf _site
+          mkdir -p _site
+          # Poster lands at the site root so it is served as /poster.html.
+          cp poster/poster.html _site/poster.html
+          cp -r poster/images _site/images
+          # Bare site URL redirects to the poster.
+          printf '<!doctype html><meta http-equiv="refresh" content="0; url=poster.html">\n' > _site/index.html
+          ls -la _site _site/images
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
