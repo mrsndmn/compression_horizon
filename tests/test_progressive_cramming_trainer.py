@@ -146,3 +146,70 @@ def test_geometric_search_finds_horizon_and_restores_on_backoff(horizon, backoff
         assert len(restore_calls) == (1 if fail_idxs else 0), f"linear should restore once, got {len(restore_calls)}"
         walk = all_lens[fail_idxs[0] + 1 :] if fail_idxs else []
         assert all(b - a == 1 for a, b in zip(walk, walk[1:])), f"linear walk not +1 contiguous: {walk}"
+
+
+def test_run_steps_does_not_step_after_convergence():
+    """Plan B regression (off-by-one save bug): the optimizer must NOT step on the iteration
+    where convergence is detected, so the live embedding ``_collect_stage_rows`` saves is exactly
+    the one whose convergence/loss were recorded.
+
+    Convergence is forced to cross the threshold on iteration ``K``. The fix forwards ``K+1``
+    times (iters 0..K) but steps only ``K`` times (iters 0..K-1). The old code stepped before the
+    convergence check, so it would step ``K+1`` times -- one wasted step past the saved metrics.
+    CPU-only, fully deterministic.
+    """
+    args = _make_args(progressive_train=True, max_optimization_steps_per_sample=10**9)
+    trainer = _blank_trainer(args)
+
+    K = 4
+    calls = {"forward": 0, "steps": 0}
+    param = torch.nn.Parameter(torch.zeros(1, 1, 4))  # real leaf so loss.backward() works
+
+    fake_param = SimpleNamespace(parameters=[param], shared_parameters=[], materialize=lambda: param)
+    batch_ctx = SimpleNamespace(
+        batch_size=1,
+        parametrization=fake_param,
+        compression_attention_mask=torch.ones(1, 1, dtype=torch.long),
+        prefix_token_embeddings=None,
+        prefix_attention_mask=None,
+        prefix_len=0,
+        per_sample_optimizers=[None],
+        per_sample_schedulers=[None],
+        shared_optimizer=None,
+        shared_scheduler=None,
+    )
+    stage_ctx = SimpleNamespace(
+        seq_len=2,
+        stage_index=0,
+        input_ids=torch.zeros(1, 2, dtype=torch.long),
+        inputs_embeds=torch.zeros(1, 2, 4),
+        attention_mask=torch.ones(1, 2, dtype=torch.long),
+        target_hidden_states=None,
+    )
+    ctx = SimpleNamespace(decode_model=None, num_compression_tokens=1)
+
+    def fake_forward(*_a, **_k):
+        i = calls["forward"]
+        calls["forward"] += 1
+        conv = torch.tensor([1.0 if i >= K else 0.0])
+        loss = (param**2).sum()  # real graph so the non-converged iters can .backward()
+        return loss, None, conv, None, None
+
+    def fake_step(_bc, state):
+        calls["steps"] += 1
+        state.increment_steps(0)
+        param.grad = None
+
+    trainer.forward_and_compute_loss = fake_forward
+    trainer._log_progress = lambda **_k: None
+    trainer._step_per_sample_optimizers = fake_step
+    trainer._step_shared_optimizer = lambda _bc: None
+
+    state = ProgressiveSampleStateMachine(1, threshold=1.0)
+    last_loss, last_conv, converged = trainer._run_steps(batch_ctx, stage_ctx, ctx, state, retry=False, max_steps=100)
+
+    assert converged is True
+    assert calls["forward"] == K + 1, f"expected {K + 1} forwards, got {calls['forward']}"
+    assert calls["steps"] == K, f"optimizer stepped {calls['steps']} times, expected {K} (no step on converged iter)"
+    assert state.steps_taken[0] == K, "wasted optimizer step counted after convergence"
+    assert last_conv is not None and float(last_conv[0].item()) >= 1.0
