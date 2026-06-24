@@ -543,6 +543,36 @@
   }
   .footer .repo { color: var(--accent); font-weight: 600; }
 
+  /* ---- SPACE-FILL: enlarge under-filled columns to use their height ----
+     Columns 2 & 3 have spare vertical room; column 4 a little. Figures are
+     wide/short and can't grow tall, so we scale text, leading and spacing. */
+  .col-fill .section-title { font-size: calc(18 * var(--u)); margin-bottom: calc(5 * var(--u)); }
+  .col-fill .body-text,
+  .col-fill .card p,
+  .col-fill .card li { font-size: calc(13.5 * var(--u)); line-height: 1.42; }
+  .col-fill .figure .caption { font-size: calc(12.5 * var(--u)); line-height: 1.4; }
+  .col-fill .result-table { font-size: calc(12.5 * var(--u)); }
+  .col-fill .result-table thead th { font-size: calc(11.5 * var(--u)); }
+  .col-fill .result-table th,
+  .col-fill .result-table td { padding: calc(3 * var(--u)) calc(4 * var(--u)); }
+  .col-fill .kb-num { font-size: calc(18 * var(--u)); }
+  .col-fill .kb-label { font-size: calc(11 * var(--u)); }
+  .col-fill .card li { margin-bottom: calc(5 * var(--u)); }
+
+  /* Column 2 (medium): single grow card, tuned to just fill */
+  .col-fill-2 .section-title { font-size: calc(17.5 * var(--u)); margin-bottom: calc(4 * var(--u)); }
+  .col-fill-2 .body-text,
+  .col-fill-2 .card p,
+  .col-fill-2 .card li { font-size: calc(12.8 * var(--u)); line-height: 1.36; }
+  .col-fill-2 .figure .caption { font-size: calc(11.8 * var(--u)); line-height: 1.34; }
+  .col-fill-2 .kb-num { font-size: calc(17 * var(--u)); }
+  .col-fill-2 .kb-label { font-size: calc(10.5 * var(--u)); }
+  .col-fill-2 .card li { margin-bottom: calc(4 * var(--u)); }
+
+  /* Column 4 (light): the little slack lives in the Takeaways (grow) card */
+  .col-fill-sm .conclusion .section-title { font-size: calc(17 * var(--u)); }
+  .col-fill-sm .conclusion li { font-size: calc(12.8 * var(--u)); line-height: 1.46; margin-bottom: calc(6 * var(--u)); }
+
   @media print {
     html, body { background: white; }
     .poster {
@@ -649,7 +679,7 @@
     </div>
 
     <!-- =================== COLUMN 2: Cross-Model + Trajectory =================== -->
-    <div class="column" data-measure-role="column">
+    <div class="column col-fill-2" data-measure-role="column">
 
       <!-- 3. Low-Dimensional Trajectories -->
       <div class="card highlight grow" data-measure-role="card">
@@ -709,7 +739,7 @@
     </div>
 
     <!-- =================== COLUMN 3: Downstream + Knockout =================== -->
-    <div class="column" data-measure-role="column">
+    <div class="column col-fill" data-measure-role="column">
 
       <!-- 4. Downstream Collapse -->
       <div class="card alert" data-measure-role="card">
@@ -763,7 +793,7 @@
     </div>
 
     <!-- =================== COLUMN 4: Cross-Model + Contributions =================== -->
-    <div class="column" data-measure-role="column">
+    <div class="column col-fill-sm" data-measure-role="column">
 
       <!-- 6. Why Not Full Cramming? -->
       <div class="card" data-measure-role="card">
