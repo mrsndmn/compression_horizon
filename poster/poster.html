@@ -18,6 +18,11 @@
 </script>
 <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 
+<!-- Inter (AXXX brand typeface) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
 <style>
   /* =========================================================
      Page setup: 36"H x 60"W landscape (ICML standard)
@@ -28,26 +33,26 @@
   }
 
   :root {
-    /* Deep-blue academic palette */
-    --accent:          #1B4F72;
-    --accent-deep:     #0E2F44;
-    --accent-light:    #EBF5FB;
-    --accent-mid:      #2E86C1;
-    --gold:            #D4AC0D;
-    --gold-light:      #FFF8DC;
-    --red-alert:       #C0392B;
+    /* AXXX brand palette — blue + grey (one semantic red kept for negatives) */
+    --accent:          #0689D4;   /* AXXX blue */
+    --accent-deep:     #053957;   /* AXXX dark blue */
+    --accent-light:    #E6F4FD;   /* light-blue tint */
+    --accent-mid:      #0689D4;   /* AXXX blue (Forward highlight) */
+    --gold:            #50C0FF;   /* AXXX light blue (ex-gold accent) */
+    --gold-light:      #EAF6FE;   /* light-blue tint (ex-gold highlight rows) */
+    --red-alert:       #C0392B;   /* the single semantic red — negatives only */
 
-    --text-primary:    #1A1A1A;
-    --text-secondary:  #555;
-    --text-muted:      #888;
+    --text-primary:    #111111;   /* near-black */
+    --text-secondary:  #687A86;   /* AXXX dark grey */
+    --text-muted:      #A7B3BB;   /* AXXX grey */
 
-    --bg-page:         #F4F6F7;
+    --bg-page:         #FFFFFF;   /* AXXX white */
     --bg-card:         #FFFFFF;
-    --bg-card-tint:    #F0F8FF;
-    --bg-emphasis:     #EBF5FB;
+    --bg-card-tint:    #F4F8FB;
+    --bg-emphasis:     #E6F4FD;   /* light blue */
 
-    --border-soft:     #BDC3C7;
-    --border-strong:   #1B4F72;
+    --border-soft:     #CDD5DA;   /* light grey */
+    --border-strong:   #0689D4;   /* AXXX blue */
 
     --u: 1.6px;
   }
@@ -56,7 +61,7 @@
 
   html, body {
     background: #2b2b2b;
-    font-family: "Charter", "Source Serif Pro", "Georgia", serif;
+    font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
     color: var(--text-primary);
     -webkit-font-smoothing: antialiased;
   }
@@ -65,9 +70,6 @@
     width: calc(1524 * var(--u));
     height: calc(914 * var(--u));
     background: var(--bg-page);
-    background-image:
-      radial-gradient(ellipse at top left, rgba(27,79,114,0.05), transparent 40%),
-      radial-gradient(ellipse at bottom right, rgba(212,172,13,0.04), transparent 50%);
     margin: 20px auto;
     padding: calc(10 * var(--u)) calc(14 * var(--u));
     display: grid;
@@ -81,12 +83,8 @@
   .poster::before {
     content: "";
     position: absolute; top: 0; left: 0; right: 0;
-    height: calc(8 * var(--u));
-    background: linear-gradient(90deg,
-      var(--accent-deep) 0%,
-      var(--accent) 40%,
-      var(--accent-mid) 70%,
-      var(--gold) 100%);
+    height: calc(6 * var(--u));
+    background: var(--accent);
   }
 
   /* ---- HEADER ---- */
@@ -130,7 +128,7 @@
     color: var(--accent-deep);
     letter-spacing: -0.5px;
   }
-  .title .accent { color: var(--gold); }
+  .title .accent { color: var(--accent); }
   .subtitle {
     font-family: "Inter", sans-serif;
     font-weight: 500;
@@ -207,7 +205,7 @@
   }
   .framework-banner .fb-text {
     flex: 1;
-    font-family: "Charter", "Source Serif Pro", "Georgia", serif;
+    font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
     font-size: calc(14 * var(--u));
     line-height: 1.4;
     color: var(--text-primary);
@@ -282,21 +280,21 @@
     border-radius: calc(5 * var(--u));
     padding: calc(4 * var(--u)) calc(9 * var(--u));
     border: calc(1 * var(--u)) solid var(--border-soft);
-    box-shadow: 0 calc(2 * var(--u)) calc(6 * var(--u)) rgba(27,79,114,0.05);
+    box-shadow: none;
     position: relative;
   }
   .card.tinted { background: var(--bg-card-tint); }
   .card.highlight {
     border-left: calc(6 * var(--u)) solid var(--accent);
-    background: linear-gradient(90deg, var(--bg-emphasis) 0%, var(--bg-card) 30%);
+    background: var(--bg-card);
   }
   .card.alert {
     border-left: calc(6 * var(--u)) solid var(--red-alert);
-    background: linear-gradient(90deg, #FDEDEC 0%, var(--bg-card) 30%);
+    background: var(--bg-card);
   }
   .card.conclusion {
-    border-left: calc(6 * var(--u)) solid #7D3C98;
-    background: linear-gradient(90deg, #F4ECF7 0%, var(--bg-card) 30%);
+    border-left: calc(6 * var(--u)) solid var(--accent-deep);
+    background: var(--bg-card);
   }
   .card.grow { flex-grow: 1; }
 
@@ -326,14 +324,29 @@
   }
 
   .body-text, .card p, .card li {
-    font-family: "Charter", "Source Serif Pro", "Georgia", serif;
+    font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
     font-size: calc(12 * var(--u));
-    line-height: 1.3;
+    line-height: 1.28;
     color: var(--text-primary);
   }
 
-  .card ul, .card ol { padding-left: calc(18 * var(--u)); }
-  .card li { margin-bottom: calc(2 * var(--u)); }
+  /* Black-arrow bullets (AXXX brand graphic) */
+  .card ul, .card ol { padding-left: 0; list-style: none; }
+  .card li {
+    margin-bottom: calc(2 * var(--u));
+    position: relative;
+    padding-left: calc(16 * var(--u));
+  }
+  .card li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: calc(3 * var(--u));
+    width: calc(11 * var(--u));
+    height: calc(10 * var(--u));
+    background: url("images/bullet_arrow.svg") no-repeat center center;
+    background-size: contain;
+  }
 
   .keyword { color: var(--accent); font-weight: 700; }
   .keyword-gold { color: var(--gold); font-weight: 700; }
@@ -368,12 +381,12 @@
   }
   .callout strong { color: var(--gold); }
   .callout.gold {
-    background: linear-gradient(135deg, var(--gold) 0%, #B8860B 100%);
+    background: var(--gold);
     color: var(--accent-deep);
   }
   .callout.gold strong { color: var(--accent-deep); }
   .callout.red {
-    background: linear-gradient(135deg, var(--red-alert) 0%, #922B21 100%);
+    background: var(--red-alert);
   }
 
   .figure {
@@ -510,7 +523,7 @@
     letter-spacing: 1px;
   }
   .takeaways-strip .ts-text {
-    font-family: "Charter", "Source Serif Pro", "Georgia", serif;
+    font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
     font-size: calc(12 * var(--u));
     color: var(--text-primary);
     margin-left: calc(4 * var(--u));
@@ -790,7 +803,7 @@
 
       <!-- 8. Takeaways -->
       <div class="card conclusion grow" data-measure-role="card">
-        <div class="section-title"><span class="num" style="background:#7D3C98">&#10003;</span> Takeaways</div>
+        <div class="section-title"><span class="num" style="background:var(--accent-deep)">&#10003;</span> Takeaways</div>
         <ul>
           <li><span class="keyword">Brittle Steering</span> &mdash; perfect reconstruction stores nothing the model can use; downstream benchmarks drop, generative MMLU collapses to&nbsp;~0%</li>
           <li><span class="keyword">Early Layers</span> &mdash; across all model families, the embedding&rsquo;s causal influence concentrates in the first few layers; late-layer attention mass is a&nbsp;symptom</li>
