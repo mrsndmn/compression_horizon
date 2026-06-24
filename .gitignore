@@ -37,6 +37,14 @@ supplemetnary.zip
 *.docx
 **/.omc/
 
+# LaTeX build artifacts
+*.aux
+*.log
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+**/*_preview-*.png
+
 worktrees
 
 # Untracked local files
