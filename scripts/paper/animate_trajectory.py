@@ -520,7 +520,9 @@ def main() -> None:
     # for subplots_adjust at figure-build time, so the equal-aspect box fills the position rectangle.
     fill_canvas = bool(args.fill_canvas)
     FILL_FIGSIZE = (12.0, 9.0)
-    FILL_MARGINS = (0.11, 0.985, 0.085, 0.87 if bool(args.progress) else 0.93)  # (left, right, bottom, top)
+    # left=0.14 keeps the rotated "PC2 (..)" axis title + the wide full-view tick labels ("-6000")
+    # on-canvas; at the tight 0.11 they were pushed off the left edge at the start (full view).
+    FILL_MARGINS = (0.14, 0.985, 0.085, 0.87 if bool(args.progress) else 0.93)  # (left, right, bottom, top)
     if fill_canvas:
         ml, mr, mb, mt = FILL_MARGINS
         box_aspect = (FILL_FIGSIZE[0] * (mr - ml)) / max(FILL_FIGSIZE[1] * (mt - mb), 1e-9)
