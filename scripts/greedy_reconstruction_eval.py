@@ -66,17 +66,37 @@ def reference_ids(tokenizer, text: str, num_input_tokens: int) -> list[int]:
     return ids[:num_input_tokens]
 
 
+def _stage_converged(r: dict) -> bool:
+    """Did this progressive stage reach the run's convergence threshold?"""
+    conv = r.get("final_convergence")
+    if conv is None:
+        return False
+    thr = r.get("convergence_threshold")
+    return float(conv) >= (float(thr) if thr is not None else 1.0)
+
+
 def select_rows(ds, dataset_type: str) -> list[dict]:
-    """One row per sample: the row itself (full) or the final stage (progressive)."""
+    """One row per sample: the row itself (full) or the last *converged* stage (progressive).
+
+    The progressive loop extends seq_len until a stage fails to converge, so the
+    highest stage_index is usually that failed stage — its saved embedding does
+    not reconstruct the prefix. We instead take the deepest stage that actually
+    crammed losslessly (final_convergence >= convergence_threshold), which is
+    typically one before the max stage_index. Falls back to the max stage_index
+    only when no stage converged.
+    """
     if dataset_type == "full":
         return [ds[i] for i in range(len(ds))]
-    by_sample: dict[int, dict] = {}
+    by_sample: dict[int, list[dict]] = {}
     for i in range(len(ds)):
         r = ds[i]
-        sid = int(r["sample_id"])
-        if sid not in by_sample or int(r["stage_index"]) > int(by_sample[sid]["stage_index"]):
-            by_sample[sid] = r
-    return [by_sample[sid] for sid in sorted(by_sample)]
+        by_sample.setdefault(int(r["sample_id"]), []).append(r)
+    selected: list[dict] = []
+    for sid in sorted(by_sample):
+        rows = sorted(by_sample[sid], key=lambda x: int(x["stage_index"]))
+        converged = [r for r in rows if _stage_converged(r)]
+        selected.append(converged[-1] if converged else rows[-1])
+    return selected
 
 
 def greedy_match_rate(model, tokenizer, embedding: torch.Tensor, ref_ids: list[int], device) -> float:

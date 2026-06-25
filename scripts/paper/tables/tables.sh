@@ -66,7 +66,7 @@ done
 
 # --- Full vs. progressive cramming -------------------------------------------
 # tab:full_vs_progressive
-"$PY" scripts/paper/tables/full_cramming_table.py --save-dir paper/tables
+"$PY" scripts/paper/tables/full_cramming_table.py --type full_cramming --save-dir paper/tables
 # tab:full_vs_progressive_appendix
 "$PY" scripts/paper/tables/full_cramming_table.py --type full_cramming_apendix --save-dir paper/tables
 # tab:prefix_tuning_accuracy
