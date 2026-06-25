@@ -145,7 +145,23 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
     if tokenizer.pad_token is None and tokenizer.eos_token is not None:
         tokenizer.pad_token = tokenizer.eos_token
-    model = AutoModelForCausalLM.from_pretrained(model_checkpoint, torch_dtype=dtype).to(args.device)
+    # Match the TRAINING forward exactly: scripts/activation_distillation.py loads the
+    # model with attn_implementation="flash_attention_2". The compression embedding
+    # converges to a *bare-argmax* target that is balanced on a knife-edge for the
+    # hardest tokens, so reconstruction is sensitive to the attention kernel's bf16
+    # accumulation: under the default (sdpa) the boundary tokens flip and a "lossless"
+    # (conv=1.0) embedding reconstructs at only ~0.97-0.99. Using the same
+    # flash-attention-2 kernel reproduces the training-time 1.0 reconstruction.
+    model_kwargs = {"torch_dtype": dtype}
+    if args.device.startswith("cuda") and dtype in (torch.bfloat16, torch.float16):
+        model_kwargs["attn_implementation"] = "flash_attention_2"
+    try:
+        model = AutoModelForCausalLM.from_pretrained(model_checkpoint, **model_kwargs).to(args.device)
+    except (ImportError, ValueError) as exc:
+        print(f"[warn] flash_attention_2 unavailable ({exc}); falling back to default attention.")
+        model_kwargs.pop("attn_implementation", None)
+        model = AutoModelForCausalLM.from_pretrained(model_checkpoint, **model_kwargs).to(args.device)
+    print(f"attn_implementation = {getattr(model.config, '_attn_implementation', 'default')}")
     model.eval()
 
     per_sample = []
