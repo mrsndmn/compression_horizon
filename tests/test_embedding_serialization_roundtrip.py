@@ -125,6 +125,67 @@ def test_dataset_roundtrip_exact_on_adversarial_values(tmp_path):
     assert torch.equal(loaded.view(torch.int32), values.view(torch.int32))
 
 
+def test_dataset_path_vs_stage_dump_path(tmp_path):
+    """Compare the two artifacts the trainer writes for the SAME embedding.
+
+    The learnable compression embedding is a **float32** ``nn.Parameter`` (every init in
+    ``embedding_init.create_compression_embedding`` is float32; AdamW optimizes it in
+    float32). The bf16 *model* only casts it transiently inside its forward -- the stored
+    parameter, and therefore ``parametrization.materialize()``, stays float32. So:
+
+    * Dataset path (``progressive_prefixes/``): keeps the **full float32** value.
+    * Stage-dump path (``embeddings/*.pt`` via ``_dump_stage_embedding``): stores
+      ``comp_tokens.to(torch.bfloat16)`` -- the float32 value **truncated to bf16** (lossy).
+
+    Hence the two artifacts are NOT bit-equal: the dump is exactly the dataset value rounded
+    to bf16 (max relative error ~ the bf16 step 2**-8). Re-widening the dump bf16 -> float32
+    is lossless but does NOT recover the discarded mantissa bits.
+    """
+    emb_f32 = _make_embedding(num_compression_tokens=1, hidden_size=576, seed=7)  # what materialize() returns
+
+    # --- Dataset path: keeps full float32 ---
+    via_dataset = _dataset_roundtrip(emb_f32, tmp_path)
+    assert via_dataset.dtype == torch.float32
+    assert torch.equal(via_dataset, emb_f32)  # lossless
+
+    # --- Stage-dump path: _dump_stage_embedding writes bf16 ---
+    dump_path = str(tmp_path / "embedding_sample_0_stage_0.pt")
+    torch.save(emb_f32.to(torch.bfloat16).detach().cpu(), dump_path)
+    via_dump = torch.load(dump_path, weights_only=True)
+    assert via_dump.dtype == torch.bfloat16
+
+    # The two artifacts differ: the dump is the lossy (bf16-rounded) version of the dataset.
+    assert not torch.equal(via_dataset, via_dump.to(torch.float32))
+    # ...and the difference is exactly bf16 rounding: dataset rounded to bf16 == the dump.
+    assert torch.equal(via_dataset.to(torch.bfloat16), via_dump)
+    # Re-widening the dump is lossless but recovers only the rounded value, not the original.
+    assert torch.equal(via_dump, via_dump.to(torch.float32).to(torch.bfloat16))
+    assert (via_dataset - via_dump.to(torch.float32)).abs().max().item() > 0.0
+
+
+def test_bf16_to_float32_is_always_lossless(tmp_path):
+    """bf16 -> float32 widening is exact for every value (bf16 == the top 16 bits of a float32).
+
+    This is why the dataset path's ``.to(torch.float32)`` never loses anything even if the
+    source were bf16, and why a bf16 dump re-widens exactly (only the original fp32 mantissa,
+    already discarded at cast time, is unrecoverable).
+    """
+    # Exhaustive-ish sweep over bf16: all 256 exponent/highbyte combos x representative mantissas.
+    hi = torch.arange(0, 256, dtype=torch.int32) << 8
+    mant = torch.tensor([0, 1, 0x3F, 0x40, 0x7F], dtype=torch.int32)
+    bits = (hi.unsqueeze(1) | mant.unsqueeze(0)).reshape(-1).to(torch.int16)
+    bf16 = bits.view(torch.bfloat16)
+    finite = torch.isfinite(bf16.to(torch.float32))  # skip inf/nan (equality is ill-defined)
+    bf16 = bf16[finite]
+
+    widened = bf16.to(torch.float32)
+    # Widening then re-narrowing returns the identical bf16 bits -> the widening lost nothing.
+    assert torch.equal(widened.to(torch.bfloat16), bf16)
+    # And the float32 bit pattern is exactly the bf16 bits zero-padded in the low 16 bits.
+    expected_f32_bits = bf16.view(torch.int16).to(torch.int32).bitwise_and(0xFFFF) << 16
+    assert torch.equal(widened.view(torch.int32), expected_f32_bits)
+
+
 def test_bf16_dataset_path_loses_precision_vs_torch_save(tmp_path):
     """Contrast: the *stage-dump* path casts to bf16, so it is NOT bit-equal to the float32 source.
 
