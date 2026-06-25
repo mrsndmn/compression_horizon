@@ -85,6 +85,20 @@ def _region_rgba(acc_map: np.ndarray, gx: np.ndarray, gy: np.ndarray, center_xy:
     return rgba, extent, near_perfect_area
 
 
+def _anchor_grid(grid_all: np.ndarray, a: int, pair_idx: int) -> np.ndarray:
+    """Return anchor ``a``'s 2D meshgrid slice for the given PCA pair.
+
+    Supports both cached schemas: per-anchor grids ``[n_anchors, n_pairs, H, W]``
+    (each anchor evaluated on its own local neighborhood) and a single shared grid
+    ``[n_pairs, H, W]`` (all anchors evaluated on one global PCA-plane grid).
+    """
+    if grid_all.ndim == 4:
+        return grid_all[a, pair_idx]
+    if grid_all.ndim == 3:
+        return grid_all[pair_idx]
+    raise ValueError(f"Unexpected grid ndim={grid_all.ndim}; expected 3 ([P,H,W]) or 4 ([F,P,H,W]).")
+
+
 def _size_from_area(area: float, a_min: float, a_max: float) -> float:
     if not np.isfinite(area) or area <= 0 or a_max <= a_min:
         return 140.0
@@ -365,6 +379,15 @@ def main() -> None:
     )
     ap.add_argument("--no-mp4", dest="no_mp4", action="store_true", help="Skip MP4 output.")
     ap.add_argument("--no-gif", dest="no_gif", action="store_true", help="Skip GIF output.")
+    ap.add_argument(
+        "--fill-canvas",
+        "--fill_canvas",
+        dest="fill_canvas",
+        action="store_true",
+        help="Make the axes fill the whole (landscape) frame while KEEPING equal (1:1) PC1/PC2 scaling: "
+        "the camera rect is padded out to the frame's aspect so the extra room shows as empty plot area "
+        "(no-data space) rather than stretching/distorting the geometry. Default off (= letterboxed equal view).",
+    )
     args = ap.parse_args()
 
     npz = _load_npz(args.npz_path)
@@ -443,8 +466,8 @@ def main() -> None:
     regions: List[Dict] = []
     areas = np.zeros(n_anchors, dtype=np.float64)
     for a in range(n_anchors):
-        gx = grid_x_all[a, pair_idx]
-        gy = grid_y_all[a, pair_idx]
+        gx = _anchor_grid(grid_x_all, a, pair_idx)
+        gy = _anchor_grid(grid_y_all, a, pair_idx)
         rgba, extent, area = _region_rgba(acc_per_anchor[a], gx, gy, anchor_xy_all[a], colors[a], thr)
         areas[a] = area
         # Bounds of the >threshold cells only (the grid can be much larger than the
@@ -489,6 +512,22 @@ def main() -> None:
 
     full_rect = (x_min - pad_x * dx, x_max + pad_x * dx, y_min - pad_bot * dy, y_max + pad_top * dy)
     cam_aspect = (full_rect[1] - full_rect[0]) / max(full_rect[3] - full_rect[2], 1e-9)
+
+    # --fill-canvas: keep equal (1:1) scaling but pad the camera rect out to the landscape AXES box
+    # aspect so the axes fills the frame, with the extra room showing as empty (no-data) plot area
+    # instead of stretching the geometry. The padded aspect (cam_aspect) is then shared by the full
+    # and zoom views, so framing stays consistent through the camera move. Margins below are also used
+    # for subplots_adjust at figure-build time, so the equal-aspect box fills the position rectangle.
+    fill_canvas = bool(args.fill_canvas)
+    FILL_FIGSIZE = (12.0, 9.0)
+    # left=0.14 keeps the rotated "PC2 (..)" axis title + the wide full-view tick labels ("-6000")
+    # on-canvas; at the tight 0.11 they were pushed off the left edge at the start (full view).
+    FILL_MARGINS = (0.14, 0.985, 0.085, 0.87 if bool(args.progress) else 0.93)  # (left, right, bottom, top)
+    if fill_canvas:
+        ml, mr, mb, mt = FILL_MARGINS
+        box_aspect = (FILL_FIGSIZE[0] * (mr - ml)) / max(FILL_FIGSIZE[1] * (mt - mb), 1e-9)
+        full_rect = _fit_to_aspect(full_rect, box_aspect)
+        cam_aspect = box_aspect
 
     # Zoom target: the end of the trajectory (tokens [zoom_start:]) plus the anchors/regions
     # at index >= zoom_start. Fit to the full view's aspect so the camera move doesn't distort.
@@ -564,7 +603,7 @@ def main() -> None:
         }
     )
 
-    fig, ax = plt.subplots(1, 1, figsize=(12.0, 9.0))
+    fig, ax = plt.subplots(1, 1, figsize=FILL_FIGSIZE)
     ax.set_xlim(full_rect[0], full_rect[1])
     ax.set_ylim(full_rect[2], full_rect[3])
     if normalize_by_steps:
@@ -576,6 +615,14 @@ def main() -> None:
     # PCA view keeps true geometry (equal). The step-warped view is tall and not a metric
     # space, so let it fill the (landscape) figure like the PCA videos instead of letterboxing.
     ax.set_aspect("auto" if normalize_by_steps else "equal", adjustable="box")
+    if fill_canvas:
+        # full_rect was padded to FILL_MARGINS' box aspect above, so the equal-aspect box fills the
+        # position rectangle exactly (no letterbox); the padding shows as empty plot area. Realign pbar.
+        ml, mr, mb, mt = FILL_MARGINS
+        fig.subplots_adjust(left=ml, right=mr, bottom=mb, top=mt)
+        pbar_box = (ml, 0.905, mr - ml, 0.030)
+    else:
+        pbar_box = (0.12, 0.905, 0.76, 0.030)
     ax.grid(True, alpha=0.15)
 
     # Region imshow artists (toggle visibility), anchor markers + labels.
@@ -673,7 +720,7 @@ def main() -> None:
             rib_norm = (rib - rmin) / (rmax - rmin) if rmax > rmin else np.full(n_traj, 0.5)
         else:
             rib_norm = np.full(n_traj, 0.5)
-        pbar_ax = fig.add_axes((0.12, 0.905, 0.76, 0.030))
+        pbar_ax = fig.add_axes(pbar_box)
         pbar_ax.set_xlim(0.0, float(n_traj))
         pbar_ax.set_ylim(0.0, 1.0)
         pbar_ax.set_xticks([])
