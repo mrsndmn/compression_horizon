@@ -6,6 +6,8 @@ import torch
 from datasets import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
+from compression_horizon.inference.generation import generate_from_compression
+
 
 def load_single_row(
     dataset_path: str,
@@ -41,67 +43,6 @@ def load_single_row(
         "stage_index": row.get("stage_index", None),
     }
     return info
-
-
-@torch.no_grad()
-def generate_from_compression(
-    model: AutoModelForCausalLM,
-    tokenizer: AutoTokenizer,
-    compression_tokens: torch.Tensor,  # [1, C, D]
-    max_new_tokens: int,
-    num_return_sequences: int,
-) -> list[str]:
-    device = compression_tokens.device
-    model = model.to(device)
-    model.eval()
-
-    if tokenizer.pad_token is None and tokenizer.eos_token is not None:
-        tokenizer.pad_token = tokenizer.eos_token
-
-    eos_token_id = tokenizer.eos_token_id
-
-    # Prepare batch of prefixes
-    if num_return_sequences > 1:
-        compression_tokens = compression_tokens.expand(num_return_sequences, -1, -1)
-    batch_size, prefix_len, hidden_size = compression_tokens.shape
-
-    # Container for generated token ids
-    generated_ids = torch.empty((batch_size, 0), dtype=torch.long, device=device)
-
-    input_embeddings = model.get_input_embeddings()
-
-    for _ in range(int(max_new_tokens)):
-        if generated_ids.size(1) == 0:
-            gen_embeds = torch.empty(batch_size, 0, hidden_size, device=device)
-        else:
-            gen_embeds = input_embeddings(generated_ids)
-
-        inputs_embeds = torch.cat([compression_tokens, gen_embeds], dim=1)
-
-        attn_prefix = torch.ones((batch_size, prefix_len), dtype=torch.long, device=device)
-        attn_gen = torch.ones((batch_size, gen_embeds.size(1)), dtype=torch.long, device=device)
-        attention_mask = torch.cat([attn_prefix, attn_gen], dim=1)
-
-        outputs = model(inputs_embeds=inputs_embeds, attention_mask=attention_mask)
-        logits = outputs.logits[:, -1, :]
-
-        next_tokens = torch.argmax(logits, dim=-1)
-
-        # Optional early stop if eos is defined and sampled
-        if eos_token_id is not None:
-            # If a sequence already ended with eos, keep predicting eos for it
-            if generated_ids.size(1) > 0:
-                ended = generated_ids[:, -1].eq(eos_token_id)
-                next_tokens = torch.where(ended, torch.full_like(next_tokens, eos_token_id), next_tokens)
-
-        generated_ids = torch.cat([generated_ids, next_tokens.unsqueeze(-1)], dim=-1)
-
-        # Stop early if all sequences just produced eos and had eos previously
-        if eos_token_id is not None and torch.all(next_tokens.eq(eos_token_id)):
-            break
-
-    texts = [tokenizer.decode(seq, skip_special_tokens=True) for seq in generated_ids]
-    return texts
 
 
 def main() -> None:
@@ -184,10 +125,11 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     compression_tokens = embedding.unsqueeze(0)
-    generations = generate_from_compression(
+    # generate_from_compression always returns a (texts, ids-or-texts) tuple; we only need texts.
+    generations, _ = generate_from_compression(
         model=model,
         tokenizer=tokenizer,
-        compression_tokens=compression_tokens,
+        compression_token_embeddings=compression_tokens,
         max_new_tokens=int(args.max_new_tokens),
         num_return_sequences=int(args.num_return_sequences),
     )
