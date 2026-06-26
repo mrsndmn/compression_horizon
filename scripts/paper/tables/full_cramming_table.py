@@ -64,7 +64,7 @@ def main() -> None:
 
     if args.type == "full_cramming":
         cache_filename = "full_cramming_table_cache.json"
-        cache_version = 1
+        cache_version = 2  # bumped: aggregate_progressive now uses the last *converged* stage
 
         experiments_list = [
             # # Llama-3.2-1B
@@ -93,7 +93,7 @@ def main() -> None:
         ]
     elif args.type == "full_cramming_apendix":
         cache_filename = "full_cramming_table_cache.json"
-        cache_version = 1
+        cache_version = 2  # bumped: aggregate_progressive now uses the last *converged* stage
 
         experiments_list = [
             # Llama-3.2-1B
@@ -123,7 +123,7 @@ def main() -> None:
         ]
     elif args.type == "prefix_tuning":
         cache_filename = "prefix_tuning_table_cache.json"
-        cache_version = 1
+        cache_version = 2  # bumped: aggregate_progressive now uses the last *converged* stage
 
         # TODO pythia
 
@@ -335,7 +335,17 @@ def main() -> None:
                 )
             max_tokens = summary.max_sequence_length
         else:
-            accuracy = "100.00" if accuracy_in_percent else "1.0"
+            # Report the measured teacher-forcing convergence, not a hardcoded 100%.
+            # (summary.final_convergence_mean comes from aggregate_progressive.)
+            if accuracy_in_percent:
+                accuracy = format_pct_cell(summary.final_convergence_mean, summary.final_convergence_std)
+            else:
+                accuracy = to_mean_std_cell(
+                    summary.final_convergence_mean,
+                    summary.final_convergence_std,
+                    use_latex=(args.tablefmt == "latex"),
+                    float_precision=3,
+                )
             # max_tokens = summary.number_of_compressed_tokens
             max_tokens = to_mean_std_cell(
                 summary.number_of_compressed_tokens,
@@ -361,14 +371,13 @@ def main() -> None:
         if args.type == "prefix_tuning":
             result_table_rows.append([experiment, exp_type, max_tokens, accuracy])
         else:
-            if is_progressive and accuracy_in_percent:
-                greedy_cell = "100.00"
+            # Report the measured greedy-reconstruction accuracy, not a hardcoded
+            # 100% for progressive (read from greedy_accuracy_cache.json, same as Full).
+            greedy = load_greedy_cache(ordered_dirs[i])
+            if greedy is None or greedy[0] is None:
+                greedy_cell = "--"
             else:
-                greedy = load_greedy_cache(ordered_dirs[i])
-                if greedy is None or greedy[0] is None:
-                    greedy_cell = "--"
-                else:
-                    greedy_cell = format_pct_cell(greedy[0], greedy[1], precision=args.greedy_precision)
+                greedy_cell = format_pct_cell(greedy[0], greedy[1], precision=args.greedy_precision)
             result_table_rows.append([exp_type, max_tokens, accuracy, greedy_cell])
         if args.type != "prefix_tuning":
             if is_progressive and i != len(ordered_summaries) - 1:

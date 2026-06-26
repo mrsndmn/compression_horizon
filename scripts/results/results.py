@@ -442,22 +442,40 @@ def aggregate_progressive(run_dir: str, ds_rows: List[dict]) -> RunSummary:
     run_name = Path(run_dir).parent.name
     parsed = parse_run_name_for_properties(run_name)
 
-    # For progressive rows, group by sample_id and take the last stage_index
+    # For progressive rows, group by sample_id and take the last *converged* stage:
+    # the highest stage_index whose final_convergence reached the run's
+    # convergence_threshold. The true max stage_index is the stage that FAILED to
+    # converge (the loop stops on the first non-converged seq_len), so aggregating it
+    # understates convergence and over-counts compressed tokens by one stage. Falls
+    # back to the max stage only when no stage converged. Mirrors the same selection
+    # in scripts/greedy_reconstruction_eval.py::select_rows.
     by_sample: Dict[int, List[dict]] = {}
     for r in ds_rows:
         sid = int(r.get("sample_id"))
         by_sample.setdefault(sid, []).append(r)
+
+    def _stage_converged(r: dict) -> bool:
+        conv = r.get("final_convergence")
+        if conv is None:
+            return False
+        thr = r.get("convergence_threshold")
+        return float(conv) >= (float(thr) if thr is not None else 1.0)
+
     last_rows: List[dict] = []
+    num_embeddings: List[int] = []
     for sid, rows in by_sample.items():
         rows_sorted = sorted(rows, key=lambda x: int(x.get("stage_index", 0)))
-        last_rows.append(rows_sorted[-1])
+        converged = [r for r in rows_sorted if _stage_converged(r)]
+        last_rows.append(converged[-1] if converged else rows_sorted[-1])
+        # Number of compressed tokens = number of converged stages (excludes the
+        # trailing failed stage the loop stopped on); fall back to all stages.
+        num_embeddings.append(len(converged) if converged else len(rows_sorted))
 
     # Collect stats
     fin_conv = [r.get("final_convergence") for r in last_rows if r.get("final_convergence") is not None]
     fin_loss = [r.get("final_loss") for r in last_rows if r.get("final_loss") is not None]
     steps_taken = [r.get("steps_taken") for r in last_rows if r.get("steps_taken") is not None]
     info_gain_bits = [r.get("information_gain_bits") for r in last_rows if r.get("information_gain_bits") is not None]
-    num_embeddings = [len(rows) for rows in by_sample.values()]
 
     # Extract a few more properties if present in rows
     props_from_rows: Dict[str, Optional[object]] = {}
