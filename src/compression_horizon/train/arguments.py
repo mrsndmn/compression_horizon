@@ -360,6 +360,20 @@ class MyTrainingArguments(TrainingArguments):
     generate_in_compute_loss: bool = field(default=False)
     random_seed: int | None = field(default=42, metadata={"help": "Random seed for reproducibility (None to skip)."})
 
+    # --- Convergence robustness -----------------------------------------
+    convergence_margin: float = field(
+        default=0.0,
+        metadata={
+            "help": (
+                "Logit-margin (epsilon) a token must clear to count as converged: a position "
+                "matches only when logit[true] - max_{j!=true} logit[j] >= convergence_margin. "
+                "0.0 = legacy bare-argmax convergence. >0 forces the optimizer to keep training "
+                "until every token has an epsilon margin, so reconstruction survives kernel/forward-"
+                "shape perturbations (robust autoregressive decoding) at the cost of fewer crammed tokens."
+            )
+        },
+    )
+
     # --- Precision ------------------------------------------------------
     dtype: str = field(
         default="bf16",

@@ -244,11 +244,17 @@ def token_argmax_match_rate_with_prefix(
     num_compression_tokens: int,
     *,
     prefix_len: int = 0,
+    margin: float = 0.0,
 ) -> torch.Tensor:
-    """Per-sample token-level argmax match rate when logits include compression (+ optional prefix) tokens.
+    """Per-sample token-level match rate when logits include compression (+ optional prefix) tokens.
 
     ``prefix_len`` skips the uncompressed prefix positions so the match rate is measured only over
     the continuation (the tokens that follow the prefix).
+
+    ``margin`` (epsilon) requires the true token's logit to lead the runner-up by at least this much
+    to count as a match: ``logit[true] - max_{j != true} logit[j] >= margin``. ``margin == 0.0``
+    reduces to bare-argmax matching (legacy behaviour, kept bit-identical). A positive margin yields
+    a stricter convergence target whose solutions are robust to forward-shape / kernel perturbations.
     """
     if num_compression_tokens < 1:
         raise ValueError(f"num_compression_tokens must be >= 1, got {num_compression_tokens}!")
@@ -256,12 +262,22 @@ def token_argmax_match_rate_with_prefix(
         raise ValueError(f"prefix_len must be >= 0, got {prefix_len}!")
 
     offset = num_compression_tokens + prefix_len
-    prediction_ids = logits[:, offset - 1 : -1].argmax(dim=-1)  # [batch, sequence]
+    pred_logits = logits[:, offset - 1 : -1]  # [batch, sequence, vocab]
+    if margin <= 0.0:
+        token_ok = pred_logits.argmax(dim=-1) == input_ids  # [batch, sequence]
+    else:
+        true_logit = pred_logits.gather(-1, input_ids.unsqueeze(-1)).squeeze(-1)  # [batch, sequence]
+        top2 = pred_logits.topk(2, dim=-1).values  # [batch, sequence, 2]
+        is_true_top1 = pred_logits.argmax(dim=-1) == input_ids
+        # Runner-up = 2nd-highest logit when the true token is the argmax, else the highest
+        # (then true_logit - runner_up < 0, so the token correctly fails the margin).
+        runner_up = torch.where(is_true_top1, top2[..., 1], top2[..., 0])
+        token_ok = (true_logit - runner_up) >= margin
     # Mask out padding positions: otherwise a model that learns to predict the pad
     # token on padded input positions inflates the numerator and the ratio can
     # exceed 1.0. We divide by the count of valid tokens, so the numerator must
     # also be restricted to valid tokens.
-    matches = ((prediction_ids == input_ids) & (attention_mask == 1)).sum(dim=-1)
+    matches = (token_ok & (attention_mask == 1)).sum(dim=-1)
     ratio = matches / attention_mask.sum(dim=-1).clamp_min(1)
     return ratio
 

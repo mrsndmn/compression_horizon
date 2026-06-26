@@ -113,13 +113,19 @@ class BaseTrainer:
         num_compression_tokens: int,
         prefix_len: int = 0,
     ) -> torch.Tensor:
-        """Per-sample token-level argmax match rate in [0, 1] (over the post-prefix continuation)."""
+        """Per-sample token-level match rate in [0, 1] (over the post-prefix continuation).
+
+        Honours ``args.convergence_margin`` (epsilon): with a positive margin a token counts as
+        converged only when its true-token logit leads the runner-up by >= epsilon, producing
+        decode-robust solutions. Defaults to 0.0 (legacy bare-argmax convergence).
+        """
         return token_argmax_match_rate_with_prefix(
             logits,
             input_ids,
             attention_mask,
             num_compression_tokens,
             prefix_len=prefix_len,
+            margin=float(getattr(self.args, "convergence_margin", 0.0) or 0.0),
         )
 
     @torch.no_grad()
