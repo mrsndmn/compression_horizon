@@ -199,12 +199,54 @@ QWEN3_EXPERIMENTS = [
     },
 ]
 
+# --- Convergence-margin reproduction of tab:progressive_modifications --------------------
+# The 8 rows of paper/tables/progressive_modifications.tex are the cross_entropy baseline +
+# low-dim variants (first two entries of each model group above). Reproduce all 8 under two
+# decode-robustness variants -> 16 experiments:
+#   * "eps=0.5 plain CE"        : convergence_margin=0.5
+#   * "eps=0.5 + loss_margin"   : convergence_margin=0.5 and loss_margin=0.5
+# convergence_margin requires every token to clear an epsilon logit margin (decode-robust,
+# honest 1.0 greedy reconstruction); loss_margin additionally reweights CE toward the deficient
+# tokens to claw back some of the crammed-token cost. (model_checkpoint, learning_rate,
+# low_dim_size) match the table rows 1:1; low_dim_size None => baseline row.
+PROGRESSIVE_MODIFICATIONS_BASE = [
+    ("unsloth/Meta-Llama-3.1-8B", 0.1, None),
+    ("unsloth/Meta-Llama-3.1-8B", 0.1, 256),
+    ("EleutherAI/pythia-1.4b", 0.5, None),
+    ("EleutherAI/pythia-1.4b", 0.5, 256),
+    ("HuggingFaceTB/SmolLM2-1.7B", 0.1, None),
+    ("HuggingFaceTB/SmolLM2-1.7B", 0.1, 256),
+    ("unsloth/gemma-3-4b-pt", 0.1, None),
+    ("unsloth/gemma-3-4b-pt", 0.1, 32),
+]
+
+CONVERGENCE_MARGIN = 0.5
+LOSS_MARGIN = 0.5
+
+MARGIN_EXPERIMENTS = [
+    {
+        "model_checkpoint": model_checkpoint,
+        "learning_rate": learning_rate,
+        "loss_type": "cross_entropy",
+        "num_alignment_layers": 1,
+        "hybrid_alpha": None,
+        "low_dim_projection": low_dim_size is not None,
+        "low_dim_size": low_dim_size,
+        "convergence_margin": CONVERGENCE_MARGIN,
+        # None for the plain-CE variant (no flag), LOSS_MARGIN for the reweighted variant.
+        "loss_margin": loss_margin,
+    }
+    for (model_checkpoint, learning_rate, low_dim_size) in PROGRESSIVE_MODIFICATIONS_BASE
+    for loss_margin in (None, LOSS_MARGIN)
+]
+
 EXPERIMENTS = [
     *LLAMA_31_8B_EXPERIMENTS,
     *PYTHIA_14B_EXPERIMENTS,
     *SMOLLM2_17B_EXPERIMENTS,
     *GEMMA_3_4B_EXPERIMENTS,
     *QWEN3_EXPERIMENTS,
+    *MARGIN_EXPERIMENTS,
 ]
 
 
@@ -271,6 +313,19 @@ def render_job(experiment):
     # num_alignment_layers (only added to suffix when non-default vs legacy 1).
     if experiment["num_alignment_layers"] != 1:
         exp_suffix = f"{exp_suffix}_align_{experiment['num_alignment_layers']}"
+
+    # Convergence/loss margin (decode-robustness variants). ``.get`` keeps every existing experiment
+    # byte-identical (no key => no flag, no suffix). convergence_margin forces an epsilon logit
+    # margin on the convergence criterion; loss_margin additionally reweights CE toward deficient
+    # tokens. See src/compression_horizon/train/{arguments,loss}.py.
+    convergence_margin = experiment.get("convergence_margin")
+    if convergence_margin is not None:
+        cmd_args.append(f"--convergence_margin {convergence_margin}")
+        exp_suffix = f"{exp_suffix}_cm_{convergence_margin}"
+    loss_margin = experiment.get("loss_margin")
+    if loss_margin is not None:
+        cmd_args.append(f"--loss_margin {loss_margin}")
+        exp_suffix = f"{exp_suffix}_lm_{loss_margin}"
 
     # Fixed uncompressed prefix (progressive cramming). ``.get`` keeps every existing experiment
     # byte-identical (no key => no flag, no suffix); set it to enable the prefix-length ablation.
