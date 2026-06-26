@@ -100,6 +100,7 @@ class BaseTrainer:
             hybrid_alpha=self.args.hybrid_alpha,
             leading_token_loss_weight=self.args.leading_token_loss_weight,
             leading_token_loss_count=self.args.leading_token_loss_count,
+            loss_margin=float(getattr(self.args, "loss_margin", 0.0) or 0.0),
             prefix_len=prefix_len,
         )
         return loss, alignment_loss

@@ -373,6 +373,19 @@ class MyTrainingArguments(TrainingArguments):
             )
         },
     )
+    loss_margin: float = field(
+        default=0.0,
+        metadata={
+            "help": (
+                "Per-token margin-aware CE reweighting (cross_entropy only). >0 weights each token's "
+                "cross-entropy by its margin deficit, clamp_min(0, loss_margin - (logit[true] - "
+                "runner_up)) (weights detached): a token already past the margin gets ~0 loss, a "
+                "deficient one gets up-weighted. Focuses optimization on the hard tokens instead of "
+                "over-separating easy ones, aiming to reach the same robustness with fewer steps / "
+                "more crammed tokens. Pairs with convergence_margin (typically equal). 0.0 = plain CE."
+            )
+        },
+    )
 
     # --- Precision ------------------------------------------------------
     dtype: str = field(

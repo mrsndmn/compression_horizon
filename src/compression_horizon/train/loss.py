@@ -24,6 +24,7 @@ def next_token_cross_entropy_loss_with_prefix(
     reduction: str = "mean",
     leading_token_loss_weight: float = 1.0,
     leading_token_loss_count: int = 0,
+    loss_margin: float = 0.0,
 ) -> torch.Tensor:
     """Next-token cross-entropy when logits include compression (and optional uncompressed prefix) tokens.
 
@@ -31,6 +32,11 @@ def next_token_cross_entropy_loss_with_prefix(
     [continuation]``. ``input_ids``/``attention_mask`` describe the continuation only (the loss
     target); the ``prefix_len`` real prefix positions are skipped so loss is computed only on the
     tokens that follow the prefix. With ``prefix_len=0`` this is identical to the original.
+
+    ``loss_margin`` (>0) reweights per-token CE by each token's margin deficit
+    ``clamp_min(0, loss_margin - (logit[true] - runner_up))`` (weights detached): tokens already
+    past the margin contribute ~0 loss, deficient ones are up-weighted, so optimization focuses on
+    the hard tokens. Takes precedence over the leading-token weighting. 0.0 = plain CE (unchanged).
     """
     if num_compression_tokens < 1:
         raise ValueError(f"num_compression_tokens must be >= 1, got {num_compression_tokens}!")
@@ -41,6 +47,27 @@ def next_token_cross_entropy_loss_with_prefix(
     labels[attention_mask == 0] = -100
 
     offset = num_compression_tokens + prefix_len
+    if loss_margin > 0.0:
+        pred_logits = logits[:, offset - 1 : -1]  # [batch, sequence, vocabulary]
+        per_token_loss = F.cross_entropy(
+            pred_logits.flatten(0, 1),
+            labels.flatten(),
+            reduction="none",
+            ignore_index=-100,
+        ).view_as(
+            labels
+        )  # [batch, sequence]
+        with torch.no_grad():
+            true_logit = pred_logits.gather(-1, input_ids.unsqueeze(-1)).squeeze(-1)  # [batch, sequence]
+            top2 = pred_logits.topk(2, dim=-1).values  # [batch, sequence, 2]
+            is_true_top1 = pred_logits.argmax(dim=-1) == input_ids
+            runner_up = torch.where(is_true_top1, top2[..., 1], top2[..., 0])
+            # Weight = margin deficit: 0 once the token clears loss_margin, larger the further short.
+            weights = (loss_margin - (true_logit - runner_up)).clamp_min(0.0)
+        weights = weights.masked_fill(labels == -100, 0.0)
+        # Mean over the deficient tokens keeps full-strength gradient on the hard ones; all-satisfied
+        # -> numerator 0 -> loss 0 (the convergence signal).
+        return (per_token_loss * weights).sum() / weights.sum().clamp_min(1e-6)
     if leading_token_loss_count <= 0 or leading_token_loss_weight == 1.0:
         loss = F.cross_entropy(
             logits[:, offset - 1 : -1].flatten(0, 1),  # [batch * sequence, vocabulary]
@@ -156,11 +183,13 @@ def compute_hybrid_cross_entropy_and_alignment_loss(
     leading_token_loss_weight: float = 1.0,
     leading_token_loss_count: int = 0,
     prefix_len: int = 0,
+    loss_margin: float = 0.0,
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """Compute CE loss and optional activation alignment loss (hybrid).
 
     ``prefix_len`` skips the uncompressed prefix positions so both terms are computed only over the
-    continuation (the tokens that follow the prefix).
+    continuation (the tokens that follow the prefix). ``loss_margin`` enables per-token margin-aware
+    CE reweighting (see ``next_token_cross_entropy_loss_with_prefix``).
     """
     ce_loss = next_token_cross_entropy_loss_with_prefix(
         logits,
@@ -171,6 +200,7 @@ def compute_hybrid_cross_entropy_and_alignment_loss(
         reduction="mean",
         leading_token_loss_weight=leading_token_loss_weight,
         leading_token_loss_count=leading_token_loss_count,
+        loss_margin=loss_margin,
     )
 
     loss_type = (loss_type or "").lower()
