@@ -204,7 +204,7 @@ QWEN3_EXPERIMENTS = [
 # low-dim variants (first two entries of each model group above). Reproduce all 8 under the
 # decode-robustness variants: for each margin epsilon in CONVERGENCE_MARGINS, a plain-CE arm
 # (convergence_margin=eps) and a loss-margin arm (convergence_margin=eps and loss_margin=eps).
-# 8 base x len(CONVERGENCE_MARGINS) x 2 experiments (= 32 for eps in {0.5, 1.0}).
+# 8 base x len(CONVERGENCE_MARGINS) x 2 experiments (= 48 for eps in {0.5, 1.0, 2.0}).
 # convergence_margin requires every token to clear an epsilon logit margin (decode-robust,
 # honest greedy reconstruction); loss_margin additionally reweights CE toward the deficient
 # tokens. (model_checkpoint, learning_rate, low_dim_size) match the table rows 1:1; low_dim_size
@@ -220,7 +220,7 @@ PROGRESSIVE_MODIFICATIONS_BASE = [
     ("unsloth/gemma-3-4b-pt", 0.1, 32),
 ]
 
-CONVERGENCE_MARGINS = [0.5, 1.0]
+CONVERGENCE_MARGINS = [0.5, 1.0, 2.0]
 
 MARGIN_EXPERIMENTS = [
     {
