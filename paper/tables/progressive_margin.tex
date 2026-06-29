@@ -1,0 +1,14 @@
+% paper-lint: n_samples=50
+\begin{tabular}{llll}
+\toprule
+ Model           & Variant            & Compressed Tokens       & Greedy Recon. (\%)          \\
+\midrule
+ Llama-3.1-8B    & baseline           & 1417 {\small $\pm$ 398} & 68.46 {\small $\pm$ 44.73} \\
+                 & $\epsilon$=0.5     & 1346 {\small $\pm$ 393} & 91.04 {\small $\pm$ 26.42} \\
+                 & $\epsilon$=0.5 +lm & 786 {\small $\pm$ 164}  & 90.74 {\small $\pm$ 25.72} \\
+ \midrule
+ pythia-1.4b     & baseline           & 421 {\small $\pm$ 60}   & 70.46 {\small $\pm$ 38.76} \\
+                 & $\epsilon$=0.5     & 406 {\small $\pm$ 66}   & 90.89 {\small $\pm$ 21.40} \\
+                 & $\epsilon$=0.5 +lm & 352 {\small $\pm$ 27}   & 100.00 {\small $\pm$ 0.00} \\
+\bottomrule
+\end{tabular}

@@ -131,6 +131,9 @@ def main() -> None:
         result = result.replace("\\}", "}")
         result = re.sub(r"REMOVE.+", "", result)
         result = hlines_to_booktabs(result)
+    # Strip trailing whitespace (the REMOVE-sentinel midrule rows leave some) so the
+    # rendered .tex is stable under the trailing-whitespace pre-commit hook.
+    result = "\n".join(line.rstrip() for line in result.split("\n"))
     print(result)
 
     if missing_greedy:
