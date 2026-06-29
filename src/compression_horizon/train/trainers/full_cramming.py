@@ -137,7 +137,7 @@ class FullCrammingTrainer(BaseTrainer):
             loaded_embeddings,
         ) = self._initialize_run()
         num_compression_tokens = self.args.number_of_mem_tokens
-        hidden_size = model.config.hidden_size
+        hidden_size = model.config.get_text_config().hidden_size
         single_compression_token_init = self._init_single_compressed(
             init_method=init_method,
             mvn_dist=mvn_dist,
