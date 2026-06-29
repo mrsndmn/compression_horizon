@@ -201,14 +201,14 @@ QWEN3_EXPERIMENTS = [
 
 # --- Convergence-margin reproduction of tab:progressive_modifications --------------------
 # The 8 rows of paper/tables/progressive_modifications.tex are the cross_entropy baseline +
-# low-dim variants (first two entries of each model group above). Reproduce all 8 under two
-# decode-robustness variants -> 16 experiments:
-#   * "eps=0.5 plain CE"        : convergence_margin=0.5
-#   * "eps=0.5 + loss_margin"   : convergence_margin=0.5 and loss_margin=0.5
+# low-dim variants (first two entries of each model group above). Reproduce all 8 under the
+# decode-robustness variants: for each margin epsilon in CONVERGENCE_MARGINS, a plain-CE arm
+# (convergence_margin=eps) and a loss-margin arm (convergence_margin=eps and loss_margin=eps).
+# 8 base x len(CONVERGENCE_MARGINS) x 2 experiments (= 32 for eps in {0.5, 1.0}).
 # convergence_margin requires every token to clear an epsilon logit margin (decode-robust,
-# honest 1.0 greedy reconstruction); loss_margin additionally reweights CE toward the deficient
-# tokens to claw back some of the crammed-token cost. (model_checkpoint, learning_rate,
-# low_dim_size) match the table rows 1:1; low_dim_size None => baseline row.
+# honest greedy reconstruction); loss_margin additionally reweights CE toward the deficient
+# tokens. (model_checkpoint, learning_rate, low_dim_size) match the table rows 1:1; low_dim_size
+# None => baseline row.
 PROGRESSIVE_MODIFICATIONS_BASE = [
     ("unsloth/Meta-Llama-3.1-8B", 0.1, None),
     ("unsloth/Meta-Llama-3.1-8B", 0.1, 256),
@@ -220,8 +220,7 @@ PROGRESSIVE_MODIFICATIONS_BASE = [
     ("unsloth/gemma-3-4b-pt", 0.1, 32),
 ]
 
-CONVERGENCE_MARGIN = 0.5
-LOSS_MARGIN = 0.5
+CONVERGENCE_MARGINS = [0.5, 1.0]
 
 MARGIN_EXPERIMENTS = [
     {
@@ -232,12 +231,13 @@ MARGIN_EXPERIMENTS = [
         "hybrid_alpha": None,
         "low_dim_projection": low_dim_size is not None,
         "low_dim_size": low_dim_size,
-        "convergence_margin": CONVERGENCE_MARGIN,
-        # None for the plain-CE variant (no flag), LOSS_MARGIN for the reweighted variant.
-        "loss_margin": loss_margin,
+        "convergence_margin": convergence_margin,
+        # None for the plain-CE arm (no flag), == convergence_margin for the reweighted arm.
+        "loss_margin": convergence_margin if with_loss_margin else None,
     }
     for (model_checkpoint, learning_rate, low_dim_size) in PROGRESSIVE_MODIFICATIONS_BASE
-    for loss_margin in (None, LOSS_MARGIN)
+    for convergence_margin in CONVERGENCE_MARGINS
+    for with_loss_margin in (False, True)
 ]
 
 EXPERIMENTS = [
