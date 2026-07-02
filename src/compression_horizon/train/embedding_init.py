@@ -141,7 +141,7 @@ def prepare_embedding_init(args, model):
             seed = create_compression_embedding(
                 batch_size=1,
                 num_compression_tokens=args.number_of_mem_tokens,
-                hidden_size=model.config.hidden_size,
+                hidden_size=model.config.get_text_config().hidden_size,
                 init_method=gen_method,
                 mvn_dist=gen_mvn_dist,
                 pca_components=gen_pca_components,

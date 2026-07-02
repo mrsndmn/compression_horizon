@@ -72,6 +72,11 @@ done
 # tab:prefix_tuning_accuracy
 "$PY" scripts/paper/tables/full_cramming_table.py --type prefix_tuning --save-dir paper/tables
 
+# --- Convergence-margin greedy reconstruction (appendix) ---------------------
+# tab:progressive_margin_greedy. Reads each margin run's greedy_accuracy_cache.json
+# (greedy_reconstruction_eval.py --dataset-type progr); no GPU / dataset reload.
+"$PY" scripts/paper/tables/progressive_margin_greedy_table.py --save-dir paper/tables
+
 # --- Semantic benchmark evaluation -------------------------------------------
 # tab:semantic_evaluation
 "$PY" scripts/paper/tables/bench_semantic_results.py --tablefmt latex --save-dir paper/tables --arc-split ARC-Easy

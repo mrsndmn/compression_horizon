@@ -1,0 +1,19 @@
+\begin{tabular}{l l cc cc cc}
+\toprule
+ & & \multicolumn{2}{c}{$\epsilon=0.5$} & \multicolumn{2}{c}{$\epsilon=1.0$} & \multicolumn{2}{c}{$\epsilon=2.0$} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}
+Model & Proj. & CE & +LM & CE & +LM & CE & +LM \\
+\midrule
+Llama-3.1-8B & -- & 91.0 {\scriptsize(1346)} & 90.7 {\scriptsize(786)} & 89.8 {\scriptsize(1353)} & \textbf{100} {\scriptsize(700)} & 97.1 {\scriptsize(1251)} & \textbf{100} {\scriptsize(588)} \\
+ & low-dim & 95.9 {\scriptsize(1804)} & 99.5 {\scriptsize(924)} & 97.3 {\scriptsize(1744)} & \textbf{100} {\scriptsize(843)} & 95.1 {\scriptsize(1609)} & \textbf{100} {\scriptsize(702)} \\
+\midrule
+Pythia-1.4B & -- & 90.9 {\scriptsize(406)} & \textbf{100} {\scriptsize(352)} & 96.9 {\scriptsize(390)} & \textbf{100} {\scriptsize(315)} & \textbf{100} {\scriptsize(352)} & \textbf{100} {\scriptsize(258)} \\
+ & low-dim & 99.7 {\scriptsize(439)} & \textbf{100} {\scriptsize(252)} & \textbf{100} {\scriptsize(400)} & \textbf{100} {\scriptsize(222)} & \textbf{100} {\scriptsize(337)} & \textbf{100} {\scriptsize(172)} \\
+\midrule
+SmolLM2-1.7B & -- & 83.0 {\scriptsize(322)} & 92.4 {\scriptsize(262)} & 87.9 {\scriptsize(317)} & 96.4 {\scriptsize(239)} & 99.0 {\scriptsize(301)} & 99.2 {\scriptsize(206)} \\
+ & low-dim & 85.8 {\scriptsize(815)} & 99.3 {\scriptsize(592)} & 91.3 {\scriptsize(801)} & \textbf{100} {\scriptsize(532)} & 93.7 {\scriptsize(739)} & \textbf{100} {\scriptsize(462)} \\
+\midrule
+Gemma-3-4B & -- & 92.0 {\scriptsize(208)} & 83.9 {\scriptsize(167)} & 92.2 {\scriptsize(198)} & 97.5 {\scriptsize(156)} & 97.3 {\scriptsize(180)} & \textbf{100} {\scriptsize(137)} \\
+ & low-dim & 93.0 {\scriptsize(634)} & 97.6 {\scriptsize(496)} & 95.8 {\scriptsize(656)} & \textbf{100} {\scriptsize(462)} & \textbf{100} {\scriptsize(642)} & \textbf{100} {\scriptsize(396)} \\
+\bottomrule
+\end{tabular}

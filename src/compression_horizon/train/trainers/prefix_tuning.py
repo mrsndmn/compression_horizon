@@ -69,7 +69,7 @@ class PrefixTuningTrainer(BaseTrainer):
         final_prefix_embeddings_cpu = None
 
         tokenizer = self.processing_class
-        hidden_size = base_model.config.hidden_size
+        hidden_size = base_model.config.get_text_config().hidden_size
 
         for batch in tqdm(dataloader):
             input_ids_b = batch.input_ids.squeeze(1).to(device)

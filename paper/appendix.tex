@@ -550,6 +550,29 @@ factor of three (2 leading).}
 
 
 
+\subsection{Perfect Teacher Forcing Does Not Guarantee Greedy Reconstruction: An Attention-Kernel Effect}
+\label{app:tf_vs_greedy_kernel}
+
+Progressive cramming converges each stage to $100\%$ \emph{teacher-forcing} (TF) argmax accuracy. A naive causal argument suggests this should already imply perfect greedy reconstruction: if, given the ground-truth prefix, the model's argmax matches the target at every position, then feeding those argmax predictions back autoregressively should stay on the ground-truth path. In practice this fails---greedy autoregressive reconstruction of the converged embeddings reaches only $\sim\!68$--$70\%$ for the base Llama-3.1-8B and Pythia-1.4B runs, despite $100\%$ TF.
+
+The gap is a \emph{numerical} one. The convergence criterion is a bare argmax and is therefore \emph{zero-margin}: optimization halts the instant the true token's logit barely exceeds the runner-up. The two decoding regimes then evaluate the model with differently \emph{shaped} forward passes---teacher forcing (and training) uses a single fixed-length forward over the whole prefix, whereas greedy decoding rebuilds the sequence incrementally (lengths $1, 2, 3, \dots$). FlashAttention tiles the attention computation over key/value blocks, so the reduction order---and hence the low-order bits of each logit---depends on the total sequence length. At a zero-margin position this suffices to flip the argmax between the training forward and the incremental greedy forward; because the errors that survive convergence concentrate at \emph{early} positions (Table~\ref{tab:compression_reconstruction_summary}), a single early flip cascades through the rest of the generation. We confirm the mechanism directly: a converged embedding scores $\mathrm{TF}{=}1.0$ under the exact training kernel (FlashAttention-2, full-length forward) yet its greedy generation diverges; re-running greedy decoding with a constant-length, teacher-forcing-consistent forward restores most of the lost tokens, whereas merely raising precision to \texttt{fp32} does not (the discrepancy is a reduction-order effect, not rounding magnitude).
+
+\paragraph{A margin makes the solution decode-robust.}
+The fragility can be removed at training time by requiring a logit \emph{margin} rather than a bare argmax: a token counts as converged only when $\mathrm{logit}[\text{true}] - \max_{j \neq \text{true}} \mathrm{logit}[j] \geq \epsilon$. Cross-entropy already drives the margin upward, so this criterion simply trains each stage a little longer; an optional per-token margin-weighted loss (weighting each token's cross-entropy by its margin deficit, weights detached) focuses the extra optimization on the still-deficient tokens. Table~\ref{tab:progressive_margin_greedy} reports greedy reconstruction under this criterion across four model families ($\times$ baseline / low-dimensional projection) for $\epsilon \in \{0.5, 1.0, 2.0\}$. A positive margin lifts greedy reconstruction monotonically from the $\sim\!68$--$70\%$ zero-margin baseline toward $100\%$; with the margin-weighted loss, $\epsilon \geq 1.0$ reaches perfect greedy reconstruction for essentially every model. The margin is not free---forcing separation on every token costs capacity, so the number of crammed tokens drops (shown in parentheses)---exposing a robustness-versus-compression trade-off controllable through $\epsilon$.
+
+\begin{table*}[t]
+\centering
+\caption{Greedy autoregressive reconstruction accuracy (\%) of progressive-cramming embeddings trained with a convergence margin $\epsilon$, over $50$ PG19 samples; the mean number of compressed tokens is shown in parentheses. ``CE'' is the plain margin criterion and ``+LM'' additionally reweights the cross-entropy toward margin-deficient tokens. The zero-margin ($\epsilon{=}0$) baselines reconstruct at only $\sim\!68$--$70\%$ (Pythia-1.4B $70.5$, Llama-3.1-8B $68.5$) despite $100\%$ teacher forcing. A larger $\epsilon$ trades crammed tokens for decode robustness.}
+\label{tab:progressive_margin_greedy}
+\begin{small}
+\input{tables/progressive_margin_greedy}
+\end{small}
+\vskip -0.1in
+\end{table*}
+
+\paragraph{Fixing the kernel is the cleaner remedy.}
+The margin buys robustness by sacrificing crammed tokens, but it treats a symptom. The root cause is the mismatch between the forward pass under which convergence is \emph{verified} and the one used at \emph{decode} time. A more principled fix leaves the training objective untouched and instead makes decoding numerically consistent with training: use the same attention kernel and a fixed-length, teacher-forcing-consistent forward at each step (equivalently, a deterministic attention implementation). In the idealized limit where greedy decoding reproduces exactly the forward under which each stage was certified, the causal argument holds and $100\%$ TF implies $100\%$ greedy reconstruction by construction, at \emph{no} cost in crammed tokens. We therefore regard kernel- and shape-consistent decoding as the preferred remedy, and the training-time margin as a fallback for settings where the decode path cannot be controlled. This also refines the reconstruction guarantee stated for progressive cramming (Table~\ref{tab:full_vs_progressive_appendix}): perfect greedy reconstruction is attainable, but it is a property of the \emph{decode procedure} as much as of the embedding.
+
 \subsection{Effect of Imperfect Reconstruction on HellaSwag and ARC}
 \label{app:imperfect_reconstruction}
 

@@ -174,7 +174,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             {
                 "low_dim_projection": shared_state,
                 "low_dim_size": self.args.low_dim_size,
-                "hidden_size": ctx.model.config.hidden_size,
+                "hidden_size": ctx.model.config.get_text_config().hidden_size,
             },
             save_path,
         )
@@ -224,7 +224,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         shared_scheduler = None
         if self.args.low_dim_projection and self.args.low_dim_projection_global:
             shared_projection = self._build_low_dim_projection_module(
-                hidden_size=model.config.hidden_size,
+                hidden_size=model.config.get_text_config().hidden_size,
                 device=device,
             )
             if self.args.low_dim_projection_train:
