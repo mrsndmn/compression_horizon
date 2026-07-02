@@ -13,6 +13,7 @@ from torch.utils.tensorboard import SummaryWriter
 from compression_horizon.inference.generation import generate_from_compression
 from compression_horizon.train.embedding_init import create_compression_embedding, prepare_embedding_init
 from compression_horizon.train.loss import (
+    budget_rebalance_loss_with_prefix,
     compute_hybrid_cross_entropy_and_alignment_loss,
     token_argmax_match_rate_with_prefix,
 )
@@ -58,6 +59,9 @@ class BaseTrainer:
         log_dir = self.args.logging_dir
         self.writer = SummaryWriter(log_dir=log_dir) if log_dir and self.accelerator.is_main_process else None
         self.global_step = 0
+        # Per-sample diagnostics from the most recent budget-rebalancing loss (None when disabled);
+        # the progressive trainer reads these to run dual ascent and log the fungibility probe.
+        self._last_budget_diagnostics: dict | None = None
 
     def train(self) -> str | None:
         """Run training. Subclasses must override. Returns artifact path or output_dir or None."""
@@ -239,6 +243,7 @@ class BaseTrainer:
         num_compression_tokens: int,
         target_hidden_states: tuple[torch.Tensor, ...] | None = None,
         prefix_len: int = 0,
+        budget_ctx: dict | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor, list[str] | None, list[str] | None]:
         """Forward + loss + convergence + diagnostics, returning a 5-tuple.
 
@@ -246,6 +251,13 @@ class BaseTrainer:
         tokens and the continuation in ``united_token_embeddings``; loss and convergence are then
         computed only over the continuation. ``input_ids``/``attention_mask``/``token_embeddings``
         describe the continuation only.
+
+        When ``args.budget_rebalance_mode`` is not ``"none"``, ``budget_ctx`` (built once per stage
+        by the progressive trainer) supplies the cached per-token base surprisal + adaptive
+        water-level / budget / dual multiplier, and the information-gain budget-rebalancing loss
+        replaces the plain CE/hybrid loss. The per-sample diagnostics it returns are stashed on
+        ``self._last_budget_diagnostics`` so the caller can run dual ascent and log the fungibility
+        probe without widening this return tuple.
         """
         # Compute vanilla model hidden states if alignment is required
         loss_type = self.args.loss_type.lower()
@@ -274,15 +286,39 @@ class BaseTrainer:
             attention_mask=united_attention_mask,
             **forward_extra_kwargs,
         )
-        loss, alignment_loss = self.compute_loss(
-            outputs.logits,
-            input_ids,
-            attention_mask,
-            num_compression_tokens,
-            compression_hidden_states=outputs.hidden_states,
-            target_hidden_states=target_hidden_states,
-            prefix_len=prefix_len,
-        )
+        budget_mode = str(getattr(self.args, "budget_rebalance_mode", "none") or "none")
+        if budget_mode != "none":
+            if budget_ctx is None:
+                raise ValueError("budget_rebalance_mode is set but no budget_ctx was supplied to forward_and_compute_loss!")
+            loss, budget_diagnostics = budget_rebalance_loss_with_prefix(
+                outputs.logits,
+                input_ids,
+                attention_mask,
+                num_compression_tokens,
+                base_ce_nats=budget_ctx["base_ce_nats"],
+                base_valid_mask=budget_ctx["base_valid_mask"],
+                prefix_len=prefix_len,
+                mode=budget_mode,
+                epsilon=float(getattr(self.args, "convergence_margin", 0.0) or 0.0),
+                reclaim_weight=float(getattr(self.args, "budget_rebalance_weight", 1.0)),
+                water_level_bits=budget_ctx.get("water_level_bits"),
+                budget_bits=budget_ctx.get("budget_bits"),
+                dual_lambda=budget_ctx.get("dual_lambda"),
+                softcount_tau=float(getattr(self.args, "budget_rebalance_softcount_tau", 0.5)),
+            )
+            alignment_loss = None
+            self._last_budget_diagnostics = budget_diagnostics
+        else:
+            loss, alignment_loss = self.compute_loss(
+                outputs.logits,
+                input_ids,
+                attention_mask,
+                num_compression_tokens,
+                compression_hidden_states=outputs.hidden_states,
+                target_hidden_states=target_hidden_states,
+                prefix_len=prefix_len,
+            )
+            self._last_budget_diagnostics = None
         convergence_per_sample = self.compute_convergence(
             outputs.logits, input_ids, attention_mask, num_compression_tokens, prefix_len=prefix_len
         )

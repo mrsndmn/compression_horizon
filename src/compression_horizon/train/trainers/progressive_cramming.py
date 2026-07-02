@@ -1,15 +1,18 @@
 """Progressive cramming trainer: progressively grow the target prefix until reconstruction fails."""
 
 import copy
+import math
 import os
 from dataclasses import dataclass, field
 
 import torch
+import torch.nn.functional as F
 from tqdm.auto import tqdm
 
 from compression_horizon.analysis import ProgressiveSampleStateMachine
 from compression_horizon.analysis.information_gain import (
     compute_information_gain,
+    compute_per_token_base_surprisal_nats,
     compute_prefix_surprisal_bits_per_token,
 )
 from compression_horizon.train.inputs import build_compression_attention_mask, build_united_input
@@ -820,9 +823,19 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         scheduler_reset_used = False
         last_loss, last_convergence = None, None
 
+        # Cache the stage-constant H_base and snapshot the adaptive IG budget once per stage (the
+        # budget-rebalancing loss reuses these every step). None when rebalancing is disabled.
+        budget_ctx = self._prepare_budget_context(batch_ctx, stage_ctx, ctx)
+
         while True:
             last_loss, last_convergence, converged = self._run_steps(
-                batch_ctx, stage_ctx, ctx, state, retry=scheduler_reset_used, max_steps=max_steps_this_stage
+                batch_ctx,
+                stage_ctx,
+                ctx,
+                state,
+                retry=scheduler_reset_used,
+                max_steps=max_steps_this_stage,
+                budget_ctx=budget_ctx,
             )
             if converged:
                 return last_loss, last_convergence
@@ -831,6 +844,103 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             print(f"Not converged at seq_len={stage_ctx.seq_len}, resetting LR schedulers for non-converged samples...")
             self._reset_per_sample_optimizers(batch_ctx, ctx, state, max_steps_this_stage)
             scheduler_reset_used = True
+
+    @property
+    def _budget_rebalance_mode(self) -> str:
+        """Normalized ``args.budget_rebalance_mode`` ('none' | 'cap' | 'dual')."""
+        return str(getattr(self.args, "budget_rebalance_mode", "none") or "none")
+
+    @torch.no_grad()
+    def _prepare_budget_context(self, batch_ctx: _BatchContext, stage_ctx: _StageContext, ctx: _RunContext) -> dict | None:
+        """Cache H_base + snapshot the adaptive IG budget for the current stage (once per stage).
+
+        Returns a dict consumed by ``forward_and_compute_loss`` when budget rebalancing is on, or
+        ``None`` when it is off. ``base_ce_nats``/``base_valid_mask`` are the frozen-LM per-token
+        surprisal (embedding-independent, so a single forward per stage). ``budget_bits`` is the
+        per-sample information gain of the current (warm-started) embedding — the fixed budget we
+        redistribute — and ``water_level_bits = budget_bits / (#valid tokens)`` is the per-token
+        cap for 'cap' mode. ``dual_lambda`` is the per-sample multiplier for 'dual' mode (dual
+        ascent runs each step), reset to 0 at stage start.
+        """
+        if self._budget_rebalance_mode == "none":
+            return None
+        epsilon = float(getattr(self.args, "convergence_margin", 0.0) or 0.0)
+        if epsilon <= 0.0:
+            raise ValueError(
+                "budget_rebalance_mode requires convergence_margin > 0 (it is the epsilon the loss "
+                "rebalances tokens toward); set --convergence_margin."
+            )
+        base_ce_nats, base_valid_mask = compute_per_token_base_surprisal_nats(
+            model=ctx.decode_model,
+            input_ids=stage_ctx.input_ids,
+            attention_mask=stage_ctx.attention_mask,
+            prefix_token_embeddings=batch_ctx.prefix_token_embeddings,
+            prefix_attention_mask=batch_ctx.prefix_attention_mask,
+        )
+        comp_ce = self._forward_comp_ce(batch_ctx, stage_ctx, ctx)  # [batch, seq_len] nats
+        valid_f = base_valid_mask.to(comp_ce.dtype)
+        delta_bits = (base_ce_nats - comp_ce) / math.log(2.0)
+        budget_bits = (delta_bits * valid_f).sum(dim=1).clamp_min(1e-3)  # [batch] IG at stage start
+        vcount = valid_f.sum(dim=1).clamp_min(1.0)
+        water_level_bits = budget_bits / vcount
+        dual_lambda = torch.zeros(batch_ctx.batch_size, device=base_ce_nats.device, dtype=torch.float32)
+        return {
+            "base_ce_nats": base_ce_nats,
+            "base_valid_mask": base_valid_mask,
+            "budget_bits": budget_bits,
+            "water_level_bits": water_level_bits,
+            "dual_lambda": dual_lambda,
+        }
+
+    @torch.no_grad()
+    def _forward_comp_ce(self, batch_ctx: _BatchContext, stage_ctx: _StageContext, ctx: _RunContext) -> torch.Tensor:
+        """Per-token H_comp (nats) of the current live embedding, aligned to the continuation labels."""
+        embedding = batch_ctx.parametrization.materialize().clone()
+        united_token_embeddings, united_attention_mask = build_united_input(
+            embedding,
+            batch_ctx.compression_attention_mask,
+            stage_ctx.inputs_embeds,
+            stage_ctx.attention_mask,
+            prefix_token_embeddings=batch_ctx.prefix_token_embeddings,
+            prefix_attention_mask=batch_ctx.prefix_attention_mask,
+        )
+        logits = ctx.decode_model(inputs_embeds=united_token_embeddings, attention_mask=united_attention_mask).logits
+        offset = ctx.num_compression_tokens + batch_ctx.prefix_len
+        pred_logits = logits[:, offset - 1 : -1]
+        return F.cross_entropy(
+            pred_logits.reshape(-1, pred_logits.size(-1)),
+            stage_ctx.input_ids.reshape(-1),
+            reduction="none",
+        ).view_as(stage_ctx.input_ids)
+
+    def _update_and_log_budget(self, budget_ctx: dict) -> None:
+        """Dual ascent on the per-sample multiplier (dual mode) + TensorBoard fungibility diagnostics.
+
+        Reads ``self._last_budget_diagnostics`` (set by the just-completed budget-rebalancing
+        forward). ``lambda <- relu(lambda + dual_lr * (bits - B))`` tightens the budget constraint;
+        the logged margin-variance / min-margin / delta-bits inequality are the pre-registered
+        probe for whether the budget actually moved across tokens.
+        """
+        diag = self._last_budget_diagnostics
+        if diag is None:
+            return
+        if self._budget_rebalance_mode == "dual":
+            violation = diag["budget_violation"].to(budget_ctx["dual_lambda"].device)
+            dual_lr = float(getattr(self.args, "budget_rebalance_dual_lr", 0.05))
+            budget_ctx["dual_lambda"] = (budget_ctx["dual_lambda"] + dual_lr * violation).clamp_min(0.0)
+        if self.writer is None:
+            return
+        step = self.global_step
+        self.writer.add_scalar("budget/total_bits", diag["total_bits"].mean().item(), step)
+        self.writer.add_scalar("budget/margin_var", diag["margin_var"].mean().item(), step)
+        self.writer.add_scalar(
+            "budget/min_margin", torch.nan_to_num(diag["min_margin"], posinf=0.0, neginf=0.0).mean().item(), step
+        )
+        self.writer.add_scalar("budget/delta_bits_max", diag["delta_bits_max"].mean().item(), step)
+        self.writer.add_scalar("budget/delta_bits_cov", diag["delta_bits_cov"].mean().item(), step)
+        self.writer.add_scalar("budget/soft_count", diag["soft_count"].mean().item(), step)
+        if self._budget_rebalance_mode == "dual":
+            self.writer.add_scalar("budget/dual_lambda", budget_ctx["dual_lambda"].mean().item(), step)
 
     def _reset_per_sample_optimizers(
         self, batch_ctx: _BatchContext, ctx: _RunContext, state: ProgressiveSampleStateMachine, max_steps: int
@@ -858,6 +968,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         state: ProgressiveSampleStateMachine,
         retry: bool,
         max_steps: int,
+        budget_ctx: dict | None = None,
     ):
         """Inner step loop within a stage. Returns (last_loss, last_convergence, converged_bool)."""
         progress_bar = tqdm(
@@ -898,6 +1009,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
                 ctx.num_compression_tokens,
                 target_hidden_states=stage_ctx.target_hidden_states,
                 prefix_len=batch_ctx.prefix_len,
+                budget_ctx=budget_ctx,
             )
             last_loss = float(loss.item())
             last_convergence = convergence_per_sample.detach().cpu()
@@ -930,6 +1042,9 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             self._step_per_sample_optimizers(batch_ctx, state)
             self._step_shared_optimizer(batch_ctx)
 
+            if budget_ctx is not None:
+                self._update_and_log_budget(budget_ctx)
+
             # Hard cap on cumulative per-sample steps across stages within this batch.
             # An exhausted sample is permanently skipped; if that drains the batch,
             # exit the stage as "converged" so the outer retry path doesn't fire
@@ -937,17 +1052,19 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             # just stepped, so re-measure the live embedding to keep the returned metrics
             # consistent with the embedding ``_collect_stage_rows`` will save.
             if state.mark_exhausted(self.args.max_optimization_steps_per_sample):
-                last_loss, last_convergence = self._measure_live(batch_ctx, stage_ctx, ctx)
+                last_loss, last_convergence = self._measure_live(batch_ctx, stage_ctx, ctx, budget_ctx)
                 return last_loss, last_convergence, True
 
         # Max steps for this stage reached without all samples converging. The optimizer
         # stepped on the final iteration, so re-measure the live (post-step) embedding to
         # keep the returned metrics consistent with what ``_collect_stage_rows`` saves.
-        last_loss, last_convergence = self._measure_live(batch_ctx, stage_ctx, ctx)
+        last_loss, last_convergence = self._measure_live(batch_ctx, stage_ctx, ctx, budget_ctx)
         return last_loss, last_convergence, False
 
     @torch.no_grad()
-    def _measure_live(self, batch_ctx: "_BatchContext", stage_ctx: "_StageContext", ctx: "_RunContext"):
+    def _measure_live(
+        self, batch_ctx: "_BatchContext", stage_ctx: "_StageContext", ctx: "_RunContext", budget_ctx: dict | None = None
+    ):
         """Forward the current live embedding; return ``(loss, convergence_per_sample_cpu)``.
 
         Used only on non-converged stage exits (per-sample budget exhausted, or max steps
@@ -975,6 +1092,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             ctx.num_compression_tokens,
             target_hidden_states=stage_ctx.target_hidden_states,
             prefix_len=batch_ctx.prefix_len,
+            budget_ctx=budget_ctx,
         )
         return float(loss.item()), convergence_per_sample.detach().cpu()
 
@@ -1174,6 +1292,7 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             "num_compression_tokens": int(ctx.num_compression_tokens),
             "hidden_size": int(comp_tokens_cpu.shape[-1]),
             "loss_type": self.args.loss_type,
+            "budget_rebalance_mode": str(getattr(self.args, "budget_rebalance_mode", "none") or "none"),
             "dtype": self.args.dtype,
             "model_checkpoint": self.args.model_checkpoint,
             "max_optimization_steps_per_sample": int(self.args.max_optimization_steps_per_sample),
