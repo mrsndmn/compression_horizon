@@ -565,7 +565,7 @@ The fragility can be removed at training time by requiring a logit \emph{margin}
 \caption{Greedy autoregressive reconstruction accuracy (\%) of progressive-cramming embeddings trained with a convergence margin $\epsilon$, over $50$ PG19 samples; the mean number of compressed tokens is shown in parentheses. ``CE'' is the plain margin criterion and ``+LM'' additionally reweights the cross-entropy toward margin-deficient tokens. The zero-margin ($\epsilon{=}0$) baselines reconstruct at only $\sim\!68$--$70\%$ (Pythia-1.4B $70.5$, Llama-3.1-8B $68.5$) despite $100\%$ teacher forcing. A larger $\epsilon$ trades crammed tokens for decode robustness.}
 \label{tab:progressive_margin_greedy}
 \begin{small}
-\input{tables/manual/progressive_margin_greedy}
+\input{tables/progressive_margin_greedy}
 \end{small}
 \vskip -0.1in
 \end{table*}
