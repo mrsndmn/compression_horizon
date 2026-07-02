@@ -37,3 +37,25 @@ The published reproducibility repository (FusionBrainLab/progressive_cramming). 
 the renamed `progressive_cramming` package, README, LICENSE, and the existing
 presentation deck. Distinct from the internal `compression_horizon` research repo.
 _Avoid:_ "compression_horizon" when referring to the public artifact.
+
+## Convergence Margin (ε)
+The logit gap a token must clear to count as converged: a position matches only when
+`logit[true] − max_{j≠true} logit[j] ≥ ε`. ε = 0 is legacy bare-argmax convergence; ε > 0
+yields decode-robust reconstruction (survives kernel / forward-shape perturbations) at the
+cost of fewer crammed tokens. The knob of the robustness-versus-compression trade-off.
+_Avoid:_ "confidence threshold", "loss margin" (that names the CE-reweighting knob, not the
+convergence criterion).
+
+## Information-Gain Budget
+The total bits a memory embedding saves on its span, `Σ_token Δsurprisal`, treated as a
+roughly fixed per-model resource that is distributed across the crammed tokens. The premise
+that standard cramming spends this budget unevenly (huge margins on easy tokens, near-zero on
+others) motivates rebalancing it.
+_Avoid:_ "capacity" (broader), "compression budget".
+
+## Budget-Rebalancing Loss
+A training objective that redistributes the Information-Gain Budget across tokens — reclaiming
+budget from over-margined (easy) tokens — so that a larger number of tokens clear the
+Convergence Margin, extending the crammable span at fixed budget. Distinct from the existing
+margin-deficit CE reweighting (+LM), which only raises the floor and never reclaims over-margin.
+_Avoid:_ "margin-weighted loss" / "+LM" (that is the floor-raising baseline, not a rebalancer).

@@ -240,6 +240,37 @@ MARGIN_EXPERIMENTS = [
     for with_loss_margin in (False, True)
 ]
 
+# --- Information-gain budget rebalancing (Pythia-1.4B deep dive) ------------------------
+# Single-model deep dive: does a budget-rebalancing loss fit MORE tokens at a FIXED convergence
+# margin epsilon than plain-CE / +LM? Both new arms redistribute the (roughly constant) IG budget
+# by reclaiming bits from over-margined tokens: 'cap' (C) adds a reclaim term on top of the +LM
+# floor; 'dual' (D) water-fills under a total-bits budget via a per-sample dual variable. Baselines
+# at the same epsilon are the existing Pythia MARGIN_EXPERIMENTS rows (plain-CE = _cm_, +LM = _lm_).
+# 2 base (baseline + low-dim 256) x len(CONVERGENCE_MARGINS) x 2 modes = 12 runs for eps in {0.5,1.0,2.0}.
+BUDGET_REBALANCE_BASE = [
+    ("EleutherAI/pythia-1.4b", 0.5, None),
+    ("EleutherAI/pythia-1.4b", 0.5, 256),
+]
+BUDGET_REBALANCE_MODES = ["cap", "dual"]
+
+BUDGET_REBALANCE_EXPERIMENTS = [
+    {
+        "model_checkpoint": model_checkpoint,
+        "learning_rate": learning_rate,
+        "loss_type": "cross_entropy",
+        "num_alignment_layers": 1,
+        "hybrid_alpha": None,
+        "low_dim_projection": low_dim_size is not None,
+        "low_dim_size": low_dim_size,
+        # convergence_margin is epsilon (the fixed bar); the rebalancing loss reads it as its target.
+        "convergence_margin": convergence_margin,
+        "budget_rebalance_mode": mode,
+    }
+    for (model_checkpoint, learning_rate, low_dim_size) in BUDGET_REBALANCE_BASE
+    for convergence_margin in CONVERGENCE_MARGINS
+    for mode in BUDGET_REBALANCE_MODES
+]
+
 EXPERIMENTS = [
     *LLAMA_31_8B_EXPERIMENTS,
     *PYTHIA_14B_EXPERIMENTS,
@@ -247,6 +278,7 @@ EXPERIMENTS = [
     *GEMMA_3_4B_EXPERIMENTS,
     *QWEN3_EXPERIMENTS,
     *MARGIN_EXPERIMENTS,
+    *BUDGET_REBALANCE_EXPERIMENTS,
 ]
 
 
@@ -326,6 +358,18 @@ def render_job(experiment):
     if loss_margin is not None:
         cmd_args.append(f"--loss_margin {loss_margin}")
         exp_suffix = f"{exp_suffix}_lm_{loss_margin}"
+
+    # Information-gain budget rebalancing (Pythia deep dive). ``.get`` keeps every existing
+    # experiment byte-identical (no key => no flag, no suffix). 'cap'/'dual' redistribute the IG
+    # budget so more tokens clear the convergence_margin above; see train/{arguments,loss}.py.
+    budget_rebalance_mode = experiment.get("budget_rebalance_mode")
+    if budget_rebalance_mode and budget_rebalance_mode != "none":
+        cmd_args.append(f"--budget_rebalance_mode {budget_rebalance_mode}")
+        exp_suffix = f"{exp_suffix}_brl_{budget_rebalance_mode}"
+        budget_rebalance_weight = experiment.get("budget_rebalance_weight")
+        if budget_rebalance_weight is not None:
+            cmd_args.append(f"--budget_rebalance_weight {budget_rebalance_weight}")
+            exp_suffix = f"{exp_suffix}_w_{budget_rebalance_weight}"
 
     # Fixed uncompressed prefix (progressive cramming). ``.get`` keeps every existing experiment
     # byte-identical (no key => no flag, no suffix); set it to enable the prefix-length ablation.

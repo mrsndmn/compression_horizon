@@ -387,6 +387,52 @@ class MyTrainingArguments(TrainingArguments):
         },
     )
 
+    # --- Information-gain budget rebalancing ----------------------------
+    budget_rebalance_mode: str = field(
+        default="none",
+        metadata={
+            "help": (
+                "Redistribute the (roughly constant) information-gain budget across tokens so more of "
+                "them clear the convergence margin at fixed epsilon. 'none' = disabled (plain CE / +LM). "
+                "'cap' (C) = margin-deficit CE floor (push deficient tokens to epsilon) PLUS a reclaim "
+                "term that pulls over-margined tokens' bits-saved down to an adaptive per-token water "
+                "level c = B/L (B = per-sample IG budget measured at stage start, L = scored tokens). "
+                "'dual' (D) = maximize a soft count of tokens past epsilon subject to a total-bits budget "
+                "Sum_i delta_bits_i <= B via a per-sample dual variable (dual ascent). Both act on true "
+                "bits-saved delta_bits_i = (H_base_i - H_comp_i)/ln2 with H_base cached per stage. Uses "
+                "convergence_margin as epsilon."
+            )
+        },
+    )
+    budget_rebalance_weight: float = field(
+        default=1.0,
+        metadata={
+            "help": (
+                "Weight of the reclaim term (cap mode) applied on top of the margin-deficit CE floor. "
+                "Larger => harder reclaim of over-budget tokens. Ignored when budget_rebalance_mode='none'."
+            )
+        },
+    )
+    budget_rebalance_dual_lr: float = field(
+        default=0.05,
+        metadata={
+            "help": (
+                "Dual-ascent step size for the per-sample Lagrange multiplier lambda that enforces the "
+                "total-bits budget in 'dual' mode: lambda <- relu(lambda + dual_lr * (bits - B)). "
+                "Only used when budget_rebalance_mode='dual'."
+            )
+        },
+    )
+    budget_rebalance_softcount_tau: float = field(
+        default=0.5,
+        metadata={
+            "help": (
+                "Temperature of the sigmoid soft count sigmoid((margin - epsilon)/tau) that D maximizes. "
+                "Smaller => sharper (closer to a hard count of tokens past epsilon). 'dual' mode only."
+            )
+        },
+    )
+
     # --- Precision ------------------------------------------------------
     dtype: str = field(
         default="bf16",
