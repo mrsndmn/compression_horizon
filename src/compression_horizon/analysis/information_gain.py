@@ -141,3 +141,62 @@ def compute_prefix_surprisal_bits_per_token(
         total_bits = _sequence_cross_entropy_bits(outputs.logits, sample_ids, sample_mask, align_offset=0)
         bits_per_token.append(total_bits / scored)
     return bits_per_token
+
+
+@torch.no_grad()
+def compute_per_token_base_surprisal_nats(
+    *,
+    model: nn.Module,
+    input_ids: torch.Tensor,  # [batch, sequence] -- the continuation (loss target)
+    attention_mask: torch.Tensor,  # [batch, sequence]
+    prefix_token_embeddings: torch.Tensor | None = None,  # [batch, prefix, hidden]
+    prefix_attention_mask: torch.Tensor | None = None,  # [batch, prefix]
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Per-token base-LM next-token surprisal (nats) for each continuation token, WITHOUT the mem token.
+
+    Returns ``(base_ce_nats, valid_mask)`` both ``[batch, sequence]`` and aligned 1:1 with the
+    continuation ``input_ids`` (position ``i`` holds the frozen LM's ``-log p(x_i | context)``).
+    This is ``H_base`` in the information-gain decomposition; it is **independent of the memory
+    embedding being optimized**, so a caller caches it once per progressive stage and reuses it
+    every optimization step to form ``delta_bits_i = (H_base_i - H_comp_i)/ln2`` for the
+    budget-rebalancing loss.
+
+    With a real prefix the model attends to it, so token 0 has context and every position is valid.
+    Without a prefix, token 0 has no predictor (nothing precedes it) — its entry is 0.0 and marked
+    invalid, matching how ``compute_information_gain`` scores only the well-defined continuation.
+    Padding positions (``attention_mask == 0``) are also marked invalid.
+    """
+    batch_size, seq_len = input_ids.shape
+    device = input_ids.device
+    base_ce = torch.zeros((batch_size, seq_len), dtype=torch.float32, device=device)
+    valid = attention_mask == 1
+
+    if prefix_token_embeddings is not None and prefix_token_embeddings.size(1) > 0:
+        prefix_len = prefix_token_embeddings.size(1)
+        cont_embeddings = model.get_input_embeddings()(input_ids).to(prefix_token_embeddings.dtype)
+        embeddings = torch.cat((prefix_token_embeddings, cont_embeddings), dim=1)
+        mask = torch.cat((prefix_attention_mask, attention_mask), dim=1)
+        logits = model(inputs_embeds=embeddings, attention_mask=mask).logits
+        # Positions prefix_len-1 .. prefix_len-1+L-1 predict continuation tokens 0 .. L-1.
+        pred_logits = logits[:, prefix_len - 1 : prefix_len - 1 + seq_len, :]
+        base_ce = F.cross_entropy(
+            pred_logits.reshape(-1, pred_logits.size(-1)).float(),
+            input_ids.reshape(-1),
+            reduction="none",
+        ).view(batch_size, seq_len)
+    else:
+        logits = model(input_ids=input_ids, attention_mask=attention_mask).logits
+        # Position i predicts token i+1; token 0 has no predictor -> stays 0.0 / invalid.
+        if seq_len > 1:
+            pred_logits = logits[:, :-1, :]  # predicts tokens 1 .. L-1
+            ce_shifted = F.cross_entropy(
+                pred_logits.reshape(-1, pred_logits.size(-1)).float(),
+                input_ids[:, 1:].reshape(-1),
+                reduction="none",
+            ).view(batch_size, seq_len - 1)
+            base_ce[:, 1:] = ce_shifted
+        valid = valid.clone()
+        valid[:, 0] = False
+
+    base_ce = base_ce.masked_fill(~valid, 0.0)
+    return base_ce, valid

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import math
+
 import torch
 import torch.nn.functional as F
+
+_LN2 = math.log(2.0)
 
 
 def get_alignment_layer_indices(total_layers: int, num_alignment_layers: int, inverted_alignment: bool) -> range:
@@ -323,3 +327,127 @@ def token_argmax_match_rate(
     matches = ((prediction_ids == input_ids[:, 1:]) & (attention_mask[:, 1:] == 1)).sum(dim=-1)
     ratio = matches / attention_mask[:, 1:].sum(dim=-1).clamp_min(1)
     return ratio
+
+
+def _per_token_margin(pred_logits: torch.Tensor, input_ids: torch.Tensor) -> torch.Tensor:
+    """Per-token logit margin ``logit[true] - max_{j != true} logit[j]`` (>= 0 iff argmax is true).
+
+    ``pred_logits`` is the prediction window ``[batch, sequence, vocab]`` already aligned to
+    ``input_ids`` (position i predicts ``input_ids[:, i]``).
+    """
+    true_logit = pred_logits.gather(-1, input_ids.unsqueeze(-1)).squeeze(-1)  # [batch, sequence]
+    top2 = pred_logits.topk(2, dim=-1).values  # [batch, sequence, 2]
+    is_true_top1 = pred_logits.argmax(dim=-1) == input_ids
+    runner_up = torch.where(is_true_top1, top2[..., 1], top2[..., 0])
+    return true_logit - runner_up
+
+
+def budget_rebalance_loss_with_prefix(
+    logits: torch.Tensor,  # [batch, compression + prefix + sequence, vocab]
+    input_ids: torch.Tensor,  # [batch, sequence] (continuation, loss target)
+    attention_mask: torch.Tensor,  # [batch, sequence]
+    num_compression_tokens: int,
+    *,
+    base_ce_nats: torch.Tensor,  # [batch, sequence] cached H_base (nats), stage-constant
+    base_valid_mask: torch.Tensor,  # [batch, sequence] bool: positions with defined base surprisal
+    prefix_len: int = 0,
+    mode: str = "cap",
+    epsilon: float = 1.0,
+    reclaim_weight: float = 1.0,
+    water_level_bits: torch.Tensor | None = None,  # [batch] per-sample cap c = B / L (cap mode)
+    budget_bits: torch.Tensor | None = None,  # [batch] per-sample IG budget B (dual mode, + logging)
+    dual_lambda: torch.Tensor | None = None,  # [batch] per-sample Lagrange multiplier >= 0 (dual mode)
+    softcount_tau: float = 0.5,
+) -> tuple[torch.Tensor, dict]:
+    """Information-gain budget-rebalancing loss (paper Appendix, "budget rebalancing").
+
+    Redistributes the (roughly constant) per-sample information-gain budget so that MORE tokens
+    clear the fixed convergence margin ``epsilon``. Works on true per-token bits-saved
+    ``delta_bits_i = (H_base_i - H_comp_i) / ln2`` where ``H_comp_i`` is the per-token CE under the
+    memory embedding (differentiable) and ``H_base_i`` is the frozen-LM surprisal without it
+    (``base_ce_nats``, cached per stage since it does not depend on the embedding).
+
+    ``mode='cap'`` (C): a margin-deficit CE *floor* (identical mechanism to ``loss_margin``/+LM)
+    pushes tokens with ``margin < epsilon`` up, PLUS a *reclaim* term that pulls tokens with
+    ``margin > epsilon`` whose bits-saved exceed the adaptive water level ``water_level_bits`` back
+    down (``relu(delta_bits - c)``). The reclaim mask (``margin > epsilon``, detached) guarantees a
+    deficient token is never pushed further below the floor.
+
+    ``mode='dual'`` (D): maximize a soft count ``sigmoid((margin - epsilon)/tau)`` of tokens past
+    epsilon subject to a total-bits budget ``sum_i delta_bits_i <= budget_bits`` via the per-sample
+    Lagrangian ``-soft_count + lambda * (bits - B)`` (``lambda`` detached; the caller runs dual
+    ascent on the returned ``budget_violation``). KKT optimum is water-filling.
+
+    Returns ``(loss, diagnostics)``; ``diagnostics`` holds detached per-sample ``[batch]`` tensors
+    (``budget_violation``, ``total_bits``, ``min_margin``, ``margin_var``, ``delta_bits_max``,
+    ``delta_bits_cov``, ``soft_count``) for dual updates and the fungibility diagnostic.
+    """
+    if mode not in ("cap", "dual"):
+        raise ValueError(f"budget_rebalance mode must be 'cap' or 'dual', got {mode!r}!")
+    if num_compression_tokens < 1:
+        raise ValueError(f"num_compression_tokens must be >= 1, got {num_compression_tokens}!")
+
+    batch_size, seq_len = input_ids.shape
+    offset = num_compression_tokens + prefix_len
+    pred_logits = logits[:, offset - 1 : -1]  # [batch, sequence, vocab]
+    vocab = pred_logits.size(-1)
+
+    valid = (attention_mask == 1) & base_valid_mask.bool()  # [batch, sequence]
+    valid_f = valid.to(pred_logits.dtype)
+
+    comp_ce = F.cross_entropy(
+        pred_logits.reshape(-1, vocab),
+        input_ids.reshape(-1),
+        reduction="none",
+    ).view(
+        batch_size, seq_len
+    )  # per-token H_comp (nats), differentiable
+    margin = _per_token_margin(pred_logits, input_ids)  # [batch, sequence]
+    delta_bits = (base_ce_nats - comp_ce) / _LN2  # [batch, sequence]
+
+    with torch.no_grad():
+        vcount = valid_f.sum(dim=1).clamp_min(1.0)  # [batch]
+        m_mean = (margin * valid_f).sum(dim=1) / vcount
+        margin_var = (((margin - m_mean.unsqueeze(1)) ** 2) * valid_f).sum(dim=1) / vcount
+        min_margin = margin.masked_fill(~valid, float("inf")).amin(dim=1)
+        total_bits = (delta_bits * valid_f).sum(dim=1)  # [batch]
+        pos_delta = delta_bits.clamp_min(0.0) * valid_f
+        delta_max = pos_delta.amax(dim=1)  # [batch]
+        d_mean = pos_delta.sum(dim=1) / vcount
+        d_std = (((pos_delta - d_mean.unsqueeze(1)) ** 2) * valid_f).sum(dim=1).div(vcount).sqrt()
+        delta_cov = d_std / d_mean.clamp_min(1e-6)  # coefficient of variation (inequality proxy)
+
+    if mode == "cap":
+        if water_level_bits is None:
+            raise ValueError("water_level_bits is required for budget_rebalance mode='cap'!")
+        with torch.no_grad():
+            deficit_w = (epsilon - margin).clamp_min(0.0).masked_fill(~valid, 0.0)  # +LM floor weights
+            reclaim_mask = (valid & (margin > epsilon)).to(pred_logits.dtype)
+        floor = (comp_ce * deficit_w).sum() / deficit_w.sum().clamp_min(1e-6)
+        c = water_level_bits.to(delta_bits.dtype).view(batch_size, 1)  # [batch, 1]
+        excess = (delta_bits - c).clamp_min(0.0) * reclaim_mask  # differentiable through comp_ce
+        reclaim = excess.sum() / reclaim_mask.sum().clamp_min(1.0)
+        loss = floor + reclaim_weight * reclaim
+        soft_count = (margin > epsilon).to(pred_logits.dtype).mul(valid_f).sum(dim=1)
+        budget_violation = (total_bits - budget_bits) if budget_bits is not None else total_bits
+    else:  # dual
+        if budget_bits is None or dual_lambda is None:
+            raise ValueError("budget_bits and dual_lambda are required for budget_rebalance mode='dual'!")
+        soft = torch.sigmoid((margin - epsilon) / softcount_tau) * valid_f  # [batch, sequence]
+        soft_count = soft.sum(dim=1)  # [batch], differentiable
+        bits_per_sample = (delta_bits * valid_f).sum(dim=1)  # [batch], differentiable
+        violation = bits_per_sample - budget_bits.to(bits_per_sample.dtype)  # [batch]
+        lam = dual_lambda.to(bits_per_sample.dtype).clamp_min(0.0)  # detached (input is a buffer)
+        loss = (-soft_count + lam * violation).mean()
+        budget_violation = violation.detach()
+
+    diagnostics = {
+        "budget_violation": budget_violation.detach(),  # [batch]
+        "total_bits": total_bits,  # [batch]
+        "min_margin": min_margin,  # [batch]
+        "margin_var": margin_var,  # [batch]
+        "delta_bits_max": delta_max,  # [batch]
+        "delta_bits_cov": delta_cov,  # [batch]
+        "soft_count": soft_count.detach(),  # [batch]
+    }
+    return loss, diagnostics

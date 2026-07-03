@@ -48,6 +48,49 @@ def test_progressive_cramming_trainer_smoke():
     assert out is None or isinstance(out, str)
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+@pytest.mark.parametrize("mode", ["cap", "dual"])
+def test_progressive_cramming_budget_rebalance_smoke(mode):
+    """Run train() with budget rebalancing on (cap/dual): exercises H_base caching + budget_ctx + dual."""
+    model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM2-135M", torch_dtype=torch.bfloat16)
+    model.to("cuda")
+    tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M")
+
+    args = _make_args(
+        progressive_train=True,
+        progressive_min_seq_len=2,
+        progressive_step=1,
+        progressive_max_stages=2,
+        max_optimization_steps_per_sample=2,
+        max_optimization_steps_per_token=2,
+        number_of_mem_tokens=1,
+        logging_dir=None,
+        convergence_margin=1.0,  # epsilon the rebalancer targets (required > 0)
+        budget_rebalance_mode=mode,
+        budget_rebalance_weight=1.0,
+    )
+    dataset = TinyDataset(num_samples=2, seq_len=8, vocab_size=16)
+
+    trainer = ProgressiveCrammingTrainer(
+        model=model,
+        processing_class=tokenizer,
+        args=args,
+        train_dataset=dataset,
+        eval_dataset=None,
+        data_collator=_collate_batch,
+    )
+    out = trainer.train()
+    assert out is None or isinstance(out, str)
+
+
+def test_budget_rebalance_requires_positive_margin():
+    """_prepare_budget_context raises if convergence_margin <= 0 (epsilon is undefined)."""
+    args = _make_args(budget_rebalance_mode="cap", convergence_margin=0.0)
+    trainer = _blank_trainer(args)
+    with pytest.raises(ValueError, match="convergence_margin"):
+        trainer._prepare_budget_context(SimpleNamespace(), SimpleNamespace(), SimpleNamespace())
+
+
 def _blank_trainer(args):
     """A ProgressiveCrammingTrainer without running __init__ (we only exercise pure methods)."""
     trainer = ProgressiveCrammingTrainer.__new__(ProgressiveCrammingTrainer)
