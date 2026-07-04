@@ -37,3 +37,7 @@ _To be filled after analysis._
   (plus fixed-ε baseline) implemented and tested. Design and rationale in the deep-interview spec
   (`run/deep-interview/deep-interview-budget-rebalancing-loss.md`) and ADRs 0004/0005.
 - 2026-07-05: Reformatted plan to the standard high-level template.
+- 2026-07-05: Launched the 12 Pythia-1.4B budget-rebalance jobs (2 base × 3 ε × {cap, dual}); the
+  fixed-ε CE / +LM baselines already exist on disk. Added `scripts/aggregate_budget_rebalancing.py`
+  (arms in rows, metrics in columns) and `scripts/watch_budget_rebalancing.py`. Results/Conclusions
+  to be filled once the jobs finish and aggregate.
