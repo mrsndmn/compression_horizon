@@ -47,7 +47,14 @@ MODEL_CONFIGS = [
         "low_dim_size": 256,
         "hybrid_num_alignment_layers": 4,
         "hybrid_lowdim_num_alignment_layers": 8,
-        "per_device_train_batch_size": 10,
+        # Progressive cramming grows the effective seq_len by 1 per converged stage up to
+        # max_sequence_length (4096); peak activation memory scales with batch x seq_len.
+        # At batch_size=10 the 8B model OOMs on a single 80GB A100 around L~1000 (< 1/4 of
+        # the way to 4096) -- confirmed by the absence of any completed Llama-8B _batch_10
+        # run and a CUDA OOM at L=1001. batch_size=2 keeps peak memory ~60GB at L=4096
+        # (calibrated from the OOM point) with comfortable margin; batch_size>=3 is borderline.
+        # The 1.x-4B models (Pythia/SmolLM2/Gemma) fit at their larger batches (completed runs exist).
+        "per_device_train_batch_size": 2,
     },
     {
         "checkpoint": "EleutherAI/pythia-1.4b",
@@ -384,6 +391,11 @@ if __name__ == "__main__":
             "env_variables": {
                 "PYTHONPATH": "./src",
                 "HF_HOME": "/workspace-SR004.nfs2/.cache/huggingface",
+                # Progressive cramming reallocates growing activation buffers every stage as
+                # seq_len increases, which fragments the CUDA caching allocator (the Llama-8B
+                # OOM had ~3GB reserved-but-unallocated). expandable_segments reclaims that
+                # fragmentation; it is the mitigation torch itself recommends for this error.
+                "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
             },
             "instance_type": cfg["instance_type"],
             "region": extra_options["region"],
