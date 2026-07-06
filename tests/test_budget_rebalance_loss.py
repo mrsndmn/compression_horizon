@@ -103,6 +103,73 @@ def test_cap_reclaim_disabled_when_below_water_level():
     assert logits.grad[0, 1, 0].item() < 0.0
 
 
+def test_cap_floor_trains_when_base_mask_empty():
+    """Regression: a single-token / no-prefix stage has an all-False base mask.
+
+    The margin-deficit CE floor depends only on the model's own logits, so it must still push a
+    deficient token up even when NO token has a defined base surprisal. Previously the whole loss
+    was gated on ``base_valid_mask`` and collapsed to an identically-zero (grad-free) loss, which
+    stalled progressive cramming at stage 0 (crammed 0 tokens, convergence 0).
+    """
+    # One sample, a single deficient continuation token (margin 0.2 < epsilon), no defined base bits.
+    logits = torch.zeros(1, 2, 4)
+    logits[0, 0, 0] = 0.2  # token 0 true logit -> margin 0.2
+    logits = logits.clone().requires_grad_(True)
+    input_ids = torch.zeros(1, 1, dtype=torch.long)
+    attention_mask = torch.ones(1, 1, dtype=torch.long)
+    base_ce_nats = torch.zeros(1, 1)  # undefined -> 0.0
+    base_valid_mask = torch.zeros(1, 1, dtype=torch.bool)  # ENTIRELY invalid (no base surprisal)
+
+    loss, diag = budget_rebalance_loss_with_prefix(
+        logits,
+        input_ids,
+        attention_mask,
+        num_compression_tokens=1,
+        base_ce_nats=base_ce_nats,
+        base_valid_mask=base_valid_mask,
+        mode="cap",
+        epsilon=1.0,
+        reclaim_weight=1.0,
+        water_level_bits=torch.tensor([1.0]),
+        budget_bits=torch.tensor([1.0]),
+    )
+    assert torch.isfinite(loss)
+    assert loss.item() > 0.0  # floor is active despite the empty base mask (was identically 0.0)
+    loss.backward()
+    # The deficient token gets an upward push (negative grad on its true logit) -> it will converge.
+    assert logits.grad[0, 0, 0].item() < 0.0
+    # No token has defined base bits, so the reclaim/budget side is empty.
+    assert diag["total_bits"].item() == 0.0
+
+
+def test_dual_soft_count_trains_when_base_mask_empty():
+    """Dual mode's soft count is over the model's logits, so it must be non-zero with an empty base mask."""
+    logits = torch.zeros(1, 2, 4)
+    logits[0, 0, 0] = 3.0  # a token already well past epsilon -> soft count ~1
+    logits = logits.clone().requires_grad_(True)
+    input_ids = torch.zeros(1, 1, dtype=torch.long)
+    attention_mask = torch.ones(1, 1, dtype=torch.long)
+    base_ce_nats = torch.zeros(1, 1)
+    base_valid_mask = torch.zeros(1, 1, dtype=torch.bool)
+
+    loss, diag = budget_rebalance_loss_with_prefix(
+        logits,
+        input_ids,
+        attention_mask,
+        num_compression_tokens=1,
+        base_ce_nats=base_ce_nats,
+        base_valid_mask=base_valid_mask,
+        mode="dual",
+        epsilon=1.0,
+        budget_bits=torch.tensor([1.0]),
+        dual_lambda=torch.tensor([0.0]),
+        softcount_tau=0.5,
+    )
+    assert torch.isfinite(loss)
+    loss.backward()  # differentiable soft count over the real token
+    assert diag["soft_count"].item() > 0.5  # the past-epsilon token is counted despite empty base mask
+
+
 def test_dual_mode_runs_and_reports_violation():
     """Dual mode returns a finite loss and a budget violation equal to total_bits - budget."""
     logits, input_ids, attention_mask = _build_synthetic_logits()

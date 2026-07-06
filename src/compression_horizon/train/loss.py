@@ -373,6 +373,13 @@ def budget_rebalance_loss_with_prefix(
     down (``relu(delta_bits - c)``). The reclaim mask (``margin > epsilon``, detached) guarantees a
     deficient token is never pushed further below the floor.
 
+    The floor (and the dual soft count) depend only on the model's own logits, so they run over
+    every real (non-padding) token; the reclaim term and the bits budget consume ``delta_bits`` and
+    so are restricted to tokens with a defined base surprisal (``base_valid_mask``). This split
+    matters at a single-token / no-prefix stage, whose base mask is entirely False: the floor still
+    drives reconstruction there (base_valid_mask empty only zeroes reclaim), so progressive cramming
+    can leave stage 0.
+
     ``mode='dual'`` (D): maximize a soft count ``sigmoid((margin - epsilon)/tau)`` of tokens past
     epsilon subject to a total-bits budget ``sum_i delta_bits_i <= budget_bits`` via the per-sample
     Lagrangian ``-soft_count + lambda * (bits - B)`` (``lambda`` detached; the caller runs dual
@@ -392,8 +399,17 @@ def budget_rebalance_loss_with_prefix(
     pred_logits = logits[:, offset - 1 : -1]  # [batch, sequence, vocab]
     vocab = pred_logits.size(-1)
 
-    valid = (attention_mask == 1) & base_valid_mask.bool()  # [batch, sequence]
-    valid_f = valid.to(pred_logits.dtype)
+    # Two masks. The reconstruction terms (the margin-deficit CE floor and the soft count) depend
+    # only on the model's OWN logits, so they run over every real (non-padding) token -- including
+    # positions where the base LM has no defined surprisal (e.g. token 0 of a no-prefix stage). Only
+    # the reclaim term and the bits budget consume ``delta_bits``, so those use the stricter
+    # base-surprisal mask. Tying the floor to ``base_valid_mask`` was a bug: a single-token /
+    # no-prefix stage has an all-False base mask, which zeroed the entire loss (no gradient) and
+    # stalled progressive cramming at stage 0 forever.
+    pad_valid = attention_mask == 1  # [batch, sequence] real (non-padding) tokens
+    bits_valid = pad_valid & base_valid_mask.bool()  # tokens with defined base surprisal (delta_bits)
+    pad_valid_f = pad_valid.to(pred_logits.dtype)
+    bits_valid_f = bits_valid.to(pred_logits.dtype)
 
     comp_ce = F.cross_entropy(
         pred_logits.reshape(-1, vocab),
@@ -406,36 +422,37 @@ def budget_rebalance_loss_with_prefix(
     delta_bits = (base_ce_nats - comp_ce) / _LN2  # [batch, sequence]
 
     with torch.no_grad():
-        vcount = valid_f.sum(dim=1).clamp_min(1.0)  # [batch]
-        m_mean = (margin * valid_f).sum(dim=1) / vcount
-        margin_var = (((margin - m_mean.unsqueeze(1)) ** 2) * valid_f).sum(dim=1) / vcount
-        min_margin = margin.masked_fill(~valid, float("inf")).amin(dim=1)
-        total_bits = (delta_bits * valid_f).sum(dim=1)  # [batch]
-        pos_delta = delta_bits.clamp_min(0.0) * valid_f
+        pad_count = pad_valid_f.sum(dim=1).clamp_min(1.0)  # [batch] real tokens
+        bits_count = bits_valid_f.sum(dim=1).clamp_min(1.0)  # [batch] base-surprisal-defined tokens
+        m_mean = (margin * pad_valid_f).sum(dim=1) / pad_count
+        margin_var = (((margin - m_mean.unsqueeze(1)) ** 2) * pad_valid_f).sum(dim=1) / pad_count
+        min_margin = margin.masked_fill(~pad_valid, float("inf")).amin(dim=1)
+        total_bits = (delta_bits * bits_valid_f).sum(dim=1)  # [batch]
+        pos_delta = delta_bits.clamp_min(0.0) * bits_valid_f
         delta_max = pos_delta.amax(dim=1)  # [batch]
-        d_mean = pos_delta.sum(dim=1) / vcount
-        d_std = (((pos_delta - d_mean.unsqueeze(1)) ** 2) * valid_f).sum(dim=1).div(vcount).sqrt()
+        d_mean = pos_delta.sum(dim=1) / bits_count
+        d_std = (((pos_delta - d_mean.unsqueeze(1)) ** 2) * bits_valid_f).sum(dim=1).div(bits_count).sqrt()
         delta_cov = d_std / d_mean.clamp_min(1e-6)  # coefficient of variation (inequality proxy)
 
     if mode == "cap":
         if water_level_bits is None:
             raise ValueError("water_level_bits is required for budget_rebalance mode='cap'!")
         with torch.no_grad():
-            deficit_w = (epsilon - margin).clamp_min(0.0).masked_fill(~valid, 0.0)  # +LM floor weights
-            reclaim_mask = (valid & (margin > epsilon)).to(pred_logits.dtype)
+            deficit_w = (epsilon - margin).clamp_min(0.0).masked_fill(~pad_valid, 0.0)  # +LM floor weights
+            reclaim_mask = (bits_valid & (margin > epsilon)).to(pred_logits.dtype)
         floor = (comp_ce * deficit_w).sum() / deficit_w.sum().clamp_min(1e-6)
         c = water_level_bits.to(delta_bits.dtype).view(batch_size, 1)  # [batch, 1]
         excess = (delta_bits - c).clamp_min(0.0) * reclaim_mask  # differentiable through comp_ce
         reclaim = excess.sum() / reclaim_mask.sum().clamp_min(1.0)
         loss = floor + reclaim_weight * reclaim
-        soft_count = (margin > epsilon).to(pred_logits.dtype).mul(valid_f).sum(dim=1)
+        soft_count = (margin > epsilon).to(pred_logits.dtype).mul(pad_valid_f).sum(dim=1)
         budget_violation = (total_bits - budget_bits) if budget_bits is not None else total_bits
     else:  # dual
         if budget_bits is None or dual_lambda is None:
             raise ValueError("budget_bits and dual_lambda are required for budget_rebalance mode='dual'!")
-        soft = torch.sigmoid((margin - epsilon) / softcount_tau) * valid_f  # [batch, sequence]
+        soft = torch.sigmoid((margin - epsilon) / softcount_tau) * pad_valid_f  # [batch, sequence]
         soft_count = soft.sum(dim=1)  # [batch], differentiable
-        bits_per_sample = (delta_bits * valid_f).sum(dim=1)  # [batch], differentiable
+        bits_per_sample = (delta_bits * bits_valid_f).sum(dim=1)  # [batch], differentiable
         violation = bits_per_sample - budget_bits.to(bits_per_sample.dtype)  # [batch]
         lam = dual_lambda.to(bits_per_sample.dtype).clamp_min(0.0)  # detached (input is a buffer)
         loss = (-soft_count + lam * violation).mean()
