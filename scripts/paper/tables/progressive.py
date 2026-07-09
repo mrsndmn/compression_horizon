@@ -283,6 +283,37 @@ TABLES: List[TableSpec] = [
         ],
     ),
     TableSpec(
+        # Cross-entropy temperature ablation on the pythia-1.4b baseline-CE progressive config.
+        # Each temperature T is run under both gradient conventions -- raw (loss = CE(logits/T),
+        # gradient ~1/T) and t2 (Hinton, loss = T^2 * CE(logits/T), gradient magnitude held
+        # ~constant at fixed lr=0.5). T=1.0 is byte-identical for both arms, so it is a single
+        # "control" row. Convergence is argmax-based / temperature-invariant, so the story lives in
+        # Trajectory Length (steps) and any Compressed-Tokens change from runs that hit the per-token
+        # step cap. Dirs from scripts/jobs/run_jobs_progressive.py (CE_TEMPERATURE_EXPERIMENTS); see
+        # docs/adr/0004-ce-temperature-training-knob.md. NOTE: pending the 9 cluster runs -- kept out
+        # of paper/tables/tables.sh (and thus the paper build) until every dir lands, since
+        # render_table raises on a missing checkpoint and the paper lint forbids nan rows.
+        name="tab:progressive_temperature",
+        checkpoints=[
+            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5_temp_0.1/progressive_prefixes",
+            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5_temp_0.1_comp_t2/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5_temp_0.5/progressive_prefixes",
+            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5_temp_0.5_comp_t2/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5_temp_1.0/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5_temp_1.5/progressive_prefixes",
+            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5_temp_1.5_comp_t2/progressive_prefixes",
+            MIDRULE,
+            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5_temp_2.0/progressive_prefixes",
+            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5_temp_2.0_comp_t2/progressive_prefixes",
+        ],
+        # Positional row labels (comma-separated, no commas within a label). Order matches the
+        # checkpoints above; the shared T=1.0 run is the single "control" row.
+        names_mapping=("T=0.1 raw,T=0.1 t2," "T=0.5 raw,T=0.5 t2," "T=1.0 control," "T=1.5 raw,T=1.5 t2," "T=2.0 raw,T=2.0 t2"),
+    ),
+    TableSpec(
         name="tab:progressive_no_bos_token",
         checkpoints=[
             f"{_EXP}/sl_4096_Meta-Llama-3.1-8B_lr_0.1/progressive_prefixes",
