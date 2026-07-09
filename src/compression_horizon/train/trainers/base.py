@@ -101,6 +101,8 @@ class BaseTrainer:
             leading_token_loss_weight=self.args.leading_token_loss_weight,
             leading_token_loss_count=self.args.leading_token_loss_count,
             loss_margin=float(getattr(self.args, "loss_margin", 0.0) or 0.0),
+            ce_temperature=float(getattr(self.args, "ce_temperature", 1.0) or 1.0),
+            ce_temperature_compensation=str(getattr(self.args, "ce_temperature_compensation", "none") or "none"),
             prefix_len=prefix_len,
         )
         return loss, alignment_loss

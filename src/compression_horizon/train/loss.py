@@ -25,6 +25,8 @@ def next_token_cross_entropy_loss_with_prefix(
     leading_token_loss_weight: float = 1.0,
     leading_token_loss_count: int = 0,
     loss_margin: float = 0.0,
+    ce_temperature: float = 1.0,
+    ce_temperature_compensation: str = "none",
 ) -> torch.Tensor:
     """Next-token cross-entropy when logits include compression (and optional uncompressed prefix) tokens.
 
@@ -37,20 +39,37 @@ def next_token_cross_entropy_loss_with_prefix(
     ``clamp_min(0, loss_margin - (logit[true] - runner_up))`` (weights detached): tokens already
     past the margin contribute ~0 loss, deficient ones are up-weighted, so optimization focuses on
     the hard tokens. Takes precedence over the leading-token weighting. 0.0 = plain CE (unchanged).
+
+    ``ce_temperature`` (T) divides the logits by T before the CE softmax: T>1 softens the predicted
+    distribution the loss is measured against, T<1 sharpens it. ``ce_temperature_compensation``
+    selects the gradient convention: ``"none"`` (raw, gradient ~1/T) or ``"t2"`` (Hinton, loss
+    multiplied by T^2 so gradient magnitude stays ~constant). T=1.0 is byte-identical to plain CE.
+    Temperature reshapes only the softmax the CE is taken over; the argmax convergence check
+    (computed elsewhere) is invariant to it.
     """
     if num_compression_tokens < 1:
         raise ValueError(f"num_compression_tokens must be >= 1, got {num_compression_tokens}!")
     if prefix_len < 0:
         raise ValueError(f"prefix_len must be >= 0, got {prefix_len}!")
 
+    temperature = float(ce_temperature)
+    if temperature <= 0.0:
+        raise ValueError(f"ce_temperature must be > 0, got {temperature}!")
+    apply_temperature = temperature != 1.0
+    compensate_t2 = apply_temperature and str(ce_temperature_compensation).lower() in ("t2", "tsq", "hinton")
+
     labels = input_ids.clone()
     labels[attention_mask == 0] = -100
 
     offset = num_compression_tokens + prefix_len
+    pred_logits = logits[:, offset - 1 : -1]  # [batch, sequence, vocabulary] -- next-token logits
+    # Temperature scales only the logits entering the CE softmax; at T=1.0 the original tensor flows
+    # through unchanged (byte-identical). The argmax convergence check (elsewhere) is unaffected.
+    ce_logits = pred_logits / temperature if apply_temperature else pred_logits
+
     if loss_margin > 0.0:
-        pred_logits = logits[:, offset - 1 : -1]  # [batch, sequence, vocabulary]
         per_token_loss = F.cross_entropy(
-            pred_logits.flatten(0, 1),
+            ce_logits.flatten(0, 1),
             labels.flatten(),
             reduction="none",
             ignore_index=-100,
@@ -58,6 +77,8 @@ def next_token_cross_entropy_loss_with_prefix(
             labels
         )  # [batch, sequence]
         with torch.no_grad():
+            # Margin deficit is measured on the un-temperatured logits: it is a real logit-gap /
+            # decode-robustness quantity, not part of the softmax the temperature reshapes.
             true_logit = pred_logits.gather(-1, input_ids.unsqueeze(-1)).squeeze(-1)  # [batch, sequence]
             top2 = pred_logits.topk(2, dim=-1).values  # [batch, sequence, 2]
             is_true_top1 = pred_logits.argmax(dim=-1) == input_ids
@@ -67,16 +88,16 @@ def next_token_cross_entropy_loss_with_prefix(
         weights = weights.masked_fill(labels == -100, 0.0)
         # Mean over the deficient tokens keeps full-strength gradient on the hard ones; all-satisfied
         # -> numerator 0 -> loss 0 (the convergence signal).
-        return (per_token_loss * weights).sum() / weights.sum().clamp_min(1e-6)
-    if leading_token_loss_count <= 0 or leading_token_loss_weight == 1.0:
+        loss = (per_token_loss * weights).sum() / weights.sum().clamp_min(1e-6)
+    elif leading_token_loss_count <= 0 or leading_token_loss_weight == 1.0:
         loss = F.cross_entropy(
-            logits[:, offset - 1 : -1].flatten(0, 1),  # [batch * sequence, vocabulary]
+            ce_logits.flatten(0, 1),  # [batch * sequence, vocabulary]
             labels.flatten(),  # [batch * sequence]
             reduction=reduction,
         )
     else:
         per_token_loss = F.cross_entropy(
-            logits[:, offset - 1 : -1].flatten(0, 1),  # [batch * sequence, vocabulary]
+            ce_logits.flatten(0, 1),  # [batch * sequence, vocabulary]
             labels.flatten(),  # [batch * sequence]
             reduction="none",
             ignore_index=-100,
@@ -93,6 +114,10 @@ def next_token_cross_entropy_loss_with_prefix(
         else:
             num_valid = attention_mask.sum().to(per_token_loss.dtype).clamp_min(1.0)
             loss = weighted_sum / num_valid
+    # Hinton distillation convention: T^2 restores the gradient magnitude that raw logits/T scales
+    # down by ~1/T, isolating the distribution-shape effect at fixed learning rate. Raw omits it.
+    if compensate_t2:
+        loss = loss * (temperature * temperature)
     return loss
 
 
@@ -184,12 +209,16 @@ def compute_hybrid_cross_entropy_and_alignment_loss(
     leading_token_loss_count: int = 0,
     prefix_len: int = 0,
     loss_margin: float = 0.0,
+    ce_temperature: float = 1.0,
+    ce_temperature_compensation: str = "none",
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """Compute CE loss and optional activation alignment loss (hybrid).
 
     ``prefix_len`` skips the uncompressed prefix positions so both terms are computed only over the
     continuation (the tokens that follow the prefix). ``loss_margin`` enables per-token margin-aware
-    CE reweighting (see ``next_token_cross_entropy_loss_with_prefix``).
+    CE reweighting; ``ce_temperature``/``ce_temperature_compensation`` scale the CE softmax (see
+    ``next_token_cross_entropy_loss_with_prefix``). Temperature applies to the CE term only, not the
+    activation-alignment term.
     """
     ce_loss = next_token_cross_entropy_loss_with_prefix(
         logits,
@@ -201,6 +230,8 @@ def compute_hybrid_cross_entropy_and_alignment_loss(
         leading_token_loss_weight=leading_token_loss_weight,
         leading_token_loss_count=leading_token_loss_count,
         loss_margin=loss_margin,
+        ce_temperature=ce_temperature,
+        ce_temperature_compensation=ce_temperature_compensation,
     )
 
     loss_type = (loss_type or "").lower()

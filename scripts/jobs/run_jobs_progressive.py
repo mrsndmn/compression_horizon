@@ -240,6 +240,34 @@ MARGIN_EXPERIMENTS = [
     for with_loss_margin in (False, True)
 ]
 
+# --- Cross-entropy temperature sweep (pythia-1.4b baseline CE) ---------------------------
+# Ablate the CE temperature knob (src/compression_horizon/train/{arguments,loss}.py) on the
+# pythia-1.4b baseline-CE progressive config only -- temperature is the entire loss there, and
+# convergence stays argmax-based / temperature-invariant, so this measures the optimization path
+# (steps-to-converge, step-cap timeouts), not a different converged solution. Each temperature is
+# run under both gradient conventions: raw (loss = CE(logits/T), gradient ~1/T) and t2 (Hinton,
+# loss = T^2 * CE(logits/T), gradient magnitude held ~constant at fixed lr=0.5). T=1.0 is
+# byte-identical for both arms, so it collapses to a single control run.
+# See docs/adr/0004-ce-temperature-training-knob.md.
+CE_TEMPERATURES = [0.1, 0.5, 1.0, 1.5, 2.0]
+
+CE_TEMPERATURE_EXPERIMENTS = [
+    {
+        "model_checkpoint": "EleutherAI/pythia-1.4b",
+        "learning_rate": 0.5,
+        "loss_type": "cross_entropy",
+        "num_alignment_layers": 1,
+        "hybrid_alpha": None,
+        "low_dim_projection": False,
+        "low_dim_size": None,
+        "ce_temperature": ce_temperature,
+        "ce_temperature_compensation": ce_temperature_compensation,
+    }
+    for ce_temperature in CE_TEMPERATURES
+    # T=1.0 is identical for raw and t2 -> single control run (dedup).
+    for ce_temperature_compensation in (["none"] if ce_temperature == 1.0 else ["none", "t2"])
+]
+
 EXPERIMENTS = [
     *LLAMA_31_8B_EXPERIMENTS,
     *PYTHIA_14B_EXPERIMENTS,
@@ -247,6 +275,7 @@ EXPERIMENTS = [
     *GEMMA_3_4B_EXPERIMENTS,
     *QWEN3_EXPERIMENTS,
     *MARGIN_EXPERIMENTS,
+    *CE_TEMPERATURE_EXPERIMENTS,
 ]
 
 
@@ -326,6 +355,20 @@ def render_job(experiment):
     if loss_margin is not None:
         cmd_args.append(f"--loss_margin {loss_margin}")
         exp_suffix = f"{exp_suffix}_lm_{loss_margin}"
+
+    # Cross-entropy temperature (CE-only knob). ``.get`` keeps every existing experiment
+    # byte-identical (no key => no flag, no suffix). ce_temperature divides the logits by T before
+    # the CE softmax; ce_temperature_compensation selects raw (none) vs Hinton T^2. The compensation
+    # flag/suffix is emitted only for the t2 arm so the raw arm stays a clean ``_temp_{T}`` dir.
+    # See src/compression_horizon/train/{arguments,loss}.py and docs/adr/0004-ce-temperature-training-knob.md.
+    ce_temperature = experiment.get("ce_temperature")
+    if ce_temperature is not None:
+        cmd_args.append(f"--ce_temperature {ce_temperature}")
+        exp_suffix = f"{exp_suffix}_temp_{ce_temperature}"
+        ce_temperature_compensation = experiment.get("ce_temperature_compensation", "none")
+        if ce_temperature_compensation and str(ce_temperature_compensation).lower() != "none":
+            cmd_args.append(f"--ce_temperature_compensation {ce_temperature_compensation}")
+            exp_suffix = f"{exp_suffix}_comp_{ce_temperature_compensation}"
 
     # Fixed uncompressed prefix (progressive cramming). ``.get`` keeps every existing experiment
     # byte-identical (no key => no flag, no suffix); set it to enable the prefix-length ablation.
