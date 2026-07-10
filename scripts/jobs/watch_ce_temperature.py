@@ -75,19 +75,34 @@ def render_table() -> tuple[bool, str]:
 
 
 def register_in_tables_sh():
-    """Add the table label to tables.sh's progressive loop (idempotent)."""
+    """Ensure the table label is an ACTIVE entry in tables.sh (idempotent).
+
+    Handles the commented ``# tab:progressive_temperature`` placeholder that is committed while the
+    sweep runs: it uncomments that line rather than being fooled into a no-op by a substring match.
+    """
     if not os.path.isfile(TABLES_SH):
         return
-    text = open(TABLES_SH, encoding="utf-8").read()
-    if TABLE_NAME in text:
+    lines = open(TABLES_SH, encoding="utf-8").read().splitlines()
+    active = f"  {TABLE_NAME}"
+    if any(ln.strip() == TABLE_NAME for ln in lines):  # already active, uncommented
         return
-    # Append after the last existing progressive table label line, else at EOF marker.
-    anchor = "tab:progressive_no_bos_token"
-    if anchor in text:
-        text = text.replace(anchor, anchor + "\n  " + TABLE_NAME, 1)
-    else:
-        text = text.rstrip() + f"\n  {TABLE_NAME}\n"
-    open(TABLES_SH, "w", encoding="utf-8").write(text)
+    out, replaced = [], False
+    for ln in lines:
+        if not replaced and ln.strip().startswith("#") and TABLE_NAME in ln:
+            out.append(active)  # uncomment the placeholder
+            replaced = True
+        else:
+            out.append(ln)
+    if not replaced:
+        anchor = "tab:progressive_no_bos_token"
+        tmp, inserted = [], False
+        for ln in out:
+            tmp.append(ln)
+            if not inserted and anchor in ln and not ln.strip().startswith("#"):
+                tmp.append(active)
+                inserted = True
+        out = tmp if inserted else out + [active]
+    open(TABLES_SH, "w", encoding="utf-8").write("\n".join(out) + "\n")
 
 
 def lint_ok() -> bool:

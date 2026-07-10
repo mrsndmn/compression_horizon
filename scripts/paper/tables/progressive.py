@@ -77,6 +77,42 @@ class TableSpec:
 _EXP = "artifacts/experiments_progressive"
 
 
+# Cross-entropy temperature sweep rows for ``tab:progressive_temperature``. Mirrors
+# CE_TEMPERATURE_MODELS / CE_TEMPERATURES in scripts/jobs/run_jobs_progressive.py: two model
+# panels, each temperature run under raw + t2 (T=1.0 is the shared control). Built programmatically
+# so the 26 checkpoints and their row labels stay in sync with the launcher.
+_CE_TEMP_MODELS = [
+    # (dir_model_short, lr_suffix, row_label_prefix)
+    ("pythia-1.4b", "0.5", "P1.4b"),
+    ("Meta-Llama-3.1-8B", "0.1", "L8b"),
+]
+_CE_TEMPS = ["0.1", "0.25", "0.5", "0.75", "1.0", "1.5", "2.0"]
+
+
+def _build_ce_temperature_rows() -> Tuple[List[CheckpointEntry], List[str]]:
+    checkpoints: List[CheckpointEntry] = []
+    names: List[str] = []
+    for model_idx, (model_short, lr, prefix) in enumerate(_CE_TEMP_MODELS):
+        if model_idx > 0:
+            checkpoints.append(MIDRULE)
+        for temp_idx, temp in enumerate(_CE_TEMPS):
+            if temp_idx > 0:
+                checkpoints.append(MIDRULE)
+            base = f"{_EXP}/sl_4096_{model_short}_ds_pg19_1k_limit_50_lr_{lr}_temp_{temp}"
+            if temp == "1.0":
+                checkpoints.append(f"{base}/progressive_prefixes")
+                names.append(f"{prefix} T={temp} control")
+            else:
+                checkpoints.append(f"{base}/progressive_prefixes")
+                names.append(f"{prefix} T={temp} raw")
+                checkpoints.append(f"{base}_comp_t2/progressive_prefixes")
+                names.append(f"{prefix} T={temp} t2")
+    return checkpoints, names
+
+
+_CE_TEMP_CHECKPOINTS, _CE_TEMP_NAMES = _build_ce_temperature_rows()
+
+
 TABLES: List[TableSpec] = [
     TableSpec(
         name="tab:all_learning_rates",
@@ -283,35 +319,21 @@ TABLES: List[TableSpec] = [
         ],
     ),
     TableSpec(
-        # Cross-entropy temperature ablation on the pythia-1.4b baseline-CE progressive config.
-        # Each temperature T is run under both gradient conventions -- raw (loss = CE(logits/T),
-        # gradient ~1/T) and t2 (Hinton, loss = T^2 * CE(logits/T), gradient magnitude held
-        # ~constant at fixed lr=0.5). T=1.0 is byte-identical for both arms, so it is a single
-        # "control" row. Convergence is argmax-based / temperature-invariant, so the story lives in
-        # Trajectory Length (steps) and any Compressed-Tokens change from runs that hit the per-token
-        # step cap. Dirs from scripts/jobs/run_jobs_progressive.py (CE_TEMPERATURE_EXPERIMENTS); see
-        # docs/adr/0004-ce-temperature-training-knob.md. NOTE: pending the 9 cluster runs -- kept out
-        # of paper/tables/tables.sh (and thus the paper build) until every dir lands, since
-        # render_table raises on a missing checkpoint and the paper lint forbids nan rows.
+        # Cross-entropy temperature ablation on the baseline-CE progressive config, two model panels
+        # (pythia-1.4b lr=0.5, Llama-3.1-8B lr=0.1). Each temperature T is run under both gradient
+        # conventions -- raw (loss = CE(logits/T), gradient ~1/T) and t2 (Hinton, loss =
+        # T^2 * CE(logits/T), gradient magnitude held ~constant). T=1.0 is byte-identical for both
+        # arms, so it is a single "control" row per model. Convergence is argmax-based /
+        # temperature-invariant, so the story lives in Trajectory Length (steps) and any
+        # Compressed-Tokens change from runs that hit the per-token step cap. Checkpoints/labels are
+        # built by _build_ce_temperature_rows() to stay in sync with CE_TEMPERATURE_* in
+        # scripts/jobs/run_jobs_progressive.py; see docs/adr/0004-ce-temperature-training-knob.md.
+        # NOTE: render_table raises on a missing checkpoint and the paper lint forbids nan rows, so
+        # this stays out of paper/tables/tables.sh until every run dir lands (watch_ce_temperature.py
+        # renders + registers it once complete).
         name="tab:progressive_temperature",
-        checkpoints=[
-            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5_temp_0.1/progressive_prefixes",
-            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5_temp_0.1_comp_t2/progressive_prefixes",
-            MIDRULE,
-            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5_temp_0.5/progressive_prefixes",
-            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5_temp_0.5_comp_t2/progressive_prefixes",
-            MIDRULE,
-            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5_temp_1.0/progressive_prefixes",
-            MIDRULE,
-            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5_temp_1.5/progressive_prefixes",
-            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5_temp_1.5_comp_t2/progressive_prefixes",
-            MIDRULE,
-            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5_temp_2.0/progressive_prefixes",
-            f"{_EXP}/sl_4096_pythia-1.4b_ds_pg19_1k_limit_50_lr_0.5_temp_2.0_comp_t2/progressive_prefixes",
-        ],
-        # Positional row labels (comma-separated, no commas within a label). Order matches the
-        # checkpoints above; the shared T=1.0 run is the single "control" row.
-        names_mapping=("T=0.1 raw,T=0.1 t2," "T=0.5 raw,T=0.5 t2," "T=1.0 control," "T=1.5 raw,T=1.5 t2," "T=2.0 raw,T=2.0 t2"),
+        checkpoints=_CE_TEMP_CHECKPOINTS,
+        names_mapping=",".join(_CE_TEMP_NAMES),
     ),
     TableSpec(
         name="tab:progressive_no_bos_token",
