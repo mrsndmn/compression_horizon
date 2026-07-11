@@ -29,7 +29,7 @@ PROGRESSIVE_TABLES=(
   tab:full_activation_alignment_and_low_dim_projections
   tab:all_progressive_modifications
   tab:progressive_no_bos_token
-  # tab:progressive_temperature  # re-added by scripts/jobs/watch_ce_temperature.py once all 26 runs land
+  tab:progressive_temperature
   tab:layer_ablation
   tab:layer_ablation_schemes
   tab:init_ablation
