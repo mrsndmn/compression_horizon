@@ -199,6 +199,11 @@ $$\mathbf{e}^* = \arg\min_{\mathbf{e}} \; \Big[-\sum_{i=1}^{n} \log p_{\mathcal{
 
 ---
 
+<!-- TODO Благодарности -->
+И спасибо большое TODO благодарности
+
+---
+
 **Ссылки:**
 
 - 📄 Статья: *Progressive Cramming: Reliable Token Compression and What It Reveals* (ICML 2026)
