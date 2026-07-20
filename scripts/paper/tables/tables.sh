@@ -29,6 +29,7 @@ PROGRESSIVE_TABLES=(
   tab:full_activation_alignment_and_low_dim_projections
   tab:all_progressive_modifications
   tab:progressive_no_bos_token
+  tab:progressive_temperature
   tab:layer_ablation
   tab:layer_ablation_schemes
   tab:init_ablation
@@ -56,6 +57,12 @@ done
 # Regenerate those caches once with `--compute` (CPU only; reads the LR-sweep
 # trajectory datasets) before this will reflect new runs.
 "$PY" scripts/paper/tables/solution_diversity.py --save
+
+# --- CE-temperature reconstruction logit geometry (z/T) ----------------------
+# tab:temperature_logit_stats. Renders from artifacts/paper/temperature_logit_stats.json (no GPU).
+# Regenerate the cache once with `--compute` (needs a GPU + pythia-1.4b & Llama-3.1-8B) before
+# this reflects new runs.
+"$PY" scripts/paper/tables/temperature_logit_stats.py --save
 
 # --- Trajectory shape: Euclidean- and step-based jumps (merged tables) -------
 # tab:trajectory_cluster_structure (+ _lr) place the two jump definitions side-by-side per row.

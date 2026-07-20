@@ -386,6 +386,31 @@ class MyTrainingArguments(TrainingArguments):
             )
         },
     )
+    ce_temperature: float = field(
+        default=1.0,
+        metadata={
+            "help": (
+                "Cross-entropy temperature (cross_entropy term only). Logits are divided by this T "
+                "before the reconstruction softmax: T>1 softens (flattens) the predicted distribution "
+                "the loss is measured against, T<1 sharpens it. A training-time knob for the loss only "
+                "-- convergence stays argmax-based and is temperature-invariant. 1.0 = plain CE "
+                "(byte-identical to the un-temperatured path). See ce_temperature_compensation for the "
+                "gradient-magnitude convention."
+            )
+        },
+    )
+    ce_temperature_compensation: str = field(
+        default="none",
+        metadata={
+            "help": (
+                "Gradient convention for ce_temperature. 'none' (raw): loss = CE(logits/T), whose "
+                "gradient scales ~1/T (temperature entangles with effective step size at fixed LR). "
+                "'t2' (Hinton distillation): loss = T^2 * CE(logits/T), holding gradient magnitude "
+                "~constant across T to isolate the distribution-shape effect. Both reduce to plain CE "
+                "at T=1.0. Ignored when ce_temperature == 1.0."
+            )
+        },
+    )
 
     # --- Precision ------------------------------------------------------
     dtype: str = field(

@@ -32,6 +32,23 @@ over a few samples, printing its headline metric in minutes on a single GPU. Dis
 from the paper-scale cluster runs.
 _Avoid:_ "smoke test" (that implies pass/fail only, not metric demonstration).
 
+## Cross-Entropy Temperature
+A scalar `T` applied to the reconstruction cross-entropy during cramming: the model's
+logits are divided by `T` before the softmax, so `T > 1` softens (flattens) the predicted
+distribution the loss is measured against and `T < 1` sharpens it. A training-time
+optimization knob for the loss only; convergence is still judged on the (temperature-
+invariant) argmax. `T = 1` is ordinary cross-entropy.
+_Avoid:_ "sampling temperature", "generation temperature" (those scale logits at decode
+time, not inside the training loss).
+
+## Gradient-Compensated Temperature
+The Hinton-distillation convention of multiplying the temperature-scaled cross-entropy by
+`T^2` so the gradient magnitude stays ~constant as `T` varies, isolating the
+distribution-shape effect from the effective step-size effect. The uncompensated ("raw")
+form omits the `T^2` factor, so the gradient scales ~`1/T`. Both reduce to plain
+cross-entropy at `T = 1`.
+_Avoid:_ "temperature normalization".
+
 ## Public Repo (progressive_cramming)
 The published reproducibility repository (FusionBrainLab/progressive_cramming). Houses
 the renamed `progressive_cramming` package, README, LICENSE, and the existing

@@ -1,0 +1,46 @@
+% paper-lint: n_samples=50
+\begin{tabular}{llrrr}
+\toprule
+ Configuration & & Avg.\ Steps & Margin $\mathbf{z}/T$ & Top-1 $\mathbf{z}/T$ \\
+\midrule
+ P1.4b $T{=}0.1$ & raw & 10000 & 12.23 & 130.33 \\
+ P1.4b $T{=}0.1$ & $t^2$ & 10000 & 12.36 & 131.13 \\
+\addlinespace[2pt]
+ P1.4b $T{=}0.25$ & raw & 9943 & 6.39 & 53.88 \\
+ P1.4b $T{=}0.25$ & $t^2$ & 9828 & 6.27 & 53.87 \\
+\addlinespace[2pt]
+ P1.4b $T{=}0.5$ & raw & 9056 & 4.56 & 29.33 \\
+ P1.4b $T{=}0.5$ & $t^2$ & 9596 & 4.68 & 29.33 \\
+\addlinespace[2pt]
+ P1.4b $T{=}0.75$ & raw & 7386 & 4.27 & 21.61 \\
+ P1.4b $T{=}0.75$ & $t^2$ & 7572 & 4.12 & 21.48 \\
+\addlinespace[2pt]
+ P1.4b $T{=}1.0$ & control & 7113 & 3.94 & 17.93 \\
+\addlinespace[2pt]
+ P1.4b $T{=}1.5$ & raw & 5664 & 3.64 & 14.39 \\
+ P1.4b $T{=}1.5$ & $t^2$ & 5736 & 3.64 & 14.36 \\
+\addlinespace[2pt]
+ P1.4b $T{=}2.0$ & raw & 4720 & 3.56 & 12.70 \\
+ P1.4b $T{=}2.0$ & $t^2$ & 4806 & 3.47 & 12.63 \\
+\midrule
+ L8b $T{=}0.1$ & raw & 10000 & 16.28 & 142.14 \\
+ L8b $T{=}0.1$ & $t^2$ & 10000 & 15.59 & 138.47 \\
+\addlinespace[2pt]
+ L8b $T{=}0.25$ & raw & 10000 & 12.66 & 71.99 \\
+ L8b $T{=}0.25$ & $t^2$ & 10000 & 12.70 & 72.72 \\
+\addlinespace[2pt]
+ L8b $T{=}0.5$ & raw & 10000 & 9.63 & 43.72 \\
+ L8b $T{=}0.5$ & $t^2$ & 10000 & 9.58 & 43.72 \\
+\addlinespace[2pt]
+ L8b $T{=}0.75$ & raw & 10000 & 8.39 & 33.68 \\
+ L8b $T{=}0.75$ & $t^2$ & 9986 & 8.30 & 33.48 \\
+\addlinespace[2pt]
+ L8b $T{=}1.0$ & control & 9981 & 7.63 & 28.37 \\
+\addlinespace[2pt]
+ L8b $T{=}1.5$ & raw & 9817 & 7.13 & 23.19 \\
+ L8b $T{=}1.5$ & $t^2$ & 9969 & 7.11 & 23.12 \\
+\addlinespace[2pt]
+ L8b $T{=}2.0$ & raw & 9703 & 6.75 & 20.38 \\
+ L8b $T{=}2.0$ & $t^2$ & 9850 & 6.81 & 20.51 \\
+\bottomrule
+\end{tabular}
