@@ -58,6 +58,12 @@ done
 # trajectory datasets) before this will reflect new runs.
 "$PY" scripts/paper/tables/solution_diversity.py --save
 
+# --- CE-temperature reconstruction logit geometry (z/T) ----------------------
+# tab:temperature_logit_stats. Renders from artifacts/paper/temperature_logit_stats.json (no GPU).
+# Regenerate the cache once with `--compute` (needs a GPU + pythia-1.4b & Llama-3.1-8B) before
+# this reflects new runs.
+"$PY" scripts/paper/tables/temperature_logit_stats.py --save
+
 # --- Trajectory shape: Euclidean- and step-based jumps (merged tables) -------
 # tab:trajectory_cluster_structure (+ _lr) place the two jump definitions side-by-side per row.
 # Renders from two cache sets; regenerate each once per run (CPU only) before this reflects new runs:
