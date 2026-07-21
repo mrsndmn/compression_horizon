@@ -135,6 +135,7 @@
     Token cramming compresses sequences into learned embeddings with near-perfect reconstruction, but fixed token budgets and 99\% accuracy thresholds leave it unclear whether residual errors reflect optimization failures or fundamental limits.
     We introduce progressive cramming, which grows the target prefix token-by-token, stopping only when reconstruction is no longer achievable within a fixed optimization budget.
     Progressive trajectories occupy low-dimensional structure in embedding space.
+    A temperature on the reconstruction cross-entropy traces a quantity--density frontier, with the crammed-token count peaking at a cold temperature and information gain at a warmer one (Figure~\ref{fig:ce_temperature}).
     Prepending a crammed embedding causes a moderate but consistent accuracy drop on multiple-choice benchmarks even with the original prefix in context, and collapses capability almost entirely under generative evaluation.
     Causal attention-knockout interventions trace this degradation to the embedding's interactions in the model's early layers.
     These results position progressive cramming as a tool for studying compression limits and show that perfect reconstruction---achievable through brittle steering rather than transferable semantics---is insufficient for meaningful compression.
