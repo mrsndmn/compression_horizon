@@ -1,9 +1,12 @@
-"""Guarded launcher for the pythia-1.4b CE-temperature sweep (9 runs).
+"""Guarded launcher for the CE-temperature sweep.
 
 Submits only the ``CE_TEMPERATURE_EXPERIMENTS`` from ``run_jobs_progressive.py``
-(baseline pythia-1.4b CE x T in {0.1,0.5,1.0,1.5,2.0} x {raw,t2}, T=1.0 deduped).
-Reuses that module's ``render_job`` so the commands/out_dirs are byte-identical to
-the generic launcher -- this is just a *safe* driver for the temperature subset.
+(the baseline-CE configs in ``CE_TEMPERATURE_MODELS`` x the ``CE_TEMPERATURES`` grid
+x {raw, t2} gradient arms, with T=1.0 deduped to a single control per model). The
+grid and model set live in that module and may grow, so this driver derives the run
+list from it rather than hard-coding one. Reuses that module's ``render_job`` so the
+commands/out_dirs are byte-identical to the generic launcher -- this is just a *safe*
+driver for the temperature subset.
 
 Why a bespoke driver instead of ``run_jobs_progressive.py --model pythia``:
   * ``--model pythia`` would also (re)consider every other pythia experiment;
@@ -35,6 +38,11 @@ PYTHON_PATH = "/workspace-SR004.nfs2/d.tarasov/envs/compression_horizon/bin/pyth
 AUTHOR_NAME = "d.tarasov"
 SUBMIT_TIMEOUT_SEC = 50  # kill a slow/retrying run_job child before it can duplicate.
 
+# The temperature runs this driver guards: the main sweep plus the raised-step-cap low-T re-run
+# subset. Order is deterministic (module-level lists), so parent and --submit-index child agree on
+# the same index -> experiment mapping. Already-completed sweep rows are skipped on their out_dir.
+CE_TEMPERATURE_LAUNCH_EXPERIMENTS = list(rjp.CE_TEMPERATURE_EXPERIMENTS) + list(rjp.CE_TEMPERATURE_HIGHCAP_EXPERIMENTS)
+
 
 def job_desc_for(exp_suffix: str) -> str:
     return f"CH: progressive {exp_suffix} #{AUTHOR_NAME} #multimodal #notify_completed @mrsndmn"
@@ -52,6 +60,7 @@ def build_payload(experiment, region: str):
             "HF_HOME": "/workspace-SR004.nfs2/.cache/huggingface",
         },
         "instance_type": "a100.1gpu",
+        "queue_name": "fusionbrainlab-job",
         "region": region,
         "type": "binary_exp",
         "shm_size_class": "medium",
@@ -69,7 +78,7 @@ def in_progress_descs() -> list:
 def submit_one_child(index: int) -> int:
     """Child mode: submit exactly one job, then exit. Run under an outer timeout."""
     client, extra_options = training_job_api_from_profile("default")
-    experiment = rjp.CE_TEMPERATURE_EXPERIMENTS[index]
+    experiment = CE_TEMPERATURE_LAUNCH_EXPERIMENTS[index]
     payload, exp_suffix, out_dir_name = build_payload(experiment, extra_options["region"])
     result = client.run_job(payload=payload)
     print(f"SUBMITTED index={index} out_dir={out_dir_name} result={result}", flush=True)
@@ -80,7 +89,7 @@ def verify():
     descs = in_progress_descs()
     print(f"In-progress jobs total: {len(descs)}")
     seen = {}
-    for experiment in rjp.CE_TEMPERATURE_EXPERIMENTS:
+    for experiment in CE_TEMPERATURE_LAUNCH_EXPERIMENTS:
         _, exp_suffix, out_dir_name = build_payload(experiment, "-")
         desc = job_desc_for(exp_suffix)
         count = sum(1 for d in descs if d == desc)
@@ -98,9 +107,9 @@ def launch_all(dry: bool):
     _, extra_options = training_job_api_from_profile("default")
     region = extra_options["region"]
     descs = set(in_progress_descs())
-    n = len(rjp.CE_TEMPERATURE_EXPERIMENTS)
+    n = len(CE_TEMPERATURE_LAUNCH_EXPERIMENTS)
     print(f"CE-temperature sweep: {n} experiments; {len(descs)} jobs currently in progress.")
-    for index, experiment in enumerate(rjp.CE_TEMPERATURE_EXPERIMENTS):
+    for index, experiment in enumerate(CE_TEMPERATURE_LAUNCH_EXPERIMENTS):
         _, exp_suffix, out_dir_name = build_payload(experiment, region)
         desc = job_desc_for(exp_suffix)
         if os.path.isdir(out_dir_name):

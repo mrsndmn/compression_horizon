@@ -276,6 +276,39 @@ CE_TEMPERATURE_EXPERIMENTS = [
     for ce_temperature_compensation in (["none"] if ce_temperature == 1.0 else ["none", "t2"])
 ]
 
+# --- CE-temperature re-run with raised step caps (pythia-1.4b low-T) ----------------------
+# The low-temperature pythia-1.4b runs in the sweep above saturated the per-sample / per-token
+# step caps (T=0.1 ran near the 10k/1k ceilings), so their Compressed-Tokens / Trajectory-Length
+# numbers are budget-bound, not convergence-bound -- an artefact of the cap rather than of the
+# temperature. Re-run the low-T subset with 5x-higher caps (per-sample 50k, per-token 5k) to see
+# whether the crammed-token count keeps rising once the optimizer is given more budget. Same
+# baseline-CE pythia-1.4b config as the main sweep, but only the raw gradient arm -- the sweep
+# already established raw ~= t2 at every T, so the higher-budget re-run skips the T^2-compensated
+# arm and keeps just raw to isolate the step-cap effect. Only the caps differ, which yields fresh
+# ``_maxsteps_`` out_dirs that never collide with the default-cap rows (so the existing
+# tab:progressive_temperature and its watcher are untouched).
+CE_TEMPERATURE_HIGHCAP_TEMPERATURES = [0.1, 0.25, 0.5]
+CE_TEMPERATURE_HIGHCAP_MAX_STEPS_PER_SAMPLE = 50_000
+CE_TEMPERATURE_HIGHCAP_MAX_STEPS_PER_TOKEN = 5_000
+
+CE_TEMPERATURE_HIGHCAP_EXPERIMENTS = [
+    {
+        "model_checkpoint": "EleutherAI/pythia-1.4b",
+        "learning_rate": 0.5,
+        "loss_type": "cross_entropy",
+        "num_alignment_layers": 1,
+        "hybrid_alpha": None,
+        "low_dim_projection": False,
+        "low_dim_size": None,
+        "ce_temperature": ce_temperature,
+        # Raw arm only (no T^2 compensation) for the higher-budget re-run.
+        "ce_temperature_compensation": "none",
+        "max_optimization_steps_per_sample": CE_TEMPERATURE_HIGHCAP_MAX_STEPS_PER_SAMPLE,
+        "max_optimization_steps_per_token": CE_TEMPERATURE_HIGHCAP_MAX_STEPS_PER_TOKEN,
+    }
+    for ce_temperature in CE_TEMPERATURE_HIGHCAP_TEMPERATURES
+]
+
 EXPERIMENTS = [
     *LLAMA_31_8B_EXPERIMENTS,
     *PYTHIA_14B_EXPERIMENTS,
@@ -284,6 +317,7 @@ EXPERIMENTS = [
     *QWEN3_EXPERIMENTS,
     *MARGIN_EXPERIMENTS,
     *CE_TEMPERATURE_EXPERIMENTS,
+    *CE_TEMPERATURE_HIGHCAP_EXPERIMENTS,
 ]
 
 
@@ -298,6 +332,13 @@ def render_job(experiment):
     model_short = model_checkpoint.split("/")[-1]
     exp_suffix = f"sl_{MAX_SEQ_LEN}_{model_short}"
 
+    # Optimization-step caps default to the module constants; an experiment may raise them via
+    # opt-in ``.get`` (e.g. the low-temperature pythia re-run that saturated the 10k/1k defaults and
+    # needs more budget). A non-default cap adds a ``_maxsteps_`` suffix below so the run lands in a
+    # fresh out_dir instead of colliding with the default-cap row.
+    max_steps_per_sample = experiment.get("max_optimization_steps_per_sample", MAX_OPTIMIZATION_STEPS_PER_SAMPLE)
+    max_steps_per_token = experiment.get("max_optimization_steps_per_token", MAX_OPTIMIZATION_STEPS_PER_TOKEN)
+
     cmd_args = [
         "--remove_unused_columns False",
         f"--num_alignment_layers {experiment['num_alignment_layers']}",
@@ -306,8 +347,8 @@ def render_job(experiment):
         f"--warmup_steps {WARMUP_STEPS}",
         f"--model_checkpoint {model_checkpoint}",
         "--per_device_train_batch_size 1",
-        f"--max_optimization_steps_per_sample {MAX_OPTIMIZATION_STEPS_PER_SAMPLE}",
-        f"--max_optimization_steps_per_token {MAX_OPTIMIZATION_STEPS_PER_TOKEN}",
+        f"--max_optimization_steps_per_sample {max_steps_per_sample}",
+        f"--max_optimization_steps_per_token {max_steps_per_token}",
         f"--learning_rate {experiment['learning_rate']}",
         "--progressive_train 1",
         f"--embedding_init_method {EMBEDDING_INIT_METHOD}",
@@ -377,6 +418,13 @@ def render_job(experiment):
         if ce_temperature_compensation and str(ce_temperature_compensation).lower() != "none":
             cmd_args.append(f"--ce_temperature_compensation {ce_temperature_compensation}")
             exp_suffix = f"{exp_suffix}_comp_{ce_temperature_compensation}"
+
+    # Raised optimization-step caps (opt-in). Guarded so every experiment that leaves the caps at
+    # the module defaults stays byte-identical (no suffix, same out_dir as before); a raised cap
+    # yields a distinct ``_maxsteps_s{sample}_t{token}`` out_dir. The flags themselves are always
+    # emitted (above) at the resolved values.
+    if max_steps_per_sample != MAX_OPTIMIZATION_STEPS_PER_SAMPLE or max_steps_per_token != MAX_OPTIMIZATION_STEPS_PER_TOKEN:
+        exp_suffix = f"{exp_suffix}_maxsteps_s{max_steps_per_sample}_t{max_steps_per_token}"
 
     # Fixed uncompressed prefix (progressive cramming). ``.get`` keeps every existing experiment
     # byte-identical (no key => no flag, no suffix); set it to enable the prefix-length ablation.
@@ -473,6 +521,7 @@ if __name__ == "__main__":
                 "HF_HOME": "/workspace-SR004.nfs2/.cache/huggingface",
             },
             "instance_type": "a100.1gpu",
+            "queue_name": "fusionbrainlab-job",
             "region": extra_options["region"],
             "type": "binary_exp",
             "shm_size_class": "medium",

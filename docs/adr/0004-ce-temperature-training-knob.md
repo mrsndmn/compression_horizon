@@ -7,7 +7,7 @@ Accepted
 
 ## Context
 We want to ablate how a **temperature** applied to the reconstruction cross-entropy
-affects progressive cramming on pythia-1.4b. The reconstruction loss is standard
+affects progressive cramming on the baseline-CE progressive config. The reconstruction loss is standard
 next-token CE (`next_token_cross_entropy_loss_with_prefix`, `src/compression_horizon/train/loss.py`),
 while convergence — the pass/fail bar that ends a stage — is judged separately on the
 **argmax** match rate (`token_argmax_match_rate_with_prefix`), which is invariant to any
@@ -19,8 +19,8 @@ Two things had to be decided before coding:
    change the *optimization path* (steps-to-converge, and whether a run hits the per-token
    step cap), not the converged solution a run reaches given unlimited steps.
 2. **Gradient magnitude vs. distribution shape.** Raw `CE(logits/T)` has a gradient that
-   scales ~`1/T`; at the sweep's fixed `learning_rate=0.5` that entangles temperature with
-   effective step size. The Hinton distillation convention multiplies the loss by `T²` to
+   scales ~`1/T`; at each run's fixed (per-family) `learning_rate` that entangles temperature
+   with effective step size. The Hinton distillation convention multiplies the loss by `T²` to
    hold gradient magnitude ~constant, isolating the pure distribution-shape effect. It is
    not obvious a priori which effect drives any observed change.
 
@@ -33,9 +33,12 @@ Two things had to be decided before coding:
   `T²`-compensated form as separate experiment arms, rather than pre-committing to one.
 - **Leave convergence argmax-based** (temperature-invariant). Temperature is a loss-only
   knob; the convergence bar is unchanged.
-- Ablate on **pythia-1.4b baseline CE only** (temperature is the entire loss there), over
-  `T ∈ {0.1, 0.5, 1.0, 1.5, 2.0}` × {raw, T²}. The two `T=1.0` arms are identical and to
-  each other and to the existing baseline, so they collapse to a single control run.
+- Ablate on the **baseline-CE progressive config only** (temperature is the entire loss there),
+  sweeping the temperature grid `CE_TEMPERATURES` × {raw, T²} for each baseline-CE model in
+  `CE_TEMPERATURE_MODELS` (each at its family's baseline lr). Both the grid and the model set
+  live in `scripts/jobs/run_jobs_progressive.py` and are expected to grow over time. The two
+  `T=1.0` arms are identical to each other and to the existing baseline, so they collapse to a
+  single control run per model.
 
 ## Consequences
 - The ablation's expected signal lives mainly in **Trajectory Length** (steps) and in
@@ -43,9 +46,9 @@ Two things had to be decided before coding:
   temperature — not in a categorically different converged solution. The results table
   (`tab:progressive_temperature`) reuses the `tab:progressive_modifications` 4-column metric
   set so the temperature rows are directly comparable to the existing baseline row.
-- Running both raw and T² arms doubles the run count (~9 distinct runs after `T=1.0` dedup)
-  but lets the data, not an upfront guess, decide whether any effect is distribution-shape or
-  effective step-size.
+- Running both raw and T² arms roughly doubles the run count (minus the single deduped `T=1.0`
+  control per model) but lets the data, not an upfront guess, decide whether any effect is
+  distribution-shape or effective step-size.
 - Because `T=1.0` is byte-identical, every pre-existing experiment and cached artifact is
   unaffected; only the new temperature-tagged experiments carry the flag and a `_temp_*`
   (and compensation-mode) suffix.

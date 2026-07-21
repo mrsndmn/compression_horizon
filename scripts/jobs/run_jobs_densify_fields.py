@@ -160,6 +160,7 @@ def main() -> None:
             "job_desc": job_desc,
             "env_variables": {"PYTHONPATH": "./src", "HF_HOME": "/workspace-SR004.nfs2/.cache/huggingface"},
             "instance_type": "a100.1gpu",
+            "queue_name": "fusionbrainlab-job",
             "region": extra_options["region"],
             "type": "binary_exp",
             "shm_size_class": "medium",
