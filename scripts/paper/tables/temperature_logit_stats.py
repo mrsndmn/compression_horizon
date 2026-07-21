@@ -4,11 +4,16 @@ For each temperature run we report, over the final stage's reconstructed tokens:
   * Avg Steps   -- mean total optimization steps per sample (cumulative steps_taken -> final value;
                    capped at max_optimization_steps_per_sample). Not a logit quantity, shown as-is.
   * Margin z/T  -- mean (logit[true] - runner_up) / T  (the margin in the loss's own units).
-  * Top-1 z/T   -- mean (max_j logit_j) / T.
+  * Top-1 z/T   -- mean (max_j logit_j) / T   (UNNORMALIZED: the raw winning logit in z/T units).
+  * Top-1 logp  -- mean log_softmax(z/T)[argmax]  (NORMALIZED: the winning token's log-probability
+                   under the temperature softmax the loss uses; equals Top-1 z/T minus logsumexp(z/T),
+                   so the two columns differ exactly by the mean log-partition).
 
 The reconstruction logits z are the raw model outputs (what decoding sees); dividing by T expresses
 them in the units the CE(z/T) loss actually optimizes, factoring out the trivial z ~ T rescaling and
-leaving the residual "confidence" the optimizer reaches at argmax-convergence.
+leaving the residual "confidence" the optimizer reaches at argmax-convergence. The UNNORMALIZED Top-1
+z/T tracks the absolute logit pedestal (nearly T-independent, so /T inflates it as T->0); the
+NORMALIZED Top-1 logp is bounded above by 0 and reads as the actual probability mass on the winner.
 
 Two-step, mirroring the other cache-backed tables (e.g. surprisal_steps_correlation):
     # 1) recompute the cache (needs a GPU + the two base models):
@@ -58,7 +63,7 @@ def compute():
     from compression_horizon.paper.tables.progressive import flatten_embedding
 
     @torch.no_grad()
-    def sample_stats(model, tok, row, device):
+    def sample_stats(model, tok, row, device, temperature):
         text = row.get("text", "")
         if not isinstance(text, str) or text.strip() == "":
             return None
@@ -81,7 +86,11 @@ def compute():
         runner_up = torch.where(is_top1, top2[..., 1], top2[..., 0])
         margin = (true_logit - runner_up)[mask].float().mean().item()
         top1 = top2[..., 0][mask].float().mean().item()
-        return margin, top1
+        # NORMALIZED top-1: log-prob of the winner under the temperature softmax the loss uses,
+        # log_softmax(z/T)[argmax] = (max_j z_j)/T - logsumexp(z/T). Needs the full vocab logits.
+        logp = torch.log_softmax(pred.float() / temperature, dim=-1)
+        top1_logp = logp.max(dim=-1).values[mask].mean().item()
+        return margin, top1, top1_logp
 
     device = torch.device("cuda")
     cache = {}
@@ -108,12 +117,13 @@ def compute():
                 key = (int(r.get("stage_index", 0) or 0), int(r.get("stage_seq_len", 0) or 0))
                 if s not in final_idx or key > final_idx[s][1]:
                     final_idx[s] = (i, key)
-            margins, top1s = [], []
+            margins, top1s, top1_logps = [], [], []
             for s, (gi, _) in final_idx.items():
-                st = sample_stats(model, tok, ds[gi], device)
+                st = sample_stats(model, tok, ds[gi], device, float(T))
                 if st is not None:
                     margins.append(st[0])
                     top1s.append(st[1])
+                    top1_logps.append(st[2])
             cache[label] = {
                 "model": prefix,
                 "T": float(T),
@@ -122,10 +132,12 @@ def compute():
                 "avg_steps": float(np.mean(list(steps_max.values()))),
                 "margin_raw": float(np.mean(margins)),
                 "top1_raw": float(np.mean(top1s)),
+                "top1_logp_norm": float(np.mean(top1_logps)),
             }
             print(
                 f"  {label:22s} steps={cache[label]['avg_steps']:8.1f} "
-                f"margin_raw={cache[label]['margin_raw']:6.3f} top1_raw={cache[label]['top1_raw']:7.3f}",
+                f"margin_raw={cache[label]['margin_raw']:6.3f} top1_raw={cache[label]['top1_raw']:7.3f} "
+                f"top1_logp_norm={cache[label]['top1_logp_norm']:7.3f}",
                 flush=True,
             )
         del model
@@ -152,9 +164,10 @@ def render():
 
     lines = [
         f"% paper-lint: n_samples={n_min}",
-        "\\begin{tabular}{llrrr}",
+        "\\begin{tabular}{llrrrr}",
         "\\toprule",
-        " Configuration & & Avg.\\ Steps & Margin $\\mathbf{z}/T$ & Top-1 $\\mathbf{z}/T$ \\\\",
+        " Configuration & & Avg.\\ Steps & Margin $\\mathbf{z}/T$ & " "Top-1 $\\mathbf{z}/T$ & Top-1 $\\log p$ \\\\",
+        " & & & & (unnorm.) & (norm.) \\\\",
         "\\midrule",
     ]
     prev_prefix, prev_T = None, None
@@ -170,7 +183,11 @@ def render():
         prev_prefix, prev_T = prefix, T
         margin_zt = e["margin_raw"] / Tf
         top1_zt = e["top1_raw"] / Tf
-        lines.append(f" {prefix} $T{{=}}{T}$ & {_arm_tex(arm)} & {e['avg_steps']:.0f} & {margin_zt:.2f} & {top1_zt:.2f} \\\\")
+        top1_logp = e["top1_logp_norm"]
+        lines.append(
+            f" {prefix} $T{{=}}{T}$ & {_arm_tex(arm)} & {e['avg_steps']:.0f} & "
+            f"{margin_zt:.2f} & {top1_zt:.2f} & {top1_logp:.2f} \\\\"
+        )
     lines += ["\\bottomrule", "\\end{tabular}", ""]
     os.makedirs(os.path.dirname(OUT_TEX), exist_ok=True)
     with open(OUT_TEX, "w") as f:
