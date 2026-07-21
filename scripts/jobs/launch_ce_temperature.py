@@ -38,6 +38,11 @@ PYTHON_PATH = "/workspace-SR004.nfs2/d.tarasov/envs/compression_horizon/bin/pyth
 AUTHOR_NAME = "d.tarasov"
 SUBMIT_TIMEOUT_SEC = 50  # kill a slow/retrying run_job child before it can duplicate.
 
+# The temperature runs this driver guards: the main sweep plus the raised-step-cap low-T re-run
+# subset. Order is deterministic (module-level lists), so parent and --submit-index child agree on
+# the same index -> experiment mapping. Already-completed sweep rows are skipped on their out_dir.
+CE_TEMPERATURE_LAUNCH_EXPERIMENTS = list(rjp.CE_TEMPERATURE_EXPERIMENTS) + list(rjp.CE_TEMPERATURE_HIGHCAP_EXPERIMENTS)
+
 
 def job_desc_for(exp_suffix: str) -> str:
     return f"CH: progressive {exp_suffix} #{AUTHOR_NAME} #multimodal #notify_completed @mrsndmn"
@@ -72,7 +77,7 @@ def in_progress_descs() -> list:
 def submit_one_child(index: int) -> int:
     """Child mode: submit exactly one job, then exit. Run under an outer timeout."""
     client, extra_options = training_job_api_from_profile("default")
-    experiment = rjp.CE_TEMPERATURE_EXPERIMENTS[index]
+    experiment = CE_TEMPERATURE_LAUNCH_EXPERIMENTS[index]
     payload, exp_suffix, out_dir_name = build_payload(experiment, extra_options["region"])
     result = client.run_job(payload=payload)
     print(f"SUBMITTED index={index} out_dir={out_dir_name} result={result}", flush=True)
@@ -83,7 +88,7 @@ def verify():
     descs = in_progress_descs()
     print(f"In-progress jobs total: {len(descs)}")
     seen = {}
-    for experiment in rjp.CE_TEMPERATURE_EXPERIMENTS:
+    for experiment in CE_TEMPERATURE_LAUNCH_EXPERIMENTS:
         _, exp_suffix, out_dir_name = build_payload(experiment, "-")
         desc = job_desc_for(exp_suffix)
         count = sum(1 for d in descs if d == desc)
@@ -101,9 +106,9 @@ def launch_all(dry: bool):
     _, extra_options = training_job_api_from_profile("default")
     region = extra_options["region"]
     descs = set(in_progress_descs())
-    n = len(rjp.CE_TEMPERATURE_EXPERIMENTS)
+    n = len(CE_TEMPERATURE_LAUNCH_EXPERIMENTS)
     print(f"CE-temperature sweep: {n} experiments; {len(descs)} jobs currently in progress.")
-    for index, experiment in enumerate(rjp.CE_TEMPERATURE_EXPERIMENTS):
+    for index, experiment in enumerate(CE_TEMPERATURE_LAUNCH_EXPERIMENTS):
         _, exp_suffix, out_dir_name = build_payload(experiment, region)
         desc = job_desc_for(exp_suffix)
         if os.path.isdir(out_dir_name):
