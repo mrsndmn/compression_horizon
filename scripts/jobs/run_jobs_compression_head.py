@@ -277,6 +277,7 @@ def _payload(script: str, job_desc: str, instance_type: str, region: str) -> dic
         "job_desc": job_desc,
         "env_variables": {"PYTHONPATH": "./src", "HF_HOME": "/workspace-SR004.nfs2/.cache/huggingface"},
         "instance_type": instance_type,
+        "queue_name": "fusionbrainlab-job",
         "region": region,
         "type": "binary_exp",
         "shm_size_class": "medium",

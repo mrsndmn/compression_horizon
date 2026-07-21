@@ -10,6 +10,7 @@ Usage:
   python scripts/jobs/run_training.py --dry --model llama pythia
   python scripts/jobs/run_training.py
 """
+
 from __future__ import annotations
 
 import argparse
@@ -386,6 +387,7 @@ if __name__ == "__main__":
                 "HF_HOME": "/workspace-SR004.nfs2/.cache/huggingface",
             },
             "instance_type": cfg["instance_type"],
+            "queue_name": "fusionbrainlab-job",
             "region": extra_options["region"],
             "type": "binary_exp",
             "shm_size_class": "medium",

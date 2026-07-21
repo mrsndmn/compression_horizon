@@ -157,6 +157,7 @@ def build_payload(spec: dict, extra_options: dict, num_gpus: int, max_steps: int
             "HF_HOME": "/workspace-SR004.nfs2/.cache/huggingface",
         },
         "instance_type": f"a100.{opts['num_gpus']}gpu",
+        "queue_name": "fusionbrainlab-job",
         "region": extra_options["region"],
         "type": "binary_exp",
         "shm_size_class": "medium",
