@@ -276,25 +276,26 @@ CE_TEMPERATURE_EXPERIMENTS = [
     for ce_temperature_compensation in (["none"] if ce_temperature == 1.0 else ["none", "t2"])
 ]
 
-# --- CE-temperature re-run with raised step caps (pythia-1.4b low-T) ----------------------
-# The low-temperature pythia-1.4b runs in the sweep above saturated the per-sample / per-token
-# step caps (T=0.1 ran near the 10k/1k ceilings), so their Compressed-Tokens / Trajectory-Length
-# numbers are budget-bound, not convergence-bound -- an artefact of the cap rather than of the
-# temperature. Re-run the low-T subset with 5x-higher caps (per-sample 50k, per-token 5k) to see
-# whether the crammed-token count keeps rising once the optimizer is given more budget. Same
-# baseline-CE pythia-1.4b config as the main sweep, but only the raw gradient arm -- the sweep
-# already established raw ~= t2 at every T, so the higher-budget re-run skips the T^2-compensated
-# arm and keeps just raw to isolate the step-cap effect. Only the caps differ, which yields fresh
-# ``_maxsteps_`` out_dirs that never collide with the default-cap rows (so the existing
-# tab:progressive_temperature and its watcher are untouched).
+# --- CE-temperature re-run with raised step caps (low-T) ---------------------------------
+# The low-temperature runs in the sweep above saturated the per-sample / per-token step caps
+# (T=0.1 ran near the 10k/1k ceilings), so their Compressed-Tokens / Trajectory-Length numbers are
+# budget-bound, not convergence-bound -- an artefact of the cap rather than of the temperature.
+# Re-run the low-T subset with 5x-higher caps (per-sample 50k, per-token 5k) to see whether the
+# crammed-token count keeps rising once the optimizer is given more budget. Swept over the same
+# baseline-CE models as the main sweep (``CE_TEMPERATURE_MODELS``: pythia-1.4b + Llama-3.1-8B, each
+# at its family's baseline lr), but only the raw gradient arm -- the sweep already established
+# raw ~= t2 at every T, so the higher-budget re-run skips the T^2-compensated arm and keeps just raw
+# to isolate the step-cap effect. Only the caps differ, which yields fresh ``_maxsteps_`` out_dirs
+# that never collide with the default-cap rows (so the existing tab:progressive_temperature and its
+# watcher are untouched).
 CE_TEMPERATURE_HIGHCAP_TEMPERATURES = [0.1, 0.25, 0.5]
 CE_TEMPERATURE_HIGHCAP_MAX_STEPS_PER_SAMPLE = 50_000
 CE_TEMPERATURE_HIGHCAP_MAX_STEPS_PER_TOKEN = 5_000
 
 CE_TEMPERATURE_HIGHCAP_EXPERIMENTS = [
     {
-        "model_checkpoint": "EleutherAI/pythia-1.4b",
-        "learning_rate": 0.5,
+        "model_checkpoint": model_checkpoint,
+        "learning_rate": learning_rate,
         "loss_type": "cross_entropy",
         "num_alignment_layers": 1,
         "hybrid_alpha": None,
@@ -306,6 +307,7 @@ CE_TEMPERATURE_HIGHCAP_EXPERIMENTS = [
         "max_optimization_steps_per_sample": CE_TEMPERATURE_HIGHCAP_MAX_STEPS_PER_SAMPLE,
         "max_optimization_steps_per_token": CE_TEMPERATURE_HIGHCAP_MAX_STEPS_PER_TOKEN,
     }
+    for (model_checkpoint, learning_rate) in CE_TEMPERATURE_MODELS
     for ce_temperature in CE_TEMPERATURE_HIGHCAP_TEMPERATURES
 ]
 
