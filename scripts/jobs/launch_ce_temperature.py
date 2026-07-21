@@ -1,9 +1,12 @@
-"""Guarded launcher for the pythia-1.4b CE-temperature sweep (9 runs).
+"""Guarded launcher for the CE-temperature sweep.
 
 Submits only the ``CE_TEMPERATURE_EXPERIMENTS`` from ``run_jobs_progressive.py``
-(baseline pythia-1.4b CE x T in {0.1,0.5,1.0,1.5,2.0} x {raw,t2}, T=1.0 deduped).
-Reuses that module's ``render_job`` so the commands/out_dirs are byte-identical to
-the generic launcher -- this is just a *safe* driver for the temperature subset.
+(the baseline-CE configs in ``CE_TEMPERATURE_MODELS`` x the ``CE_TEMPERATURES`` grid
+x {raw, t2} gradient arms, with T=1.0 deduped to a single control per model). The
+grid and model set live in that module and may grow, so this driver derives the run
+list from it rather than hard-coding one. Reuses that module's ``render_job`` so the
+commands/out_dirs are byte-identical to the generic launcher -- this is just a *safe*
+driver for the temperature subset.
 
 Why a bespoke driver instead of ``run_jobs_progressive.py --model pythia``:
   * ``--model pythia`` would also (re)consider every other pythia experiment;
