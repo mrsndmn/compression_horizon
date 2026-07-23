@@ -542,7 +542,7 @@ Each condition is evaluated on teacher-forced reconstruction accuracy and on dow
 
 \begin{figure*}[t]
     \centering
-    \includegraphics[width=0.792\textwidth]{attention_knockout_per_layer.pdf}
+    \includegraphics[width=0.693\textwidth]{attention_knockout_per_layer.pdf}
     \caption{Per-layer attention knockout on Llama-3.1-8B. Masking the compression embedding at a single layer, we report downstream HellaSwag accuracy (blue) and teacher-forced reconstruction accuracy (purple); orange bars show the compression embedding's attention mass per layer. Dashed lines mark the uncompressed baseline (Base) and the crammed prefix without intervention (Cram). Early-layer knockout sharply degrades reconstruction yet leaves downstream accuracy at or above the crammed baseline, whereas the late layers that carry the most attention mass have negligible causal effect on either metric.}
     \label{fig:knockout_per_layer}
 \end{figure*}
