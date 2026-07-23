@@ -5,6 +5,9 @@
 % Recommended, but optional, packages for figures and better typesetting:
 \usepackage{microtype}
 \usepackage{graphicx}
+% arXiv/portable builds don't read .latexmkrc, so declare the figure search
+% path here (bare \includegraphics filenames live under figures/).
+\graphicspath{{figures/}{./}}
 \usepackage{subcaption}
 \usepackage{booktabs} % for professional tables
 \usepackage[normalem]{ulem}
@@ -25,7 +28,8 @@
 \newcommand{\theHalgorithm}{\arabic{algorithm}}
 
 % Use the following line for the initial blind version submitted for review:
-\usepackage[accepted]{icml2026}
+% Path-qualified so arXiv (which ignores .latexmkrc's TEXINPUTS) finds it in styles/.
+\usepackage[accepted]{styles/icml2026}
 
 % For preprint, use
 % \usepackage[preprint]{icml2026}
@@ -144,7 +148,7 @@
 
 \begin{figure}[h]
     \centering
-    \input{visual_abstract.tikz}
+    \input{figures/visual_abstract.tikz}
     \caption{Full cramming achieves ${\sim}$1\% training error with teacher forcing, but errors cascade to 0\% generation accuracy. Progressive cramming establishes a precise boundary where compression either succeeds completely or fails clearly.}
     \label{fig:visual_abstract}
 \end{figure}
@@ -341,7 +345,7 @@ We define the (stage-wise) trajectory length as the sum of Euclidean distances b
 
 \begin{figure}[t]
     \centering
-    \input{figure_progressive_cramming.tikz}
+    \input{figures/figure_progressive_cramming.tikz}
     \caption{Progressive cramming adds target tokens sequentially. At stage $k$, we optimize the compression embedding to achieve 100\% reconstruction of the prefix $(x_1,\ldots,x_k)$, then extend to $k{+}1$ and warm-start from the previous solution.}
     \label{fig:progressive}
 \end{figure}
@@ -625,7 +629,7 @@ which we feel must be specifically highlighted here.
 % \nocite{langley00}
 
 \bibliography{example_paper}
-\bibliographystyle{icml2026}
+\bibliographystyle{styles/icml2026}
 
 
 \include{appendix}
