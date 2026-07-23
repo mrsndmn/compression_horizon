@@ -247,15 +247,17 @@ MARGIN_EXPERIMENTS = [
 # step-cap timeouts), not a different converged solution. Each temperature is run under both
 # gradient conventions: raw (loss = CE(logits/T), gradient ~1/T) and t2 (Hinton, loss =
 # T^2 * CE(logits/T), gradient magnitude held ~constant at fixed lr). T=1.0 is byte-identical for
-# both arms, so it collapses to a single control run. Swept over two model families at each
-# family's baseline lr. See docs/adr/0004-ce-temperature-training-knob.md.
+# both arms, so it collapses to a single control run. Swept over the model families in
+# ``CE_TEMPERATURE_MODELS`` at each family's baseline lr. See docs/adr/0004-ce-temperature-training-knob.md.
 CE_TEMPERATURES = [0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0]
 
 # (model_checkpoint, learning_rate) baseline-CE configs the temperature sweep runs on. lr matches
-# each family's baseline row (pythia-1.4b: 0.5; Llama-3.1-8B: 0.1).
+# each family's baseline row (pythia-1.4b: 0.5; Llama-3.1-8B: 0.1; Qwen3-4B: 0.1). All run at the
+# default 10k/1k step budget (the raised-budget re-run below is a separate, smaller model set).
 CE_TEMPERATURE_MODELS = [
     ("EleutherAI/pythia-1.4b", 0.5),
     ("unsloth/Meta-Llama-3.1-8B", 0.1),
+    ("Qwen/Qwen3-4B", 0.1),
 ]
 
 CE_TEMPERATURE_EXPERIMENTS = [
@@ -281,16 +283,22 @@ CE_TEMPERATURE_EXPERIMENTS = [
 # (T=0.1 ran near the 10k/1k ceilings), so their Compressed-Tokens / Trajectory-Length numbers are
 # budget-bound, not convergence-bound -- an artefact of the cap rather than of the temperature.
 # Re-run the low-T subset with 5x-higher caps (per-sample 50k, per-token 5k) to see whether the
-# crammed-token count keeps rising once the optimizer is given more budget. Swept over the same
-# baseline-CE models as the main sweep (``CE_TEMPERATURE_MODELS``: pythia-1.4b + Llama-3.1-8B, each
-# at its family's baseline lr), but only the raw gradient arm -- the sweep already established
-# raw ~= t2 at every T, so the higher-budget re-run skips the T^2-compensated arm and keeps just raw
-# to isolate the step-cap effect. Only the caps differ, which yields fresh ``_maxsteps_`` out_dirs
-# that never collide with the default-cap rows (so the existing tab:progressive_temperature and its
-# watcher are untouched).
+# crammed-token count keeps rising once the optimizer is given more budget. Only the raw gradient
+# arm -- the sweep already established raw ~= t2 at every T, so the higher-budget re-run skips the
+# T^2-compensated arm and keeps just raw to isolate the step-cap effect. Only the caps differ, which
+# yields fresh ``_maxsteps_`` out_dirs that never collide with the default-cap rows (so the existing
+# tab:progressive_temperature and its watcher are untouched).
 CE_TEMPERATURE_HIGHCAP_TEMPERATURES = [0.1, 0.25, 0.5]
 CE_TEMPERATURE_HIGHCAP_MAX_STEPS_PER_SAMPLE = 50_000
 CE_TEMPERATURE_HIGHCAP_MAX_STEPS_PER_TOKEN = 5_000
+
+# Models that get the raised-budget re-run: pythia-1.4b + Llama-3.1-8B only. Kept as its own list
+# (NOT CE_TEMPERATURE_MODELS) so adding a model to the default-budget sweep above -- e.g. Qwen3-4B --
+# does not implicitly trigger an expensive 50k-step re-run for it.
+CE_TEMPERATURE_HIGHCAP_MODELS = [
+    ("EleutherAI/pythia-1.4b", 0.5),
+    ("unsloth/Meta-Llama-3.1-8B", 0.1),
+]
 
 CE_TEMPERATURE_HIGHCAP_EXPERIMENTS = [
     {
@@ -307,7 +315,7 @@ CE_TEMPERATURE_HIGHCAP_EXPERIMENTS = [
         "max_optimization_steps_per_sample": CE_TEMPERATURE_HIGHCAP_MAX_STEPS_PER_SAMPLE,
         "max_optimization_steps_per_token": CE_TEMPERATURE_HIGHCAP_MAX_STEPS_PER_TOKEN,
     }
-    for (model_checkpoint, learning_rate) in CE_TEMPERATURE_MODELS
+    for (model_checkpoint, learning_rate) in CE_TEMPERATURE_HIGHCAP_MODELS
     for ce_temperature in CE_TEMPERATURE_HIGHCAP_TEMPERATURES
 ]
 
