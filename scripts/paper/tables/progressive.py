@@ -88,6 +88,17 @@ _CE_TEMP_MODELS = [
 ]
 _CE_TEMPS = ["0.1", "0.25", "0.5", "0.75", "1.0", "1.5", "2.0"]
 
+# Raised-step-cap (50k/sample, 5k/token) low-T re-runs, raw arm only. The default-budget low-T runs
+# saturated the 10k/1k caps (budget-bound), so these are added as EXTRA "raw 50k" rows next to the
+# default raw row for the same temperature -- both budgets shown side by side. (model_short, temp) ->
+# out_dir suffix. Only pythia-1.4b low-T has landed so far (Llama-3.1-8B high-budget runs pending).
+_CE_TEMP_HIGHCAP_SUFFIX = "_maxsteps_s50000_t5000"
+_CE_TEMP_HIGHCAP = {
+    ("pythia-1.4b", "0.1"),
+    ("pythia-1.4b", "0.25"),
+    ("pythia-1.4b", "0.5"),
+}
+
 
 def _build_ce_temperature_rows() -> Tuple[List[CheckpointEntry], List[str]]:
     checkpoints: List[CheckpointEntry] = []
@@ -105,6 +116,10 @@ def _build_ce_temperature_rows() -> Tuple[List[CheckpointEntry], List[str]]:
             else:
                 checkpoints.append(f"{base}/progressive_prefixes")
                 names.append(f"{prefix} T={temp} raw")
+                # Raised-budget raw re-run for this temperature (if it exists), shown next to raw.
+                if (model_short, temp) in _CE_TEMP_HIGHCAP:
+                    checkpoints.append(f"{base}{_CE_TEMP_HIGHCAP_SUFFIX}/progressive_prefixes")
+                    names.append(f"{prefix} T={temp} raw 50k")
                 checkpoints.append(f"{base}_comp_t2/progressive_prefixes")
                 names.append(f"{prefix} T={temp} t2")
     return checkpoints, names
