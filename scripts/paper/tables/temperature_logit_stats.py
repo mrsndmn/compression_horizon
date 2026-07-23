@@ -39,6 +39,12 @@ MODELS = [
 ]
 N_SAMPLES_STAMP = 50
 
+# Raised-step-cap (50k/sample, 5k/token) low-T re-runs, raw arm only; added as an extra "raw 50k"
+# row next to the default raw arm for the same temperature (mirrors tab:progressive_temperature).
+# Only pythia-1.4b low-T has landed so far (Llama-3.1-8B high-budget runs pending).
+HIGHCAP_SUFFIX = "_maxsteps_s50000_t5000"
+HIGHCAP = {("pythia-1.4b", "0.1"), ("pythia-1.4b", "0.25"), ("pythia-1.4b", "0.5")}
+
 
 def run_rows():
     """Ordered (label, arm, T, dir_short, lr, checkpoint, prefix, dir) mirroring the main table."""
@@ -46,6 +52,8 @@ def run_rows():
     for dir_short, lr, ckpt, prefix in MODELS:
         for T in TEMPS:
             arms = [("", "control")] if T == "1.0" else [("", "raw"), ("_comp_t2", "t2")]
+            if (dir_short, T) in HIGHCAP:  # insert the raised-budget raw re-run right after raw
+                arms = [("", "raw"), (HIGHCAP_SUFFIX, "raw 50k"), ("_comp_t2", "t2")]
             for suf, arm in arms:
                 d = f"{EXP}/sl_4096_{dir_short}_ds_pg19_1k_limit_50_lr_{lr}_temp_{T}{suf}/progressive_prefixes"
                 rows.append((f"{prefix} T={T} {arm}", arm, T, dir_short, lr, ckpt, prefix, d))
@@ -55,7 +63,7 @@ def run_rows():
 # --------------------------------------------------------------------------- #
 # Compute (GPU): raw margin + raw top-1 (final stage) and total steps per run.
 # --------------------------------------------------------------------------- #
-def compute():
+def compute(only_missing=False):
     import torch
     from datasets import load_from_disk
     from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -93,12 +101,20 @@ def compute():
         return margin, top1, top1_logp
 
     device = torch.device("cuda")
+    # only_missing: merge into the committed cache and compute solely the labels not already present
+    # (so a partial re-run -- e.g. adding the high-budget rows -- leaves every existing value, incl.
+    # the expensive Llama-8B rows, byte-identical instead of recomputing with fresh bf16 noise).
     cache = {}
+    if only_missing and os.path.exists(CACHE):
+        with open(CACHE) as f:
+            cache = json.load(f)
     by_ckpt = {}
     for row in run_rows():
         by_ckpt.setdefault(row[5], []).append(row)
     for ckpt, rows in by_ckpt.items():
         rows = [r for r in rows if os.path.isdir(r[-1])]
+        if only_missing:
+            rows = [r for r in rows if r[0] not in cache]
         if not rows:
             continue
         print(f"\n=== {ckpt} ({len(rows)} runs) ===", flush=True)
@@ -153,7 +169,7 @@ def compute():
 # Render (no GPU): read cache, emit z/T columns as a LaTeX tabular.
 # --------------------------------------------------------------------------- #
 def _arm_tex(arm):
-    return {"raw": "raw", "t2": "$t^2$", "control": "control"}.get(arm, arm)
+    return {"raw": "raw", "raw 50k": "raw 50k", "t2": "$t^2$", "control": "control"}.get(arm, arm)
 
 
 def render():
@@ -199,10 +215,15 @@ def render():
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--compute", action="store_true", help="Recompute the cache (needs GPU + base models).")
+    ap.add_argument(
+        "--only-missing",
+        action="store_true",
+        help="With --compute: merge into the existing cache, computing only labels not already present.",
+    )
     ap.add_argument("--save", action="store_true", help="Render the .tex from the cache.")
     args = ap.parse_args()
     if args.compute:
-        compute()
+        compute(only_missing=args.only_missing)
     if args.save or not args.compute:
         render()
 

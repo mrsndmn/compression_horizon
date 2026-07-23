@@ -1,46 +1,49 @@
 % paper-lint: n_samples=50
 \begin{tabular}{lllll}
 \toprule
- Model               & Compressed Tokens           & Information Gain         & Trajectory Length        & PCA 99\%                    \\
+ Model                & Compressed Tokens           & Information Gain         & Trajectory Length         & PCA 99\%                    \\
 \midrule
- P1.4b T=0.1 raw     & 581.9 {\small $\pm$ 73.8}   & 966 {\small $\pm$ 103}   & 9792 {\small $\pm$ 727}  & 85.5 {\small $\pm$ 7.5}    \\
- P1.4b T=0.1 t2      & 563.8 {\small $\pm$ 72.1}   & 945 {\small $\pm$ 147}   & 9627 {\small $\pm$ 867}  & 85.16 {\small $\pm$ 9.74}  \\
+ P1.4b T=0.1 raw      & 581.9 {\small $\pm$ 73.8}   & 966 {\small $\pm$ 103}   & 9792 {\small $\pm$ 727}   & 85.5 {\small $\pm$ 7.5}    \\
+ P1.4b T=0.1 raw 50k  & 654.3 {\small $\pm$ 120.5}  & 1055 {\small $\pm$ 251}  & 13458 {\small $\pm$ 1764} & 123.14 {\small $\pm$ 18}   \\
+ P1.4b T=0.1 t2       & 563.8 {\small $\pm$ 72.1}   & 945 {\small $\pm$ 147}   & 9627 {\small $\pm$ 867}   & 85.16 {\small $\pm$ 9.74}  \\
  \midrule
- P1.4b T=0.25 raw    & 670.1 {\small $\pm$ 87.7}   & 1346 {\small $\pm$ 150}  & 9017 {\small $\pm$ 818}  & 69.8 {\small $\pm$ 5.94}   \\
- P1.4b T=0.25 t2     & 644.8 {\small $\pm$ 86.8}   & 1292 {\small $\pm$ 150}  & 8814 {\small $\pm$ 917}  & 68.12 {\small $\pm$ 6.03}  \\
+ P1.4b T=0.25 raw     & 670.1 {\small $\pm$ 87.7}   & 1346 {\small $\pm$ 150}  & 9017 {\small $\pm$ 818}   & 69.8 {\small $\pm$ 5.94}   \\
+ P1.4b T=0.25 raw 50k & 767.6 {\small $\pm$ 98.5}   & 1498 {\small $\pm$ 166}  & 11702 {\small $\pm$ 1224} & 93.46 {\small $\pm$ 14.1}  \\
+ P1.4b T=0.25 t2      & 644.8 {\small $\pm$ 86.8}   & 1292 {\small $\pm$ 150}  & 8814 {\small $\pm$ 917}   & 68.12 {\small $\pm$ 6.03}  \\
  \midrule
- P1.4b T=0.5 raw     & 600.3 {\small $\pm$ 70.4}   & 1669 {\small $\pm$ 230}  & 7595 {\small $\pm$ 723}  & 56.88 {\small $\pm$ 3.93}  \\
- P1.4b T=0.5 t2      & 621.2 {\small $\pm$ 72.8}   & 1742 {\small $\pm$ 175}  & 7688 {\small $\pm$ 801}  & 57.5 {\small $\pm$ 3.31}   \\
+ P1.4b T=0.5 raw      & 600.3 {\small $\pm$ 70.4}   & 1669 {\small $\pm$ 230}  & 7595 {\small $\pm$ 723}   & 56.88 {\small $\pm$ 3.93}  \\
+ P1.4b T=0.5 raw 50k  & 664.1 {\small $\pm$ 87.2}   & 1830 {\small $\pm$ 309}  & 9202 {\small $\pm$ 960}   & 69.44 {\small $\pm$ 7.48}  \\
+ P1.4b T=0.5 t2       & 621.2 {\small $\pm$ 72.8}   & 1742 {\small $\pm$ 175}  & 7688 {\small $\pm$ 801}   & 57.5 {\small $\pm$ 3.31}   \\
  \midrule
- P1.4b T=0.75 raw    & 505.2 {\small $\pm$ 76.3}   & 1771 {\small $\pm$ 198}  & 6363 {\small $\pm$ 617}  & 49.28 {\small $\pm$ 3.82}  \\
- P1.4b T=0.75 t2     & 497.4 {\small $\pm$ 68}     & 1708 {\small $\pm$ 236}  & 6349 {\small $\pm$ 545}  & 48.92 {\small $\pm$ 3.09}  \\
+ P1.4b T=0.75 raw     & 505.2 {\small $\pm$ 76.3}   & 1771 {\small $\pm$ 198}  & 6363 {\small $\pm$ 617}   & 49.28 {\small $\pm$ 3.82}  \\
+ P1.4b T=0.75 t2      & 497.4 {\small $\pm$ 68}     & 1708 {\small $\pm$ 236}  & 6349 {\small $\pm$ 545}   & 48.92 {\small $\pm$ 3.09}  \\
  \midrule
- P1.4b T=1.0 control & 420.7 {\small $\pm$ 60}     & 1622 {\small $\pm$ 190}  & 5449 {\small $\pm$ 572}  & 44.2 {\small $\pm$ 3.24}   \\
+ P1.4b T=1.0 control  & 420.7 {\small $\pm$ 60}     & 1622 {\small $\pm$ 190}  & 5449 {\small $\pm$ 572}   & 44.2 {\small $\pm$ 3.24}   \\
  \midrule
- P1.4b T=1.5 raw     & 273.9 {\small $\pm$ 51.6}   & 1120 {\small $\pm$ 185}  & 3598 {\small $\pm$ 521}  & 35.42 {\small $\pm$ 2.98}  \\
- P1.4b T=1.5 t2      & 269.7 {\small $\pm$ 52.4}   & 1107 {\small $\pm$ 179}  & 3556 {\small $\pm$ 530}  & 35.68 {\small $\pm$ 3.09}  \\
+ P1.4b T=1.5 raw      & 273.9 {\small $\pm$ 51.6}   & 1120 {\small $\pm$ 185}  & 3598 {\small $\pm$ 521}   & 35.42 {\small $\pm$ 2.98}  \\
+ P1.4b T=1.5 t2       & 269.7 {\small $\pm$ 52.4}   & 1107 {\small $\pm$ 179}  & 3556 {\small $\pm$ 530}   & 35.68 {\small $\pm$ 3.09}  \\
  \midrule
- P1.4b T=2.0 raw     & 168.5 {\small $\pm$ 28.5}   & 714 {\small $\pm$ 117}   & 2491 {\small $\pm$ 334}  & 29.58 {\small $\pm$ 3.47}  \\
- P1.4b T=2.0 t2      & 173.6 {\small $\pm$ 33.6}   & 727 {\small $\pm$ 113}   & 2551 {\small $\pm$ 380}  & 29.86 {\small $\pm$ 3.63}  \\
+ P1.4b T=2.0 raw      & 168.5 {\small $\pm$ 28.5}   & 714 {\small $\pm$ 117}   & 2491 {\small $\pm$ 334}   & 29.58 {\small $\pm$ 3.47}  \\
+ P1.4b T=2.0 t2       & 173.6 {\small $\pm$ 33.6}   & 727 {\small $\pm$ 113}   & 2551 {\small $\pm$ 380}   & 29.86 {\small $\pm$ 3.63}  \\
  \midrule
- L8b T=0.1 raw       & 1556.8 {\small $\pm$ 437.1} & 2141 {\small $\pm$ 1157} & 6395 {\small $\pm$ 1327} & 79.52 {\small $\pm$ 8.04}  \\
- L8b T=0.1 t2        & 1522.9 {\small $\pm$ 476.2} & 1894 {\small $\pm$ 1360} & 6226 {\small $\pm$ 1382} & 78.98 {\small $\pm$ 9.35}  \\
+ L8b T=0.1 raw        & 1556.8 {\small $\pm$ 437.1} & 2141 {\small $\pm$ 1157} & 6395 {\small $\pm$ 1327}  & 79.52 {\small $\pm$ 8.04}  \\
+ L8b T=0.1 t2         & 1522.9 {\small $\pm$ 476.2} & 1894 {\small $\pm$ 1360} & 6226 {\small $\pm$ 1382}  & 78.98 {\small $\pm$ 9.35}  \\
  \midrule
- L8b T=0.25 raw      & 1573.8 {\small $\pm$ 386.1} & 3947 {\small $\pm$ 1223} & 6043 {\small $\pm$ 1092} & 77.2 {\small $\pm$ 8.25}   \\
- L8b T=0.25 t2       & 1567.7 {\small $\pm$ 386.1} & 3956 {\small $\pm$ 1228} & 6038 {\small $\pm$ 994}  & 75.98 {\small $\pm$ 7.15}  \\
+ L8b T=0.25 raw       & 1573.8 {\small $\pm$ 386.1} & 3947 {\small $\pm$ 1223} & 6043 {\small $\pm$ 1092}  & 77.2 {\small $\pm$ 8.25}   \\
+ L8b T=0.25 t2        & 1567.7 {\small $\pm$ 386.1} & 3956 {\small $\pm$ 1228} & 6038 {\small $\pm$ 994}   & 75.98 {\small $\pm$ 7.15}  \\
  \midrule
- L8b T=0.5 raw       & 1519.2 {\small $\pm$ 406.9} & 4559 {\small $\pm$ 1224} & 5546 {\small $\pm$ 921}  & 76.44 {\small $\pm$ 7.89}  \\
- L8b T=0.5 t2        & 1532.6 {\small $\pm$ 441.9} & 4607 {\small $\pm$ 1289} & 5761 {\small $\pm$ 1064} & 75.84 {\small $\pm$ 7.86}  \\
+ L8b T=0.5 raw        & 1519.2 {\small $\pm$ 406.9} & 4559 {\small $\pm$ 1224} & 5546 {\small $\pm$ 921}   & 76.44 {\small $\pm$ 7.89}  \\
+ L8b T=0.5 t2         & 1532.6 {\small $\pm$ 441.9} & 4607 {\small $\pm$ 1289} & 5761 {\small $\pm$ 1064}  & 75.84 {\small $\pm$ 7.86}  \\
  \midrule
- L8b T=0.75 raw      & 1509 {\small $\pm$ 389.8}   & 4834 {\small $\pm$ 1186} & 5597 {\small $\pm$ 884}  & 75.58 {\small $\pm$ 8.87}  \\
- L8b T=0.75 t2       & 1551.6 {\small $\pm$ 435.1} & 4948 {\small $\pm$ 1215} & 5717 {\small $\pm$ 978}  & 74.8 {\small $\pm$ 7.68}   \\
+ L8b T=0.75 raw       & 1509 {\small $\pm$ 389.8}   & 4834 {\small $\pm$ 1186} & 5597 {\small $\pm$ 884}   & 75.58 {\small $\pm$ 8.87}  \\
+ L8b T=0.75 t2        & 1551.6 {\small $\pm$ 435.1} & 4948 {\small $\pm$ 1215} & 5717 {\small $\pm$ 978}   & 74.8 {\small $\pm$ 7.68}   \\
  \midrule
- L8b T=1.0 control   & 1423.5 {\small $\pm$ 402.8} & 4644 {\small $\pm$ 1148} & 5308 {\small $\pm$ 891}  & 74.58 {\small $\pm$ 9.47}  \\
+ L8b T=1.0 control    & 1423.5 {\small $\pm$ 402.8} & 4644 {\small $\pm$ 1148} & 5308 {\small $\pm$ 891}   & 74.58 {\small $\pm$ 9.47}  \\
  \midrule
- L8b T=1.5 raw       & 1267.4 {\small $\pm$ 379.4} & 4149 {\small $\pm$ 1073} & 4856 {\small $\pm$ 969}  & 73.1 {\small $\pm$ 9.7}    \\
- L8b T=1.5 t2        & 1257.8 {\small $\pm$ 357.2} & 4144 {\small $\pm$ 1063} & 4859 {\small $\pm$ 921}  & 73.98 {\small $\pm$ 10.18} \\
+ L8b T=1.5 raw        & 1267.4 {\small $\pm$ 379.4} & 4149 {\small $\pm$ 1073} & 4856 {\small $\pm$ 969}   & 73.1 {\small $\pm$ 9.7}    \\
+ L8b T=1.5 t2         & 1257.8 {\small $\pm$ 357.2} & 4144 {\small $\pm$ 1063} & 4859 {\small $\pm$ 921}   & 73.98 {\small $\pm$ 10.18} \\
  \midrule
- L8b T=2.0 raw       & 1117.6 {\small $\pm$ 325.7} & 3696 {\small $\pm$ 962}  & 4498 {\small $\pm$ 832}  & 71.34 {\small $\pm$ 9.16}  \\
- L8b T=2.0 t2        & 1118.1 {\small $\pm$ 322.8} & 3700 {\small $\pm$ 966}  & 4541 {\small $\pm$ 812}  & 72.02 {\small $\pm$ 8.33}  \\
+ L8b T=2.0 raw        & 1117.6 {\small $\pm$ 325.7} & 3696 {\small $\pm$ 962}  & 4498 {\small $\pm$ 832}   & 71.34 {\small $\pm$ 9.16}  \\
+ L8b T=2.0 t2         & 1118.1 {\small $\pm$ 322.8} & 3700 {\small $\pm$ 966}  & 4541 {\small $\pm$ 812}   & 72.02 {\small $\pm$ 8.33}  \\
 \bottomrule
 \end{tabular}

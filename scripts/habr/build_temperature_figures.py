@@ -43,7 +43,7 @@ _CYCLE = plt.rcParams["axes.prop_cycle"].by_key().get("color", ["C0", "C1"])
 C_TOK = _CYCLE[0]  # compressed tokens (left axis)
 C_IG = _CYCLE[1]  # information gain (right axis)
 
-ROW_RE = re.compile(r"^\s*(P1\.4b|L8b)\s+T=([0-9.]+)\s+(raw|t2|control)\s*&(.*?)\\\\")
+ROW_RE = re.compile(r"^\s*(P1\.4b|L8b)\s+T=([0-9.]+)\s+(raw 50k|raw|t2|control)\s*&(.*?)\\\\")
 
 
 def _first_float(cell: str) -> float:
@@ -58,9 +58,11 @@ def _std(cell: str) -> float:
     return float(m.group(1)) if m else 0.0
 
 
-def parse_table(path: Path) -> dict:
-    """Return data[prefix] = list of raw-arm dicts sorted by T (T=1 control merged in)."""
+def parse_table(path: Path) -> tuple[dict, dict]:
+    """Return (raw, hi): raw[prefix] = default-budget raw-arm dicts (T=1 control merged in), sorted by
+    T; hi[prefix] = raised-budget ``raw 50k`` re-run dicts (low-T only, overlaid as a second series)."""
     raw: dict[str, list[dict]] = {p: [] for p, _ in MODELS}
+    hi: dict[str, list[dict]] = {p: [] for p, _ in MODELS}
     for line in path.read_text(encoding="utf-8").splitlines():
         m = ROW_RE.match(line)
         if not m:
@@ -69,30 +71,43 @@ def parse_table(path: Path) -> dict:
         if arm == "t2":  # raw + control fully describe the plotted curve
             continue
         cells = rest.split("&")
-        raw[prefix].append(
-            {
-                "T": float(t_str),
-                "tokens": _first_float(cells[0]),
-                "tokens_std": _std(cells[0]),
-                "ig": _first_float(cells[1]),
-                "ig_std": _std(cells[1]),
-            }
-        )
-    for prefix in raw:
-        raw[prefix].sort(key=lambda r: r["T"])
-    return raw
+        rec = {
+            "T": float(t_str),
+            "tokens": _first_float(cells[0]),
+            "tokens_std": _std(cells[0]),
+            "ig": _first_float(cells[1]),
+            "ig_std": _std(cells[1]),
+        }
+        (hi if arm == "raw 50k" else raw)[prefix].append(rec)
+    for d in (raw, hi):
+        for prefix in d:
+            d[prefix].sort(key=lambda r: r["T"])
+    return raw, hi
 
 
-def _line_with_band(ax, ts, mean, std, color, marker, label):
-    """Mean line + shaded +/-1 std band, matching the paper figures' aesthetic."""
-    lo = [m - s for m, s in zip(mean, std)]
-    hi = [m + s for m, s in zip(mean, std)]
-    ax.fill_between(ts, lo, hi, alpha=0.18, color=color, zorder=1)
-    (line,) = ax.plot(ts, mean, marker=marker, linewidth=2.5, markersize=8, color=color, label=label, zorder=3)
+def _line_with_band(ax, ts, mean, std, color, marker, label, linestyle="-", fillstyle="full", band=True):
+    """Mean line + shaded +/-1 std band, matching the paper figures' aesthetic. The raised-budget
+    overlay passes linestyle='--', open markers, and band=False to stay visually distinct/uncluttered."""
+    if band:
+        lo = [m - s for m, s in zip(mean, std)]
+        hi = [m + s for m, s in zip(mean, std)]
+        ax.fill_between(ts, lo, hi, alpha=0.18, color=color, zorder=1)
+    (line,) = ax.plot(
+        ts,
+        mean,
+        marker=marker,
+        linestyle=linestyle,
+        linewidth=2.5,
+        markersize=8,
+        color=color,
+        label=label,
+        fillstyle=fillstyle,
+        zorder=3,
+    )
     return line
 
 
-def make_figure(data: dict, out: Path, dpi: int):
+def make_figure(raw: dict, hi: dict, out: Path, dpi: int):
     # Paper-style typography: larger fonts, default color cycle, clean grid.
     plt.rcParams.update(
         {
@@ -106,7 +121,7 @@ def make_figure(data: dict, out: Path, dpi: int):
     )
     fig, axes = plt.subplots(1, len(MODELS), figsize=(15, 6))
     for ax, (prefix, name) in zip(axes, MODELS):
-        rows = data[prefix]
+        rows = raw[prefix]
         ts = [r["T"] for r in rows]
 
         # Left axis: compressed tokens (reversed-U).
@@ -128,8 +143,40 @@ def make_figure(data: dict, out: Path, dpi: int):
         axr.tick_params(axis="y", labelcolor=C_IG)
         axr.set_ylim(bottom=0)
 
+        # Raised-budget (50k-step) low-T re-run overlay, where present (pythia). Dashed + open markers,
+        # no band, so it reads as a distinct series against the default-budget curve.
+        handles = [l1, l2]
+        hrows = hi.get(prefix, [])
+        if hrows:
+            hts = [r["T"] for r in hrows]
+            l3 = _line_with_band(
+                ax,
+                hts,
+                [r["tokens"] for r in hrows],
+                [r["tokens_std"] for r in hrows],
+                C_TOK,
+                "o",
+                "Compressed Tokens (50k budget)",
+                linestyle="--",
+                fillstyle="none",
+                band=False,
+            )
+            l4 = _line_with_band(
+                axr,
+                hts,
+                [r["ig"] for r in hrows],
+                [r["ig_std"] for r in hrows],
+                C_IG,
+                "s",
+                "Information Gain (50k budget)",
+                linestyle="--",
+                fillstyle="none",
+                band=False,
+            )
+            handles += [l3, l4]
+
         ax.set_title(name)
-        ax.legend(handles=[l1, l2], loc="lower center")
+        ax.legend(handles=handles, loc="lower center")
 
     fig.tight_layout()
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -144,9 +191,9 @@ def main() -> int:
     ap.add_argument("--dpi", type=int, default=150)
     args = ap.parse_args()
 
-    data = parse_table(args.table)
-    make_figure(data, HABR_PNG, dpi=args.dpi)
-    make_figure(data, PAPER_PDF, dpi=args.dpi)
+    raw, hi = parse_table(args.table)
+    make_figure(raw, hi, HABR_PNG, dpi=args.dpi)
+    make_figure(raw, hi, PAPER_PDF, dpi=args.dpi)
     return 0
 
 
