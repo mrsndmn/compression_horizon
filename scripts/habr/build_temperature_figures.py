@@ -4,12 +4,13 @@
 Parses the committed paper table ``paper/tables/progressive_temperature.tex``
 (the published CE-temperature sweep values, kept in sync with
 ``tab:progressive_temperature``) and renders a single twin-Y-axis figure with one
-panel per model (pythia-1.4b, Llama-3.1-8B). Left axis = compressed tokens
-(reversed-U, peaking at a cold temperature); right axis = information gain
-(peaking at a warmer temperature). The ``raw`` CE(z/T) arm (incl. the T=1 control)
-is plotted with std error bars; the raw and T^2 arms agree to within noise (see
+panel per model (pythia-1.4b, Llama-3.1-8B, Qwen3-4B; panels = MODELS). Left axis =
+compressed tokens (reversed-U, peaking at a cold temperature); right axis = information
+gain (peaking at a warmer temperature). The ``raw`` CE(z/T) arm (incl. the T=1 control)
+is drawn with a shaded +/-1 std band; the raw and T^2 arms agree to within noise (see
 tab:progressive_temperature), so only the raw arm is drawn to keep the twin axes
-readable.
+readable. Where a raised-budget ``raw 50k`` re-run exists (pythia low-T) it is overlaid
+as a dashed, open-marker series with no band.
 
 Style matches the paper's matplotlib figures (default color cycle, larger fonts,
 mean line + shaded std band, grid alpha 0.3, no in-figure title -- the caption
@@ -19,6 +20,7 @@ carries it). Outputs (regenerate deterministically from the committed table):
 
 Run:  python scripts/habr/build_temperature_figures.py
 """
+
 from __future__ import annotations
 
 import argparse
@@ -36,14 +38,16 @@ HABR_PNG = REPO / "habr" / "assets" / "ce_temperature_tokens_ig.png"
 PAPER_PDF = REPO / "paper" / "figures" / "ce_temperature_tokens_ig.pdf"
 
 # Table prefix -> display name (order = panel order, left to right).
-MODELS = [("P1.4b", "Pythia-1.4b"), ("L8b", "Llama-3.1-8B")]
+MODELS = [("P1.4b", "Pythia-1.4b"), ("L8b", "Llama-3.1-8B"), ("Q4b", "Qwen3-4B")]
 
 # Match the paper's figure palette (default matplotlib color cycle): C0 blue, C1 orange.
 _CYCLE = plt.rcParams["axes.prop_cycle"].by_key().get("color", ["C0", "C1"])
 C_TOK = _CYCLE[0]  # compressed tokens (left axis)
 C_IG = _CYCLE[1]  # information gain (right axis)
 
-ROW_RE = re.compile(r"^\s*(P1\.4b|L8b)\s+T=([0-9.]+)\s+(raw 50k|raw|t2|control)\s*&(.*?)\\\\")
+# Row-label prefixes derived from MODELS so adding a panel needs no regex edit.
+_PREFIX_RE = "|".join(re.escape(prefix) for prefix, _ in MODELS)
+ROW_RE = re.compile(rf"^\s*({_PREFIX_RE})\s+T=([0-9.]+)\s+(raw 50k|raw|t2|control)\s*&(.*?)\\\\")
 
 
 def _first_float(cell: str) -> float:
@@ -119,7 +123,7 @@ def make_figure(raw: dict, hi: dict, out: Path, dpi: int):
             "legend.fontsize": 13,
         }
     )
-    fig, axes = plt.subplots(1, len(MODELS), figsize=(15, 6))
+    fig, axes = plt.subplots(1, len(MODELS), figsize=(7.5 * len(MODELS), 6))
     for ax, (prefix, name) in zip(axes, MODELS):
         rows = raw[prefix]
         ts = [r["T"] for r in rows]

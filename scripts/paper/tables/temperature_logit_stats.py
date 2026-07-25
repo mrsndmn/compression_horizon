@@ -36,6 +36,7 @@ MODELS = [
     # (dir_short, lr, checkpoint, row_prefix)
     ("pythia-1.4b", "0.5", "EleutherAI/pythia-1.4b", "P1.4b"),
     ("Meta-Llama-3.1-8B", "0.1", "unsloth/Meta-Llama-3.1-8B", "L8b"),
+    ("Qwen3-4B", "0.1", "Qwen/Qwen3-4B", "Q4b"),
 ]
 N_SAMPLES_STAMP = 50
 

@@ -85,6 +85,7 @@ _CE_TEMP_MODELS = [
     # (dir_model_short, lr_suffix, row_label_prefix)
     ("pythia-1.4b", "0.5", "P1.4b"),
     ("Meta-Llama-3.1-8B", "0.1", "L8b"),
+    ("Qwen3-4B", "0.1", "Q4b"),
 ]
 _CE_TEMPS = ["0.1", "0.25", "0.5", "0.75", "1.0", "1.5", "2.0"]
 
