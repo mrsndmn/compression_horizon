@@ -211,13 +211,24 @@ def src_surprisal_steps() -> Set[str]:
 
 
 def src_margin_greedy() -> Set[str]:
+    """Runs behind tab:progressive_margin_greedy.
+
+    Mirrors the generator's nesting exactly: each model contributes an unprojected and
+    a low-dim row (``low in (None, low_dim_size)``), and each margin contributes a CE
+    and a +LM column (``_cm_<eps>`` and ``_cm_<eps>_lm_<eps>``). Covering only
+    ``_cm_<eps>`` on the low-dim base -- the first cut of this rule -- missed 32 run
+    dirs that the runtime trace then caught.
+    """
     mod = _load("scripts/paper/tables/progressive_margin_greedy_table.py")
     entries = []
-    for _label, short, low_dim, lr in mod.MODELS:
-        for margin in mod.MARGINS:
-            base = mod.run_dir_name(short, lr, low_dim)
-            entries.append(f"artifacts/experiments_progressive/{base}_cm_{margin}")
+    for _label, short, low_dim_size, lr in mod.MODELS:
+        for low in (None, low_dim_size):
+            base = mod.run_dir_name(short, lr, low)
             entries.append(f"artifacts/experiments_progressive/{base}")
+            for eps in mod.MARGINS:
+                for with_lm in (False, True):
+                    lm = f"_lm_{eps}" if with_lm else ""
+                    entries.append(f"artifacts/experiments_progressive/{base}_cm_{eps}{lm}")
     return _expand(entries)
 
 
