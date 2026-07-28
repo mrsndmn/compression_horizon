@@ -244,6 +244,32 @@ def src_depth_size_pivot() -> Set[str]:
     return _expand(entries)
 
 
+_FULLCRAM_RE = re.compile(r'\{\s*"train"\s*:\s*"(full|progr|prefix)"\s*,\s*"id"\s*:\s*"([^"]+)"')
+
+_FULLCRAM_ROOT = {
+    "full": "artifacts/experiments/*{id}",
+    "progr": "artifacts/experiments_progressive/{id}",
+    "prefix": "artifacts/experiments_prefix_tuning/{id}",
+}
+
+
+def src_full_cramming() -> Set[str]:
+    """Runs behind tab:full_vs_progressive{,_appendix} and tab:prefix_tuning_accuracy.
+
+    ``full_cramming_table.py`` holds its row lists as inline ``{"train":..., "id":...}``
+    dicts inside the arg-parsing branch, keyed by ``--type`` -- there is no module-level
+    constant to import. ``full`` ids are 8-char content hashes resolved by globbing
+    ``artifacts/experiments/*<id>``, which no literal path search can predict.
+
+    Commented-out rows are matched deliberately: a row disabled in the generator may
+    still back a ``.tex`` that is committed and ``\\input`` by the paper, and the whole
+    ``artifacts/experiments`` root is only ~1.6 GB, so erring toward keeping is nearly free.
+    """
+    text = (ROOT / "scripts/paper/tables/full_cramming_table.py").read_text()
+    entries = [_FULLCRAM_ROOT[train].format(id=rid) for train, rid in _FULLCRAM_RE.findall(text)]
+    return _expand(entries)
+
+
 def src_margin_table() -> Set[str]:
     """Convergence-margin runs behind tab:progressive_margin.
 
@@ -294,6 +320,7 @@ STATIC_SOURCES: Dict[str, Callable[[], Set[str]]] = {
     "temperature_logit_stats": src_temperature_logit_stats,
     "depth_size_pivot": src_depth_size_pivot,
     "margin_table": src_margin_table,
+    "full_cramming": src_full_cramming,
     "hf_uploader": src_hf_uploader,
     "text_refs": src_text_refs,
 }
