@@ -36,6 +36,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import time
 from pathlib import Path
@@ -74,6 +75,65 @@ TIER1_RUN_MARKERS = ("_old_backup_", "_invalid_", "_deprecated_")
 # whatever the keep-set says. Cheap guard against deleting under a running job.
 FRESH_DAYS = 7
 
+# Cache files that a paper table renders from. A directory holding one of these is
+# never deleted on the strength of its *name* alone, however dead that name looks.
+#
+# This guard exists because the name heuristic was caught red-handed: the only four
+# surviving surprisal_steps_cache.json files -- the sole backing for
+# tab:surprisal_steps_correlation -- live in the four
+# sl_4096_*_old_backup_26.06.26 dirs that TIER1_RUN_MARKERS flags for deletion. The
+# generator points at the non-backup paths, where the cache is absent, so the table is
+# already non-regenerable and those backups are the last copy of that computation.
+# Deleting them would have been silent and irreversible.
+PAPER_CACHE_FILES = {
+    "low_dimensional_cache.json",
+    "surprisal_steps_cache.json",
+    "full_cramming_table_cache.json",
+    "prefix_tuning_table_cache.json",
+    "greedy_accuracy_cache.json",
+}
+
+
+def paper_caches_in(path: Path) -> List[str]:
+    """Names of paper cache files found anywhere under ``path``."""
+    found: Set[str] = set()
+    for dirpath, _dirnames, filenames in os.walk(path, onerror=lambda e: None):
+        for fn in filenames:
+            if fn in PAPER_CACHE_FILES:
+                found.add(fn)
+    return sorted(found)
+
+
+# Suffixes that mark a directory as a snapshot of another run rather than a run of
+# its own. Stripping one yields the "base" run the snapshot was taken from.
+_SNAPSHOT_SUFFIX_RE = re.compile(r"_(?:old_backup|backup|old|archive)(?:_[0-9.]+)?$")
+
+
+def base_run_of(rel: str) -> str | None:
+    """``.../sl_4096_X_lr_0.1_old_backup_26.06.26`` -> ``.../sl_4096_X_lr_0.1``."""
+    root, _, name = rel.rpartition("/")
+    stripped = _SNAPSHOT_SUFFIX_RE.sub("", name)
+    return f"{root}/{stripped}" if stripped != name else None
+
+
+def last_copy_caches(rel: str, keep: Set[str]) -> List[str]:
+    """Paper caches in ``rel`` that are the last copy for a run we are keeping.
+
+    A cache only matters if some *kept* run needs it and does not have it. The
+    surprisal case: the generator wants
+    ``sl_4096_X_lr_0.1/progressive_prefixes/surprisal_steps_cache.json``; that path is
+    empty, and the only copy sits in ``sl_4096_X_lr_0.1_old_backup_26.06.26``. Deleting
+    the snapshot loses it for good.
+
+    Caches inside a run that nothing references are not protected -- no generator will
+    ever look for them.
+    """
+    base = base_run_of(rel)
+    if base is None or base not in keep:
+        return []
+    have_in_base = set(paper_caches_in(ROOT / base)) if (ROOT / base).exists() else set()
+    return [c for c in paper_caches_in(ROOT / rel) if c not in have_in_base]
+
 
 def du_bytes(path: Path) -> int:
     total = 0
@@ -101,10 +161,14 @@ def load_keepset(path: str) -> Set[str]:
     return {ln.strip() for ln in Path(path).read_text().splitlines() if ln.strip()}
 
 
-def build_candidates(keep: Set[str], tiers: List[int]) -> Tuple[Dict[int, List[str]], List[str]]:
-    """Return {tier: [repo-relative paths]} plus the list of skipped-as-fresh paths."""
+def build_candidates(
+    keep: Set[str], tiers: List[int], allow_cache_drop: bool = False
+) -> Tuple[Dict[int, List[str]], List[str], Dict[str, List[str]]]:
+    """Return {tier: [repo-relative paths]}, skipped-as-fresh paths, and blocked
+    paths mapped to the paper caches they hold."""
     cands: Dict[int, List[str]] = {0: [], 1: [], 2: []}
     fresh_skipped: List[str] = []
+    cache_blocked: Dict[str, List[str]] = {}
     cutoff = time.time() - FRESH_DAYS * 86400
 
     def consider(tier: int, path: Path) -> None:
@@ -114,6 +178,11 @@ def build_candidates(keep: Set[str], tiers: List[int]) -> Tuple[Dict[int, List[s
         if newest_mtime(path) > cutoff:
             fresh_skipped.append(rel)
             return
+        if not allow_cache_drop:
+            caches = last_copy_caches(rel, keep)
+            if caches:
+                cache_blocked[rel] = caches
+                return
         cands[tier].append(rel)
 
     if 0 in tiers:
@@ -146,7 +215,7 @@ def build_candidates(keep: Set[str], tiers: List[int]) -> Tuple[Dict[int, List[s
                     continue
                 consider(2, run)
 
-    return cands, fresh_skipped
+    return cands, fresh_skipped, cache_blocked
 
 
 def main() -> int:
@@ -158,6 +227,11 @@ def main() -> int:
     ap.add_argument("--apply", action="store_true", help="move candidates into a trash dir")
     ap.add_argument("--trash", help="trash dir (default run/artifacts_cleanup/trash_<stamp>)")
     ap.add_argument("--restore", help="move everything in this trash dir back and exit")
+    ap.add_argument(
+        "--allow-cache-drop",
+        action="store_true",
+        help="delete candidates even if they hold a paper cache file (see PAPER_CACHE_FILES)",
+    )
     args = ap.parse_args()
 
     if args.restore:
@@ -177,7 +251,7 @@ def main() -> int:
 
     keep = load_keepset(args.keepset)
     tiers = sorted(set(args.tier)) if args.tier else [0, 1, 2]
-    cands, fresh_skipped = build_candidates(keep, tiers)
+    cands, fresh_skipped, cache_blocked = build_candidates(keep, tiers, args.allow_cache_drop)
 
     sizes = {rel: du_bytes(ROOT / rel) for tier in tiers for rel in cands[tier]}
     grand = 0
@@ -199,6 +273,14 @@ def main() -> int:
             print(f"\nskipped as modified within {FRESH_DAYS}d (possibly live): {len(fresh_skipped)}")
             for rel in fresh_skipped[:10]:
                 print(f"  ~ {rel}")
+        if cache_blocked:
+            blocked_gb = sum(du_bytes(ROOT / rel) for rel in cache_blocked) / 1e9
+            print(f"\nBLOCKED -- holds a paper cache file ({len(cache_blocked)} paths, {blocked_gb:.1f} GB):")
+            for rel, caches in sorted(cache_blocked.items())[:15]:
+                print(f"  x {rel}\n      {', '.join(caches)}")
+            if len(cache_blocked) > 15:
+                print(f"  ... and {len(cache_blocked) - 15} more")
+            print("  These are excluded regardless of tier. Review each before using --allow-cache-drop.")
 
     plan = {
         "tiers": tiers,
@@ -206,6 +288,7 @@ def main() -> int:
         "paths": [rel for tier in tiers for rel in cands[tier]],
         "sizes_bytes": sizes,
         "fresh_skipped": fresh_skipped,
+        "cache_blocked": cache_blocked,
         "total_bytes": sum(sizes.values()),
     }
     if args.manifest:

@@ -20,6 +20,19 @@ means the deleted data was load-bearing: restore the trash and narrow the tier.
 ``--compare`` intentionally does not run ``make tables`` itself. Regeneration must be
 the caller's explicit step so a failed regeneration is visible as a failed command
 rather than being swallowed here.
+
+Known limitation -- hash equality alone can produce a false PASS. If a generator was
+already failing before the deletion, it does not rewrite its ``.tex``, so the hash is
+unchanged and this script reports "identical" whether or not the deletion made things
+worse. Some generators *are* currently failing (``tab:surprisal_steps_correlation``
+needs a ``--compute`` pass; ``tables.sh`` names five tables absent from the registry).
+So pair every comparison with a generator-status diff::
+
+    python scripts/cleanup/trace_regen.py --out before.txt   # note the failure list
+    ...apply a tier...
+    python scripts/cleanup/trace_regen.py --out after.txt    # same failures, no more
+
+A generator that newly fails is a deletion regression even when every hash matches.
 """
 
 from __future__ import annotations
