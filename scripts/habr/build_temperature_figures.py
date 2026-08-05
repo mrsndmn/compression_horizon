@@ -6,7 +6,9 @@ Parses the committed paper table ``paper/tables/progressive_temperature.tex``
 ``tab:progressive_temperature``) and renders a single twin-Y-axis figure with one
 panel per model (pythia-1.4b, Llama-3.1-8B, Qwen3-4B; panels = MODELS). Left axis =
 compressed tokens (reversed-U, peaking at a cold temperature); right axis = information
-gain (peaking at a warmer temperature). The ``raw`` CE(z/T) arm (incl. the T=1 control)
+gain, measured under the temperature the run's own loss used -- H_1(base) - H_T(mem), see
+``scripts/paper/tables/temperature_information_gain.py``, which the table generator layers
+onto the IG column at render time. The ``raw`` CE(z/T) arm (incl. the T=1 control)
 is drawn with a shaded +/-1 std band; the raw and T^2 arms agree to within noise (see
 tab:progressive_temperature), so only the raw arm is drawn to keep the twin axes
 readable. Where a raised-budget ``raw 50k`` re-run exists (pythia low-T) it is overlaid
