@@ -105,17 +105,19 @@ def make_figure(raw: dict, hi: dict, ig: dict, out: Path, dpi: int):
 
             axr = ax.twinx()
             handles = [l1]
-            if show_raw_ref:  # published (unscaled, T=1) IG for comparison, same units
-                published = {r["T"]: r["ig"] for r in raw[prefix]}
+            if show_raw_ref:  # unscaled (raw-logit, T=1) IG for comparison, same units
+                unscaled = _attach(raw[prefix], ig, prefix, "raw", "ig_raw")
+                unscaled += _attach(raw[prefix], ig, prefix, "control", "ig_raw")
+                unscaled = {r["T"]: r["ig"] for r in unscaled}
                 handles.append(
                     _line_with_band(
                         axr,
                         ts,
-                        [published[t] for t in ts],
+                        [unscaled[t] for t in ts],
                         [0.0] * len(ts),
                         C_RAWREF,
                         "s",
-                        "Information Gain (raw logits, published)",
+                        "Information Gain (raw logits, unscaled)",
                         linestyle=":",
                         fillstyle="none",
                         band=False,

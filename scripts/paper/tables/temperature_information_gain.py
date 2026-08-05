@@ -153,6 +153,7 @@ def compute(only_missing=False):
                 "model": prefix,
                 "T": float(T),
                 "arm": arm,
+                "dir": d,  # keyed on by the table generator's rescaled-IG override
                 "n": len(ig_raw),
                 "n_tokens_mean": float(np.mean(n_toks)),
                 "ig_stored_mean": float(np.mean(ig_stored)),
