@@ -45,8 +45,51 @@ PRECOMPUTED_INFO_GAIN = {
 }
 
 
+# CE-temperature runs report information gain under the temperature their own loss used, i.e.
+# H_1(base) - H_T(mem): the base LM is read through its ordinary T=1 softmax, while the crammed side
+# is read through the CE(z/T) softmax it was optimized under. The trainer's stored
+# ``information_gain_bits`` is instead a plain T=1 cross-entropy on the raw logits, which understates
+# cold runs because a run trained at temperature T ends with reconstruction logits scaled z ~ T (see
+# tab:temperature_logit_stats). Cache is built by scripts/paper/tables/temperature_information_gain.py
+# (--compute, needs a GPU); when it is absent the stored raw values are used unchanged, so every other
+# table is untouched.
+RESCALED_TEMPERATURE_IG_CACHE = "artifacts/paper/temperature_information_gain.json"
+RESCALED_TEMPERATURE_IG_KEY = "ig_comp_only"
+_rescaled_temperature_ig: Optional[Dict[str, Dict[str, float]]] = None
+
+
 def _normalize_path(path: str) -> str:
     return os.path.normpath(os.path.abspath(path))
+
+
+def load_rescaled_temperature_info_gain() -> Dict[str, Dict[str, float]]:
+    """Normalized run dir -> {mean, std} of the temperature-rescaled information gain (bits)."""
+    global _rescaled_temperature_ig
+    if _rescaled_temperature_ig is None:
+        table: Dict[str, Dict[str, float]] = {}
+        if os.path.exists(RESCALED_TEMPERATURE_IG_CACHE):
+            with open(RESCALED_TEMPERATURE_IG_CACHE) as handle:
+                for entry in json.load(handle).values():
+                    if "dir" not in entry:
+                        continue
+                    table[_normalize_path(entry["dir"])] = {
+                        "mean": float(entry[f"{RESCALED_TEMPERATURE_IG_KEY}_mean"]),
+                        "std": float(entry[f"{RESCALED_TEMPERATURE_IG_KEY}_std"]),
+                    }
+        _rescaled_temperature_ig = table
+    return _rescaled_temperature_ig
+
+
+def apply_rescaled_temperature_info_gain(dataset_path: str, stats: Dict[str, Any]) -> bool:
+    values = load_rescaled_temperature_info_gain().get(_normalize_path(dataset_path))
+    if values is None:
+        return False
+    stats["information_gain_from_dataset"] = {
+        "mean": values["mean"],
+        "std": values["std"],
+        "count": None,
+    }
+    return True
 
 
 def apply_precomputed_info_gain(dataset_path: str, stats: Dict[str, Any]) -> bool:
@@ -855,6 +898,10 @@ def extract_trajectory(
         if apply_precomputed_info_gain(dataset_path, cached_stats):
             cache_data["stats"] = cached_stats
             save_experiment_cache(cache_file, cache_data)
+        # In-memory only, and deliberately after the save above: the experiment cache keeps the
+        # trainer's raw T=1 information gain, and the temperature-rescaled value is layered on top
+        # at render time from its own cache.
+        apply_rescaled_temperature_info_gain(dataset_path, cached_stats)
         embeddings = deserialize_array(cached_embeddings)
         final_embedding = deserialize_array(cached_final_embedding)
         return embeddings, list(cached_labels), cached_stats, final_embedding
@@ -1089,6 +1136,8 @@ def extract_trajectory(
     }
 
     save_experiment_cache(cache_file, cache_data)
+
+    apply_rescaled_temperature_info_gain(dataset_path, stats)  # render-time only, see cache branch
 
     return X, labels, stats, final_embedding
 
