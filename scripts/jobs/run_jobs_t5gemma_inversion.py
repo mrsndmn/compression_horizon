@@ -153,6 +153,11 @@ def render_eval_job(arm: dict, benchmark: str, artifacts_root: str) -> tuple[lis
         "--dtype bf16",
         "--loss_type cross_entropy",
         "--num_alignment_layers 0",
+        # Attention knockout is on by default in these evaluators, but it masks attention to the
+        # memory's *decoder* position -- which an encoder-decoder does not have, so the analysis has
+        # no counterpart there. Disabled on every arm so all three measure the same thing; this
+        # experiment reports Base / Acc / Conv%, not the knockout sweep.
+        "--no_intervention",
     ]
 
     exp_suffix = f"{exp_suffix}_samples_{EVAL_LIMIT_SAMPLES}"

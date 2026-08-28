@@ -18,7 +18,7 @@ import torch
 from datasets import load_dataset
 from torch.optim import AdamW
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer, get_scheduler
+from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer, get_scheduler
 
 from compression_horizon.analysis.attention_intervention import (
     build_intervention_result,
@@ -27,7 +27,18 @@ from compression_horizon.analysis.attention_intervention import (
     get_decoder_layers,
     print_intervention_summary,
 )
-from compression_horizon.analysis.perplexity import estimate_token_perplexity, estimate_token_perplexity_full_labels
+from compression_horizon.analysis.encoder_decoder_eval import (
+    compress_prefixes_batch_encoder_decoder,
+    compute_ppl_compression_encoder_decoder,
+    extract_compression_ppls,
+)
+from compression_horizon.analysis.perplexity import estimate_token_perplexity
+from compression_horizon.train.encoder_decoder import (
+    ENCODER_INPUT,
+    INJECTION_SITES,
+    EncoderDecoderCrammingAdapter,
+    is_encoder_decoder_model,
+)
 from compression_horizon.train.loss import compute_hybrid_cross_entropy_and_alignment_loss, token_argmax_match_rate_with_prefix
 from compression_horizon.utils.launch import freeze_model_parameters, get_device, resolve_torch_dtype, set_launch_seed
 from compression_horizon.utils.tokens import count_text_characters, count_text_tokens
@@ -46,6 +57,7 @@ def compress_prefixes_batch(
     inverted_alignment: bool = False,
     device: Optional[torch.device] = None,
     add_special_tokens: bool = True,
+    adapter: Optional[EncoderDecoderCrammingAdapter] = None,
 ) -> list[dict[str, torch.Tensor | float]]:
     """Compress multiple text prefixes into compression tokens (batched).
 
@@ -63,6 +75,18 @@ def compress_prefixes_batch(
     """
     if device is None:
         device = get_device()
+
+    if adapter is not None:
+        return compress_prefixes_batch_encoder_decoder(
+            adapter=adapter,
+            tokenizer=tokenizer,
+            texts=texts,
+            num_compression_tokens=num_compression_tokens,
+            max_steps=max_steps,
+            learning_rate=learning_rate,
+            device=device,
+            add_special_tokens=add_special_tokens,
+        )
 
     model = model.to(device)
     model.eval()
@@ -555,6 +579,7 @@ def compute_ppl_baseline_batch(
     endings: list[str],
     device: Optional[torch.device] = None,
     add_special_tokens: bool = True,
+    adapter: Optional[EncoderDecoderCrammingAdapter] = None,
 ) -> tuple[list[float], list[float]]:
     """Compute perplexity of context + ending pairs without compression tokens (batched).
 
@@ -593,8 +618,15 @@ def compute_ppl_baseline_batch(
     input_context_ids = tokenizer(f"{context} ", add_special_tokens=add_special_tokens)["input_ids"]
     context_len = len(input_context_ids)
 
-    # Forward pass
-    outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+    # Forward pass. Under an encoder-decoder the same "plain LM" quantity is the decoder
+    # teacher-forced on the text with nothing on the encoder side; its logits carry one leading
+    # position (the decoder start token), so the aligned window starts at LOGITS_OFFSET.
+    if adapter is not None:
+        outputs = adapter.forward_without_memory(input_ids=input_ids, attention_mask=attention_mask)
+        base_offset = adapter.LOGITS_OFFSET
+    else:
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+        base_offset = 0
 
     # Compute PPL for each sample
     ppls = []
@@ -602,7 +634,7 @@ def compute_ppl_baseline_batch(
     for i in range(len(full_texts)):
         # Perplexity on all sequence
         sequence_len = int(attention_mask[i].sum().item())
-        sample_logits = outputs.logits[i : i + 1, :sequence_len]  # [1, sequence, vocabulary]
+        sample_logits = outputs.logits[i : i + 1, base_offset : base_offset + sequence_len]  # [1, sequence, vocabulary]
         sample_input_ids = input_ids[i : i + 1, :sequence_len]  # [1, sequence]
         ppl = estimate_token_perplexity(sample_logits, sample_input_ids)
         if math.isnan(ppl):
@@ -627,6 +659,7 @@ def compute_ppl_compression_batch(
     endings: list[str],
     device: Optional[torch.device] = None,
     add_special_tokens: bool = True,
+    adapter: Optional[EncoderDecoderCrammingAdapter] = None,
 ) -> list[float]:
     """Compute perplexity of context + ending pairs using compression tokens (batched).
 
@@ -663,6 +696,18 @@ def compute_ppl_compression_batch(
         context_len = len(input_context_ids)
     else:
         context_len = 0
+
+    if adapter is not None:
+        # The memory conditions the decoder through cross-attention, so there is nothing to
+        # concatenate and nothing to pad by hand -- the tokenizer's padding plus the decoder
+        # attention mask already describe the batch.
+        return compute_ppl_compression_encoder_decoder(
+            adapter=adapter,
+            compression_token_embeddings=compression_token_embeddings,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            context_len=context_len,
+        )
 
     # Get token embeddings for all texts
     token_embeddings = model.get_input_embeddings()(input_ids)  # [batch_size, sequence, hidden]
@@ -722,40 +767,14 @@ def compute_ppl_compression_batch(
     # Forward pass
     outputs = model(inputs_embeds=batch_embeddings, attention_mask=batch_attention)
 
-    # Compute PPL for each sample
-    ppls = []
-    edge_ppls = []
-    endings_ppls = []
-    for i in range(len(full_texts)):
-        # Perplexity on all sequence
-        sequence_len = int(attention_mask[i].sum().item())
-        sample_logits = outputs.logits[
-            i : i + 1, num_compression_tokens : num_compression_tokens + sequence_len
-        ]  # [1, sequence, vocabulary]
-        sample_input_ids = input_ids[i : i + 1, :sequence_len]  # [1, sequence]
-        ppl = estimate_token_perplexity(sample_logits, sample_input_ids)
-        if math.isnan(ppl):
-            ppl = float("inf")
-        ppls.append(ppl)
-        # Perplexity with compression tokens edge
-        sample_logits = outputs.logits[
-            i : i + 1, num_compression_tokens - 1 : num_compression_tokens + sequence_len
-        ]  # [1, sequence + 1, vocabulary]
-        sample_input_ids = input_ids[i : i + 1, :sequence_len]  # [1, sequence]
-        edge_ppl = estimate_token_perplexity_full_labels(sample_logits, sample_input_ids)
-        if math.isnan(edge_ppl):
-            edge_ppl = float("inf")
-        edge_ppls.append(edge_ppl)
-        # Perplexity only on endings
-        sample_logits = outputs.logits[
-            i : i + 1, num_compression_tokens + max(0, context_len - 1) : num_compression_tokens + sequence_len, :
-        ]  # [1, ending, vocabulary]
-        sample_input_ids = input_ids[i : i + 1, max(0, context_len - 1) : sequence_len]  # [1, ending]
-        ending_ppl = estimate_token_perplexity(sample_logits, sample_input_ids)
-        if math.isnan(ending_ppl):
-            ending_ppl = float("inf")
-        endings_ppls.append(ending_ppl)
-    return ppls, edge_ppls, endings_ppls
+    return extract_compression_ppls(
+        logits=outputs.logits,
+        input_ids=input_ids,
+        attention_mask=attention_mask,
+        num_texts=len(full_texts),
+        context_len=context_len,
+        logits_offset=num_compression_tokens,
+    )
 
 
 def answer_key_to_index(answer_key: str, labels: list[str]) -> int:
@@ -943,6 +962,17 @@ def main():
         default=1000,
         help="Max optimization steps per progressive stage.",
     )
+    parser.add_argument(
+        "--encoder_decoder_injection_site",
+        type=str,
+        default=ENCODER_INPUT,
+        choices=list(INJECTION_SITES),
+        help=(
+            "Where the memory embedding is injected for encoder-decoder checkpoints: "
+            "'encoder_input' (the decoder reaches it only through the encoder stack) or "
+            "'encoder_output' (the encoder never runs). Ignored for decoder-only checkpoints."
+        ),
+    )
     args = parser.parse_args()
 
     # Set random seed
@@ -952,8 +982,24 @@ def main():
     device = get_device()
     # Load model
     print(f"Loading model from {args.model_checkpoint}...")
-    model = AutoModelForCausalLM.from_pretrained(args.model_checkpoint, dtype=torch_dtype)
+    model_config = AutoConfig.from_pretrained(args.model_checkpoint)
+    if getattr(model_config, "is_encoder_decoder", False):
+        model = AutoModelForSeq2SeqLM.from_pretrained(args.model_checkpoint, dtype=torch_dtype)
+    else:
+        model = AutoModelForCausalLM.from_pretrained(args.model_checkpoint, dtype=torch_dtype)
     print("Loaded model dtype:", next(model.parameters()).dtype)
+    # Encoder-decoder cramming: the memory lives on the encoder side, so every logits offset in
+    # this script becomes the decoder start token rather than the memory positions. None (and the
+    # original code path) for decoder-only checkpoints.
+    adapter = None
+    if is_encoder_decoder_model(model):
+        adapter = EncoderDecoderCrammingAdapter(model, injection_site=args.encoder_decoder_injection_site)
+        print(f"[encoder-decoder] evaluating with injection_site={adapter.injection_site}")
+        if args.progressive:
+            raise NotImplementedError(
+                "--progressive compression is not supported for encoder-decoder checkpoints in this "
+                "evaluator: its staged loop still assumes the decoder-only [mem] [sequence] layout."
+            )
     # Get number of layers for intervention mode
     num_model_layers = None
     if args.intervention:
@@ -1056,6 +1102,7 @@ def main():
                     endings=batch_endings_list[sample_idx],
                     device=device,
                     add_special_tokens=add_special_tokens,
+                    adapter=adapter,
                 )
             except Exception as e:
                 print(f"Error computing baseline PPL for sample {start_idx + sample_idx}: {e}")
@@ -1097,6 +1144,7 @@ def main():
                     inverted_alignment=args.inverted_alignment,
                     device=device,
                     add_special_tokens=add_special_tokens,
+                    adapter=adapter,
                 )
         except Exception as e:
             print(f"Error compressing batch {batch_idx}: {e}")
@@ -1145,6 +1193,7 @@ def main():
                     endings=batch_endings_list[sample_idx],
                     device=device,
                     add_special_tokens=add_special_tokens,
+                    adapter=adapter,
                 )
                 sample_only_ppls, sample_only_edge_ppls, sample_only_endings_ppls = compute_ppl_compression_batch(
                     model=model,
@@ -1154,6 +1203,7 @@ def main():
                     endings=batch_endings_list[sample_idx],
                     device=device,
                     add_special_tokens=add_special_tokens,
+                    adapter=adapter,
                 )
             except Exception as e:
                 print(f"Error computing compression PPL for sample {start_idx + sample_idx}: {e}")
