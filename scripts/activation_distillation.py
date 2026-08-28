@@ -8,7 +8,13 @@ import sys
 import transformers
 from accelerate import PartialState
 from datasets import Dataset, load_dataset
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, DataCollatorForLanguageModeling
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoModelForSeq2SeqLM,
+    AutoTokenizer,
+    DataCollatorForLanguageModeling,
+)
 
 from compression_horizon.train import (
     CompressionHeadTrainer,
@@ -323,9 +329,21 @@ if __name__ == "__main__":
                 attn_implementation="flash_attention_2",
             )
     else:
-        model = AutoModelForCausalLM.from_pretrained(
-            training_args.model_checkpoint, torch_dtype=torch_dtype, attn_implementation="flash_attention_2"
-        )
+        base_config = AutoConfig.from_pretrained(training_args.model_checkpoint)
+        if getattr(base_config, "is_encoder_decoder", False):
+            # Seq2seq checkpoint (e.g. T5Gemma): the memory embedding goes on the encoder side and
+            # the decoder reconstructs the text through cross-attention. See
+            # src/compression_horizon/train/encoder_decoder.py. sdpa rather than flash_attention_2:
+            # under N=1 cramming the encoder self-attends over a single position and the seq2seq
+            # cross-attention path is not uniformly flash-capable.
+            print(f"[model] encoder-decoder checkpoint detected: {training_args.model_checkpoint}")
+            model = AutoModelForSeq2SeqLM.from_pretrained(
+                training_args.model_checkpoint, torch_dtype=torch_dtype, attn_implementation="sdpa"
+            )
+        else:
+            model = AutoModelForCausalLM.from_pretrained(
+                training_args.model_checkpoint, torch_dtype=torch_dtype, attn_implementation="flash_attention_2"
+            )
         for p in model.parameters():
             p.requires_grad = False
 

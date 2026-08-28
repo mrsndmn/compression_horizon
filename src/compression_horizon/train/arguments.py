@@ -76,6 +76,19 @@ class MyTrainingArguments(TrainingArguments):
         default=False,
         metadata={"help": "Disable BOS token insertion during dataset tokenization."},
     )
+    encoder_decoder_injection_site: str = field(
+        default="encoder_input",
+        metadata={
+            "help": (
+                "Where the memory embedding is injected for encoder-decoder (seq2seq) checkpoints. "
+                "'encoder_input': the memory is the encoder's input, so the decoder reaches it only "
+                "through the encoder stack and cross-attention (the encoder hypothesis). "
+                "'encoder_output': the memory IS the encoder output the decoder cross-attends to, so "
+                "the encoder never runs (the control that removes the encoder). Ignored for "
+                "decoder-only checkpoints. See docs/adr/0005-encoder-effect-attributed-by-injection-site-control.md."
+            )
+        },
+    )
 
     # --- Compression embedding shape & initialization --------------------
     number_of_mem_tokens: int = field(

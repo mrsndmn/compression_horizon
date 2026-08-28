@@ -7,7 +7,9 @@ implementation detail. See `docs/adr/` for decisions and `src/` for code.
 Compressing a span of text into one (or a few) learnable **memory embedding(s)** by
 gradient descent, optimizing the embedding(s) so the frozen language model reconstructs
 the original tokens. The base, non-staged method.
-_Avoid:_ "single-shot cramming", "direct cramming".
+_Avoid:_ "single-shot cramming", "direct cramming", "textual inversion" (the
+diffusion-literature name for the same optimize-an-embedding-against-a-frozen-model
+procedure — say Full Cramming in this project).
 
 ## Progressive Cramming
 A staged variant of cramming that grows the compressed span incrementally: each stage
@@ -48,6 +50,27 @@ distribution-shape effect from the effective step-size effect. The uncompensated
 form omits the `T^2` factor, so the gradient scales ~`1/T`. Both reduce to plain
 cross-entropy at `T = 1`.
 _Avoid:_ "temperature normalization".
+
+## Encoder-Input Inversion
+Cramming into an encoder-decoder model by placing the memory embedding in the
+**encoder's input** embedding space, so the decoder can only reach it through the whole
+encoder stack and then cross-attention. The encoder-decoder analogue of Full/Progressive
+Cramming, and the arm predicted to preserve more semantics.
+_Avoid:_ "encoder prompt", "encoder soft prompt".
+
+## Encoder-Output Inversion
+The control arm that removes the encoder: the memory embedding is optimized directly in
+the **encoder's output** space — the representation the decoder's cross-attention reads —
+so the encoder is never run. Any advantage of [[Encoder-Input Inversion]] over this arm is
+attributable to the encoder itself rather than to cross-attention or to encoder-decoder
+pretraining.
+_Avoid:_ "cross-attention prompt", "latent injection".
+
+## Retention Gap
+The loss of downstream capability caused by replacing a prefix with its memory embedding:
+base accuracy minus crammed accuracy, in percentage points. Comparing gaps rather than
+absolute accuracies keeps models of differing base capability comparable.
+_Avoid:_ "accuracy drop" (ambiguous about which baseline), "degradation".
 
 ## Public Repo (progressive_cramming)
 The published reproducibility repository (FusionBrainLab/progressive_cramming). Houses

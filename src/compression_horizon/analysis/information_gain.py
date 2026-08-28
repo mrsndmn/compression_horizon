@@ -116,6 +116,53 @@ def compute_information_gain(
 
 
 @torch.no_grad()
+def compute_information_gain_encoder_decoder(
+    *,
+    adapter,
+    input_ids: torch.Tensor,  # [batch, sequence] -- the reconstruction target
+    attention_mask: torch.Tensor,  # [batch, sequence]
+    compression_token_embeddings: torch.Tensor,  # [batch, compression, hidden]
+    compression_attention_mask: torch.Tensor,  # [batch, compression]
+) -> list[float]:
+    """Per-sample Information Gain in bits for encoder-decoder cramming.
+
+    Same quantity as :func:`compute_information_gain` — the bits the memory saves on the target —
+    but the two forwards differ only in what the *encoder* side carries: nothing (a single start
+    token) for the base term ``H_lm``, the memory embedding for ``H_comp_lm``. The decoder is
+    teacher-forced on ``[start] [target]`` in both, so both are scored with ``align_offset=1``,
+    which drops the first target token exactly as the decoder-only baseline does.
+
+    Note the base term is *not* the same reference as the decoder-only one (there, the base forward
+    is a plain LM pass over the text). Information gain is therefore comparable across
+    encoder-decoder arms, and only loosely comparable against a decoder-only row.
+    """
+    batch_size = input_ids.size(0)
+    information_gains: list[float] = []
+
+    for j in range(batch_size):
+        sample_input_ids = input_ids[j : j + 1]  # [1, sequence]
+        sample_attention_mask = attention_mask[j : j + 1]  # [1, sequence]
+
+        base_outputs = adapter.forward_without_memory(
+            input_ids=sample_input_ids,
+            attention_mask=sample_attention_mask,
+        )
+        h_lm_bits = _sequence_cross_entropy_bits(base_outputs.logits, sample_input_ids, sample_attention_mask, align_offset=1)
+
+        outputs = adapter.forward(
+            memory_embeds=compression_token_embeddings[j : j + 1],
+            memory_mask=compression_attention_mask[j : j + 1],
+            input_ids=sample_input_ids,
+            attention_mask=sample_attention_mask,
+        )
+        h_comp_lm_bits = _sequence_cross_entropy_bits(outputs.logits, sample_input_ids, sample_attention_mask, align_offset=1)
+
+        information_gains.append(h_lm_bits - h_comp_lm_bits)
+
+    return information_gains
+
+
+@torch.no_grad()
 def compute_prefix_surprisal_bits_per_token(
     *,
     model: nn.Module,

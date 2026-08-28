@@ -10,6 +10,7 @@ from tqdm.auto import tqdm
 from compression_horizon.analysis import ProgressiveSampleStateMachine
 from compression_horizon.analysis.information_gain import (
     compute_information_gain,
+    compute_information_gain_encoder_decoder,
     compute_prefix_surprisal_bits_per_token,
 )
 from compression_horizon.train.inputs import build_compression_attention_mask, build_united_input
@@ -328,10 +329,24 @@ class ProgressiveCrammingTrainer(BaseTrainer):
         batch_size = input_ids.shape[0]
         with torch.no_grad():
             # Embeddings + target hidden states must come from the model that will decode the
-            # prefix (the reconstructor in dual mode, the compressor otherwise).
-            full_token_embeddings = ctx.decode_model.get_input_embeddings()(input_ids)  # [batch, sequence, hidden]
-        target_hidden_states_full = self.compute_hidden_states(ctx.decode_model, full_token_embeddings, attention_mask)
-        hidden_size = full_token_embeddings.shape[-1]  # Always model's hidden size now.
+            # prefix (the reconstructor in dual mode, the compressor otherwise). Under an
+            # encoder-decoder the target tokens are consumed by the *decoder*, whose embedding
+            # table need not be the one ``get_input_embeddings()`` returns.
+            if self.encoder_decoder is not None:
+                full_token_embeddings = self.encoder_decoder.embed_target_tokens(input_ids)
+            else:
+                full_token_embeddings = ctx.decode_model.get_input_embeddings()(input_ids)  # [batch, sequence, hidden]
+        if self.encoder_decoder is not None:
+            # Activation alignment is refused for encoder-decoder cramming, so these hidden states
+            # are never read; skipping the forward also avoids calling a seq2seq model with no
+            # decoder inputs (which raises). The decoder-only path below is left untouched.
+            target_hidden_states_full = ()
+            # The memory lives in the encoder's space, which is what the parametrization must size
+            # itself to -- not the decoder embedding width.
+            hidden_size = self.encoder_decoder.memory_hidden_size
+        else:
+            target_hidden_states_full = self.compute_hidden_states(ctx.decode_model, full_token_embeddings, attention_mask)
+            hidden_size = full_token_embeddings.shape[-1]  # Always model's hidden size now.
 
         # ``compression_head_forward`` seeds each sample's compression embedding by running the
         # trained compression head over its prefix; computed here where the model + batch are in scope.
@@ -1069,16 +1084,25 @@ class ProgressiveCrammingTrainer(BaseTrainer):
             # (None for vanilla Direct parametrization).
             pca_coefficients_to_save = batch_ctx.parametrization.serialize_extras()
 
-            per_sample_info_gain = compute_information_gain(
-                model=ctx.decode_model,
-                input_ids=stage_ctx.input_ids,
-                attention_mask=stage_ctx.attention_mask,
-                token_embeddings=stage_ctx.inputs_embeds,
-                compression_token_embeddings=compression_token_embeddings,
-                compression_attention_mask=batch_ctx.compression_attention_mask,
-                prefix_token_embeddings=batch_ctx.prefix_token_embeddings,
-                prefix_attention_mask=batch_ctx.prefix_attention_mask,
-            )
+            if self.encoder_decoder is not None:
+                per_sample_info_gain = compute_information_gain_encoder_decoder(
+                    adapter=self.encoder_decoder,
+                    input_ids=stage_ctx.input_ids,
+                    attention_mask=stage_ctx.attention_mask,
+                    compression_token_embeddings=compression_token_embeddings,
+                    compression_attention_mask=batch_ctx.compression_attention_mask,
+                )
+            else:
+                per_sample_info_gain = compute_information_gain(
+                    model=ctx.decode_model,
+                    input_ids=stage_ctx.input_ids,
+                    attention_mask=stage_ctx.attention_mask,
+                    token_embeddings=stage_ctx.inputs_embeds,
+                    compression_token_embeddings=compression_token_embeddings,
+                    compression_attention_mask=batch_ctx.compression_attention_mask,
+                    prefix_token_embeddings=batch_ctx.prefix_token_embeddings,
+                    prefix_attention_mask=batch_ctx.prefix_attention_mask,
+                )
 
             embeddings_dir = self._prepare_embeddings_dir()
             tokenizer = self.processing_class

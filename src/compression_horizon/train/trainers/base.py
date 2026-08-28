@@ -12,6 +12,11 @@ from torch.utils.tensorboard import SummaryWriter
 
 from compression_horizon.inference.generation import generate_from_compression
 from compression_horizon.train.embedding_init import create_compression_embedding, prepare_embedding_init
+from compression_horizon.train.encoder_decoder import (
+    ENCODER_INPUT,
+    EncoderDecoderCrammingAdapter,
+    is_encoder_decoder_model,
+)
 from compression_horizon.train.loss import (
     compute_hybrid_cross_entropy_and_alignment_loss,
     token_argmax_match_rate_with_prefix,
@@ -58,6 +63,49 @@ class BaseTrainer:
         log_dir = self.args.logging_dir
         self.writer = SummaryWriter(log_dir=log_dir) if log_dir and self.accelerator.is_main_process else None
         self.global_step = 0
+
+        # Encoder-decoder cramming: the memory lives on the encoder side and occupies no decoder
+        # position, so the whole `[mem] [sequence]` layout (and its logits offset) is replaced by
+        # the adapter. None for every decoder-only model, which keeps that path untouched.
+        decode_model = model_reconstructor if model_reconstructor is not None else model
+        self.encoder_decoder: EncoderDecoderCrammingAdapter | None = None
+        if is_encoder_decoder_model(decode_model):
+            self.encoder_decoder = EncoderDecoderCrammingAdapter(
+                decode_model,
+                injection_site=str(getattr(args, "encoder_decoder_injection_site", ENCODER_INPUT) or ENCODER_INPUT),
+            )
+            self._assert_encoder_decoder_supported()
+            print(
+                f"[encoder-decoder] cramming via injection_site={self.encoder_decoder.injection_site} "
+                f"(memory hidden size {self.encoder_decoder.memory_hidden_size}, "
+                f"decoder start token {self.encoder_decoder.decoder_start_token_id})"
+            )
+
+    def _assert_encoder_decoder_supported(self) -> None:
+        """Fail loudly on flags whose implementation assumes the decoder-only `[mem] [seq]` layout.
+
+        Each of these would otherwise run and produce silently wrong numbers: the offset
+        arithmetic they rely on counts a memory position that does not exist on the decoder side.
+        """
+        args = self.args
+        if int(getattr(args, "progressive_prefix_len", 0) or 0) > 0:
+            raise NotImplementedError(
+                "progressive_prefix_len > 0 is not supported for encoder-decoder cramming: the "
+                "uncompressed prefix has no defined side (encoder or decoder) in this setup."
+            )
+        loss_type = str(getattr(args, "loss_type", "cross_entropy") or "cross_entropy").lower()
+        if loss_type != "cross_entropy":
+            raise NotImplementedError(
+                f"loss_type={loss_type!r} (activation alignment) is not supported for encoder-decoder "
+                "cramming: encoder and decoder hidden states are not positionally aligned with the "
+                "target sequence the way the decoder-only path assumes. Use --loss_type cross_entropy."
+            )
+        if getattr(args, "fix_position_ids", False):
+            raise NotImplementedError("fix_position_ids is not supported for encoder-decoder cramming.")
+        if getattr(args, "low_dim_projection", False) and getattr(args, "low_dim_projection_global", False):
+            # Per-batch low-dim works (it only reparametrizes the memory), the global variant is
+            # untested here; refuse rather than guess.
+            raise NotImplementedError("--low_dim_projection_global is not supported for encoder-decoder cramming.")
 
     def train(self) -> str | None:
         """Run training. Subclasses must override. Returns artifact path or output_dir or None."""
@@ -249,6 +297,15 @@ class BaseTrainer:
         computed only over the continuation. ``input_ids``/``attention_mask``/``token_embeddings``
         describe the continuation only.
         """
+        if self.encoder_decoder is not None:
+            return self._forward_and_compute_loss_encoder_decoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                united_token_embeddings=united_token_embeddings,
+                united_attention_mask=united_attention_mask,
+                num_compression_tokens=num_compression_tokens,
+            )
+
         # Compute vanilla model hidden states if alignment is required
         loss_type = self.args.loss_type.lower()
         if loss_type != "cross_entropy" and target_hidden_states is None:
@@ -292,6 +349,47 @@ class BaseTrainer:
             model, input_ids, united_token_embeddings, num_compression_tokens
         )
         return loss, alignment_loss, convergence_per_sample, generated_text, ground_truth_text
+
+    def _forward_and_compute_loss_encoder_decoder(
+        self,
+        *,
+        input_ids: torch.Tensor,  # [batch, sequence]
+        attention_mask: torch.Tensor,  # [batch, sequence]
+        united_token_embeddings: torch.Tensor,  # [batch, compression + sequence, hidden]
+        united_attention_mask: torch.Tensor,  # [batch, compression + sequence]
+        num_compression_tokens: int,
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor, list[str] | None, list[str] | None]:
+        """Encoder-decoder counterpart of ``forward_and_compute_loss``.
+
+        Callers still hand us the decoder-only ``[mem] [sequence]`` concatenation, so we peel the
+        memory back off and route it to the encoder side. The decoder is teacher-forced on
+        ``[start] [target]``, so its logits carry exactly one leading position and the shared loss
+        helpers apply with an offset of 1 — that 1 is the decoder start token, and the memory
+        contributes no decoder position at all.
+        """
+        memory_embeds = united_token_embeddings[:, :num_compression_tokens]
+        memory_mask = united_attention_mask[:, :num_compression_tokens]
+
+        outputs = self.encoder_decoder.forward(
+            memory_embeds=memory_embeds,
+            memory_mask=memory_mask,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+        )
+        offset_tokens = self.encoder_decoder.LOGITS_OFFSET
+        loss, alignment_loss = self.compute_loss(
+            outputs.logits,
+            input_ids,
+            attention_mask,
+            offset_tokens,
+        )
+        convergence_per_sample = self.compute_convergence(
+            outputs.logits,
+            input_ids,
+            attention_mask,
+            offset_tokens,
+        )
+        return loss, alignment_loss, convergence_per_sample, None, None
 
     def _create_dataloader(self) -> DataLoader:
         """Build the training DataLoader from the trainer args."""
