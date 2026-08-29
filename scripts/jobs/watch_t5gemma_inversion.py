@@ -12,7 +12,7 @@ Anything else (Pending/Running) just prints a status line and sleeps. Run it as 
 so its exit is the notification.
 
 Usage:
-    python scripts/jobs/watch_t5gemma_inversion.py
+    python scripts/jobs/watch_t5gemma_inversion.py --job lm-mpi-job-... lm-mpi-job-...
     python scripts/jobs/watch_t5gemma_inversion.py --interval 300
     python scripts/jobs/watch_t5gemma_inversion.py --once
     python scripts/jobs/watch_t5gemma_inversion.py --expect 9   # don't finish early: wait for N jobs
@@ -37,8 +37,23 @@ FAILED_STATUSES = {"failed", "stopped", "deleted", "terminated"}
 COMPLETED_STATUSES = {"completed"}
 
 
-def tracked_jobs(client, region: str) -> list[dict]:
-    """Every job (any status) whose description carries the experiment tag, newest first."""
+def tracked_jobs(client, region: str, job_names: list[str] | None = None) -> list[dict]:
+    """Status of every tracked job.
+
+    ``get_list_jobs`` drops jobs once they reach a final status, so listing alone can never see
+    the all-completed case — it just reports an empty set and waits forever. Pass ``--job`` with
+    the launcher's job names to poll each one by name instead; the listing is only a fallback for
+    when the names were not recorded.
+    """
+    if job_names:
+        jobs = []
+        for name in job_names:
+            try:
+                jobs.append(client.get_job_status(name))
+            except Exception as exc:
+                print(f"[watch] could not read status of {name}: {exc}", flush=True)
+        return jobs
+
     jobs = client.get_list_jobs(region=region, allocation_name=None, status=None, limit=200, offset=0)
     if isinstance(jobs, dict):
         jobs = jobs.get("jobs", jobs.get("items", []))
@@ -102,13 +117,21 @@ def main() -> int:
         help="Wait until at least this many jobs are tracked before declaring everything done. "
         "0 = use whatever is currently tagged.",
     )
+    parser.add_argument(
+        "--job",
+        nargs="+",
+        default=None,
+        help="Full job names to poll by name (what the launcher printed). Strongly preferred: the "
+        "job listing drops jobs once they finish, so name-based polling is the only way to observe "
+        "the all-completed case.",
+    )
     args = parser.parse_args()
 
     client, extra_options = training_job_api_from_profile("default")
     region = extra_options["region"]
 
     while True:
-        jobs = tracked_jobs(client, region)
+        jobs = tracked_jobs(client, region, args.job)
         print_status(jobs)
 
         failed = [job for job in jobs if status_of(job) in FAILED_STATUSES]
