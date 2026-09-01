@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" font-family="system-ui, -apple-system, "Segoe UI", sans-serif">
+<defs><marker id="ah-2a78d6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2a78d6"/></marker><marker id="ah-898781" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#898781"/></marker><marker id="ah-e34948" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e34948"/></marker></defs>
+<rect width="1280" height="760" fill="#fcfcfb"/>
+<text x="56" y="52" font-size="24" font-weight="700" fill="#0b0b0b">Does CE temperature change the crammed solution — or just rescale its logits?</text>
+<text x="56" y="78" font-size="14" fill="#52514e">The experiment behind tab:temperature_logit_stats</text>
+<text x="56" y="126" font-size="13" font-weight="700" fill="#898781">1 &#183; WHAT IS OPTIMIZED</text>
+<rect x="56" y="142" width="210" height="96" rx="10" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.5"/>
+<text x="72" y="170" font-size="13.5" font-weight="600" fill="#0b0b0b">PG19 passage</text>
+<text x="72" y="192" font-size="12" fill="#52514e">up to ~1.5k tokens</text>
+<text x="72" y="214" font-size="12" fill="#52514e">the text to reconstruct</text>
+<line x1="276" y1="190" x2="322" y2="190" stroke="#898781" stroke-width="2" marker-end="url(#ah-898781)"/>
+<rect x="332" y="142" width="200" height="96" rx="10" fill="#eaf2fd" stroke="#2a78d6" stroke-width="1.5"/>
+<text x="348" y="170" font-size="13.5" font-weight="700" fill="#0b0b0b">[mem] embedding</text>
+<text x="348" y="192" font-size="12" fill="#52514e">one vector, per sample</text>
+<text x="348" y="214" font-size="12" font-weight="600" fill="#2a78d6">the ONLY trainable thing</text>
+<line x1="542" y1="190" x2="588" y2="190" stroke="#898781" stroke-width="2" marker-end="url(#ah-898781)"/>
+<rect x="598" y="142" width="190" height="96" rx="10" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.5"/>
+<text x="614" y="170" font-size="13.5" font-weight="600" fill="#0b0b0b">frozen LM &#10052;</text>
+<text x="614" y="192" font-size="12" fill="#52514e">pythia-1.4b / Llama-8B</text>
+<text x="614" y="214" font-size="12" fill="#52514e">Qwen3-4B</text>
+<line x1="798" y1="190" x2="844" y2="190" stroke="#898781" stroke-width="2" marker-end="url(#ah-898781)"/>
+<rect x="854" y="142" width="170" height="96" rx="10" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.5"/>
+<text x="870" y="170" font-size="13.5" font-weight="600" fill="#0b0b0b">logits z</text>
+<text x="870" y="192" font-size="12" fill="#52514e">what decoding</text>
+<text x="870" y="214" font-size="12" fill="#52514e">actually sees</text>
+<line x1="1034" y1="190" x2="1080" y2="190" stroke="#898781" stroke-width="2" marker-end="url(#ah-898781)"/>
+<rect x="1090" y="142" width="134" height="96" rx="10" fill="#fdeeea" stroke="#eb6834" stroke-width="1.5"/>
+<text x="1106" y="176" font-size="14" font-weight="700" fill="#0b0b0b">CE(z / T)</text>
+<text x="1106" y="200" font-size="12" fill="#52514e">the knob</text>
+<text x="1106" y="220" font-size="12" fill="#52514e">T: 0.1 → 2.0</text>
+<path d="M1157,238 L1157,272 L432,272 L432,244" fill="none" stroke="#2a78d6" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#ah-2a78d6)"/>
+<text x="700" y="266" text-anchor="middle" font-size="12" font-weight="600" fill="#2a78d6">gradient updates the embedding only — weights never move</text>
+<text x="56" y="330" font-size="13" font-weight="700" fill="#898781">2 &#183; WHY T IS A CLEAN KNOB</text>
+<rect x="56" y="346" width="1168" height="74" rx="10" fill="#f4faf7" stroke="#1baf7a" stroke-width="1.5"/>
+<text x="80" y="378" font-size="14" font-weight="700" fill="#0b0b0b">Stopping rule: argmax(z) = label for every token — independent of T.</text>
+<text x="80" y="402" font-size="12.5" fill="#52514e">So T cannot move the finish line. Any difference between runs is temperature acting on the optimization path and the loss geometry — not on the definition of success.</text>
+<text x="56" y="472" font-size="13" font-weight="700" fill="#898781">3 &#183; WHAT WE MEASURE ON THE CONVERGED z</text>
+<rect x="56" y="488" width="388" height="154" rx="10" fill="#ffffff" stroke="#e1e0d9" stroke-width="1.5"/>
+<text x="76" y="516" font-size="13.5" font-weight="700" fill="#0b0b0b">Margin z/T</text>
+<text x="76" y="542" font-size="13" fill="#0b0b0b" font-family="ui-monospace, monospace">(z_true − runner-up) / T</text>
+<text x="76" y="568" font-size="12" fill="#52514e">How separated the right token is,</text>
+<text x="76" y="587" font-size="12" fill="#52514e">in the loss's own units.</text>
+<text x="76" y="626" font-size="12" font-weight="700" fill="#898781">shift-invariant</text>
+<rect x="446" y="488" width="388" height="154" rx="10" fill="#fdeeea" stroke="#eb6834" stroke-width="1.5"/>
+<text x="466" y="516" font-size="13.5" font-weight="700" fill="#0b0b0b">Top-1 z/T — unnormalized</text>
+<text x="466" y="542" font-size="13" fill="#0b0b0b" font-family="ui-monospace, monospace">(max_j z_j) / T</text>
+<text x="466" y="568" font-size="12" fill="#52514e">The absolute logit pedestal.</text>
+<text x="466" y="587" font-size="12" fill="#52514e">NOT shift-invariant.</text>
+<text x="466" y="626" font-size="12" font-weight="700" fill="#eb6834">inflates as T → 0</text>
+<rect x="836" y="488" width="388" height="154" rx="10" fill="#eaf2fd" stroke="#2a78d6" stroke-width="1.5"/>
+<text x="856" y="516" font-size="13.5" font-weight="700" fill="#0b0b0b">Top-1 log p — normalized</text>
+<text x="856" y="542" font-size="13" fill="#0b0b0b" font-family="ui-monospace, monospace">log softmax(z/T)[argmax]</text>
+<text x="856" y="568" font-size="12" fill="#52514e">The winner's actual probability</text>
+<text x="856" y="587" font-size="12" fill="#52514e">mass. Bounded by 0.</text>
+<text x="856" y="626" font-size="12" font-weight="700" fill="#2a78d6">the honest confidence</text>
+<rect x="56" y="666" width="1168" height="60" rx="8" fill="#f2f6fc"/>
+<text x="80" y="694" font-size="13.5" fill="#0b0b0b"><tspan font-weight="700">The distinction that matters:</tspan> both top-1 columns describe the same logits. Dividing by T alone leaves the pedestal in, so cold runs look ~10× more confident.</text>
+<text x="80" y="714" font-size="13.5" fill="#0b0b0b">Subtracting logsumexp(z/T) removes it and reports the probability a reader would actually quote — which barely moves with T.</text>
+</svg>
