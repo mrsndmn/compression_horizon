@@ -2,7 +2,8 @@ The print poster is `poster.pdf`: one portrait page, **594 × 840 mm**, CMYK wit
 an embedded **FOGRA39L Coated** output profile. The organizer explicitly specifies
 840 mm height (standard ISO A1 is 841 mm). `poster_preview.pdf` is an identical
 copy; `poster_preview.png` is rendered from the final CMYK PDF for screen review.
-Main copy is 24 pt; captions and tables are 21 pt. The build enforces minimum
+The compact header places institution logos beside the venue badge and a 70 mm
+QR beside the title. Main copy is about 25 pt; captions and tables are 21 pt. The build enforces minimum
 24 pt body copy and 20 pt captions/tables. Five figures use whitespace-trimmed
 versions (`images/*_trimmed.png`); the unmodified source images are retained.
 Redundant projection/scoring diagrams and repeated conclusion copy are omitted.
@@ -27,7 +28,9 @@ It writes the measured results to `print_report.json`.
 
 Layout adapted with the `paper-to-poster` skill's portrait two-column workflow,
 retaining the existing AXXX palette and research figures. Its core `preflight`,
-`measure`, `polish --strict`, and `verify-final` checks pass. The optional
+`measure`, and `verify-final` checks pass. The title intentionally aligns to the
+left body edge beside the enlarged QR; `polish --strict --title-offset-max 0.07`
+allows that layout (the default 0.06 assumes a centered title). The optional
 style/provenance gates are not used for this imported poster.
 
 The full/progressive comparison is aligned with

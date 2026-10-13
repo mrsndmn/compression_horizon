@@ -17,8 +17,8 @@
 --u:1.6px;
 --fs-1:calc(4 * var(--u)); --fs-2:calc(5.8 * var(--u));
 --fs-3:calc(7.4 * var(--u)); --fs-4:calc(8.5 * var(--u));
---fs-5:calc(8 * var(--u)); --fs-6:calc(8.5 * var(--u));
---fs-7:calc(10 * var(--u)); --fs-8:calc(13 * var(--u)); --fs-9:calc(17 * var(--u));
+--fs-5:calc(8.8 * var(--u)); --fs-6:calc(8.5 * var(--u));
+--fs-7:calc(11 * var(--u)); --fs-8:calc(13 * var(--u)); --fs-9:calc(17 * var(--u));
 /* ===== END DESIGN TOKENS ===== */
 }
 * {box-sizing:border-box;margin:0;padding:0}
@@ -164,14 +164,34 @@ p,li {line-height:1.22}
 /* Avoid stacking a final paragraph/table margin on top of card padding. */
 .card > p:last-child {margin-bottom:0}
 .card > .result-table:last-child {margin-bottom:calc(1 * var(--u))}
+
+/* Compact header: institutions share the venue row, larger QR aligns with title. */
+.header {grid-template-columns:minmax(0,1fr) auto;gap:calc(4 * var(--u));padding-bottom:calc(4 * var(--u));align-items:start}
+.header-top {grid-column:1 / -1;display:flex;align-items:center;justify-content:space-between;gap:calc(8 * var(--u))}
+.header-top .affiliations-logos {margin-top:0;gap:calc(7 * var(--u))}
+.header-top .affiliations-logos img {height:calc(12 * var(--u));max-width:calc(65 * var(--u))}
+.title {line-height:1.03}
+.subtitle {margin-top:calc(3 * var(--u))}
+.authors-line {margin-top:calc(2 * var(--u))}
+.qr-block img {width:calc(70 * var(--u));height:calc(70 * var(--u));flex-shrink:0}
+.right-stack {align-self:start}
+
+.card p:not(.caption), .card li {font-size:var(--fs-5)}
+
+/* Sub-line optical balance below the final comparison table. */
+.column:first-child > .card:last-child {padding-bottom:calc(6 * var(--u))}
 </style></head>
 <body>
 <div class="poster" data-measure-role="poster">
-<header class="header" data-measure-role="header">
-<div class="conf-badge">
+<header class="header" data-measure-role="header"><div class="header-top"><div class="conf-badge">
 <div class="conf-name">ICML</div>
 <div class="conf-sub">2026 · POSTER</div>
-</div>
+</div><div class="affiliations-logos">
+<img alt="FusionBrain Lab" data-color-exempt="logo" src="images/fusionbrain_combined.svg"/>
+<img alt="AIRI" data-color-exempt="logo" src="images/airi_logo.svg"/>
+<img alt="HSE University" data-color-exempt="logo" src="images/hse_logo.svg"/>
+<img alt="Innopolis University" data-color-exempt="logo" src="images/innopolis_logo.svg"/>
+</div></div>
 <div class="title-block">
 <h1 class="title">Progressive Cramming: Reliable Token <span class="accent">Compression</span> and What It Reveals</h1>
 <div class="subtitle">One embedding reconstructs &gt;1000 tokens — yet perfect reconstruction does not preserve useful semantics.</div>
@@ -181,12 +201,6 @@ p,li {line-height:1.22}
         <span class="author">Elizaveta Goncharova<sup>1,2</sup></span> ·
         <span class="author">Andrey Kuznetsov<sup>1,3</sup></span>
 <span class="aff"><sup>1</sup>FusionBrain Lab, AIRI  ·  <sup>2</sup>HSE University, Moscow  ·  <sup>3</sup>Innopolis University</span>
-</div>
-<div class="affiliations-logos">
-<img alt="FusionBrain Lab" data-color-exempt="logo" src="images/fusionbrain_combined.svg"/>
-<img alt="AIRI" data-color-exempt="logo" src="images/airi_logo.svg"/>
-<img alt="HSE University" data-color-exempt="logo" src="images/hse_logo.svg"/>
-<img alt="Innopolis University" data-color-exempt="logo" src="images/innopolis_logo.svg"/>
 </div>
 </div>
 <div class="right-stack">
