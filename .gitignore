@@ -51,3 +51,8 @@ worktrees
 poster/poster_preview.png
 scripts/paper/_make_trajectory_npz_nofield.py
 scripts/paper/refit_pca_and_animate.py
+
+# Deliverable poster PDFs and preview are versioned artifacts.
+!poster/poster.pdf
+!poster/poster_preview.pdf
+!poster/poster_preview.png

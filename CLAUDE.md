@@ -58,11 +58,25 @@ of the compiled paper, so it is exempt.
 
 ## Building the poster
 
-Source: `poster/poster.html`. After editing, validate layout and render a preview:
+Source: `poster/poster.html`; exact portrait canvas is 594 × 840 mm.
+Run `python poster/build_poster.py` (or pass `--ghostscript /path/to/gs`).
+Dependencies and print checks are described in `poster/README.md`.
+Outputs: CMYK FOGRA39 `poster/poster.pdf`, identical `poster/poster_preview.pdf`,
+PNG preview, and `poster/print_report.json`. All assets render offline.
 
-1. **Measure gate** (validates column alignment, gaps, overflow):
-   `python .claude/posterly/tools/poster_check.py measure poster/poster.html`
-2. **Render PNG preview**:
-   `python .claude/posterly/tools/render_preview.py poster/poster.html --png poster/poster_preview.png`
+## Usage arms
 
-Do not read rendered images yourself — the user reviews visually.
+- Poster editing: `poster/poster.html`, local `poster/images/`, `poster/fonts/`,
+  and `poster/profiles/`; preserves English title/authors at the top.
+- Poster rendering: `python poster/build_poster.py`; Playwright print emulation
+  checks layout before Ghostscript converts RGB to FOGRA39 CMYK. pikepdf embeds
+  the output intent; PyMuPDF verifies print dimensions and effective raster DPI.
+- Poster delivery/review: `poster/poster.pdf` is the print artifact;
+  `poster/poster_preview.pdf` is identical; `poster/poster_preview.png` comes
+  from the final PDF. `poster/print_report.json` records the validated dimensions,
+  profile, DPI, and layout gaps. There are no training/evaluation/CI callers of
+  the poster builder.
+- Paper building: `make paper` invokes `paper-check` then `latexmk`;
+  `make paper-check`, `make paper-clean`, and `make tables` are independent of
+  the poster build. Generated paper tables are inputs for poster claims,
+  never edited as part of poster generation.

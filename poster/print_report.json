@@ -1,0 +1,99 @@
+{
+  "file": "poster.pdf",
+  "pages": 1,
+  "width_mm": 594,
+  "height_mm": 840,
+  "orientation": "portrait",
+  "color_model": "CMYK",
+  "icc_description": "FOGRA39L Coated",
+  "output_condition": "FOGRA39",
+  "images": [
+    {
+      "xref": 24,
+      "dpi": [
+        300.0,
+        300.0
+      ]
+    },
+    {
+      "xref": 27,
+      "dpi": [
+        299.52,
+        299.52
+      ]
+    },
+    {
+      "xref": 28,
+      "dpi": [
+        291.1,
+        290.77
+      ]
+    },
+    {
+      "xref": 29,
+      "dpi": [
+        219.2,
+        219.66
+      ]
+    },
+    {
+      "xref": 30,
+      "dpi": [
+        300.34,
+        299.94
+      ]
+    },
+    {
+      "xref": 31,
+      "dpi": [
+        299.89,
+        300.32
+      ]
+    },
+    {
+      "xref": 32,
+      "dpi": [
+        251.88,
+        251.43
+      ]
+    },
+    {
+      "xref": 33,
+      "dpi": [
+        299.98,
+        299.79
+      ]
+    },
+    {
+      "xref": 34,
+      "dpi": [
+        185.21,
+        185.35
+      ]
+    },
+    {
+      "xref": 24,
+      "dpi": [
+        300.0,
+        300.0
+      ]
+    }
+  ],
+  "layout": {
+    "spread_px": 2.03125,
+    "footer_gaps_px": [
+      47.5,
+      45.46875
+    ],
+    "card_gaps_px": [
+      18.890625,
+      18.890625,
+      18.890625,
+      18.890625,
+      18.890625,
+      18.890625
+    ],
+    "broken_images": [],
+    "overflow": []
+  }
+}

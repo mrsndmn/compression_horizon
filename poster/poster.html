@@ -1,854 +1,341 @@
 <!DOCTYPE html>
+
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Progressive Cramming &mdash; ICML 2026 Poster</title>
+<head><link href="fonts/inter.css" rel="stylesheet"/>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Progressive Cramming — ICML 2026 Poster</title>
 
-<!-- MathJax for inline equations -->
-<script>
-  window.MathJax = {
-    tex: {
-      inlineMath: [['$', '$'], ['\\(', '\\)']],
-      displayMath: [['$$', '$$'], ['\\[', '\\]']],
-      packages: {'[+]': ['ams']}
-    },
-    svg: { fontCache: 'global' }
-  };
-</script>
-<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 
-<!-- Inter (AXXX brand typeface) -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
 <style>
-  /* =========================================================
-     Page setup: 36"H x 60"W landscape (ICML standard)
-     ========================================================= */
-  @page {
-    size: 60in 36in;
-    margin: 0;
-  }
-
-  :root {
-    /* AXXX brand palette — blue + grey (one semantic red kept for negatives) */
-    --accent:          #0689D4;   /* AXXX blue */
-    --accent-deep:     #053957;   /* AXXX dark blue */
-    --accent-light:    #E6F4FD;   /* light-blue tint */
-    --accent-mid:      #0689D4;   /* AXXX blue (Forward highlight) */
-    --gold:            #50C0FF;   /* AXXX light blue (ex-gold accent) */
-    --gold-light:      #EAF6FE;   /* light-blue tint (ex-gold highlight rows) */
-    --red-alert:       #C0392B;   /* the single semantic red — negatives only */
-
-    --text-primary:    #111111;   /* near-black */
-    --text-secondary:  #687A86;   /* AXXX dark grey */
-    --text-muted:      #A7B3BB;   /* AXXX grey */
-
-    --bg-page:         #FFFFFF;   /* AXXX white */
-    --bg-card:         #FFFFFF;
-    --bg-card-tint:    #F4F8FB;
-    --bg-emphasis:     #E6F4FD;   /* light blue */
-
-    --border-soft:     #CDD5DA;   /* light grey */
-    --border-strong:   #0689D4;   /* AXXX blue */
-
-    --u: 1.6px;
-  }
-
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  html, body {
-    background: #2b2b2b;
-    font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
-    color: var(--text-primary);
-    -webkit-font-smoothing: antialiased;
-  }
-
-  .poster {
-    width: calc(1524 * var(--u));
-    height: calc(914 * var(--u));
-    background: var(--bg-page);
-    margin: 20px auto;
-    padding: calc(10 * var(--u)) calc(14 * var(--u));
-    display: grid;
-    grid-template-rows: auto auto 1fr auto auto;
-    gap: calc(6 * var(--u));
-    box-shadow: 0 0 60px rgba(0,0,0,0.5);
-    position: relative;
-    overflow: hidden;
-  }
-
-  .poster::before {
-    content: "";
-    position: absolute; top: 0; left: 0; right: 0;
-    height: calc(6 * var(--u));
-    background: var(--accent);
-  }
-
-  /* ---- HEADER ---- */
-  .header {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: center;
-    gap: calc(16 * var(--u));
-    padding: calc(2 * var(--u)) calc(4 * var(--u)) calc(5 * var(--u)) calc(4 * var(--u));
-    border-bottom: calc(2 * var(--u)) solid var(--accent);
-  }
-
-  .conf-badge {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: calc(2 * var(--u));
-  }
-  .conf-badge .conf-name {
-    font-family: "Inter", sans-serif;
-    font-size: calc(28 * var(--u));
-    font-weight: 900;
-    color: var(--accent);
-    letter-spacing: 2px;
-  }
-  .conf-badge .conf-sub {
-    font-family: "Inter", sans-serif;
-    font-size: calc(10 * var(--u));
-    color: var(--accent);
-    font-weight: 700;
-    letter-spacing: 1.2px;
-  }
-
-  .title-block { text-align: center; min-width: 0; }
-  .title {
-    font-family: "Inter", "Helvetica Neue", sans-serif;
-    font-weight: 800;
-    font-size: calc(32 * var(--u));
-    line-height: 1.1;
-    color: var(--accent-deep);
-    letter-spacing: -0.5px;
-  }
-  .title .accent { color: var(--accent); }
-  .subtitle {
-    font-family: "Inter", sans-serif;
-    font-weight: 500;
-    font-size: calc(14 * var(--u));
-    color: var(--text-secondary);
-    margin-top: calc(2 * var(--u));
-    font-style: italic;
-  }
-  .authors-line {
-    font-family: "Inter", sans-serif;
-    font-size: calc(14 * var(--u));
-    color: var(--accent);
-    font-weight: 600;
-    margin-top: calc(3 * var(--u));
-  }
-  .authors-line .author { margin: 0 calc(4 * var(--u)); }
-  .authors-line sup { font-size: 0.7em; color: var(--accent); }
-  .authors-line .aff {
-    color: var(--text-secondary);
-    font-weight: 400;
-    display: block;
-    margin-top: calc(2 * var(--u));
-    font-size: calc(12 * var(--u));
-  }
-  .affiliations-logos {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: calc(16 * var(--u));
-    margin-top: calc(3 * var(--u));
-  }
-  .affiliations-logos img {
-    height: calc(18 * var(--u));
-    width: auto;
-    object-fit: contain;
-  }
-
-  .right-stack {
-    display: flex;
-    align-items: center;
-    gap: calc(10 * var(--u));
-  }
-  .qr-block {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: calc(2 * var(--u));
-  }
-  .qr-block img {
-    width: calc(85 * var(--u));
-    height: calc(85 * var(--u));
-    border: calc(2 * var(--u)) solid var(--accent);
-    border-radius: calc(4 * var(--u));
-    background: white;
-    padding: calc(2 * var(--u));
-  }
-  .qr-label {
-    font-family: "Inter", sans-serif;
-    font-size: calc(11 * var(--u));
-    color: var(--accent);
-    font-weight: 600;
-  }
-
-  /* ---- BANNER ---- */
-  .framework-banner {
-    display: flex;
-    align-items: center;
-    gap: calc(16 * var(--u));
-    background: linear-gradient(90deg, var(--bg-emphasis) 0%, white 50%, var(--bg-emphasis) 100%);
-    border: calc(1 * var(--u)) solid var(--border-soft);
-    border-left: calc(6 * var(--u)) solid var(--accent);
-    border-radius: calc(6 * var(--u));
-    padding: calc(5 * var(--u)) calc(14 * var(--u));
-  }
-  .framework-banner .fb-text {
-    flex: 1;
-    font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
-    font-size: calc(14 * var(--u));
-    line-height: 1.4;
-    color: var(--text-primary);
-    text-wrap: balance;
-    text-align: center;
-  }
-  .framework-banner .fb-text strong { color: var(--accent-deep); }
-  .framework-banner .fb-label {
-    display: inline-block;
-    background: var(--accent);
-    color: white;
-    font-family: "Inter", sans-serif;
-    font-size: calc(13 * var(--u));
-    font-weight: 700;
-    padding: calc(2 * var(--u)) calc(8 * var(--u));
-    border-radius: calc(4 * var(--u));
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    vertical-align: middle;
-    line-height: 1;
-    position: relative;
-    top: calc(-1 * var(--u));
-  }
-  .banner-stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr;
-    gap: calc(6 * var(--u));
-  }
-  .bs-item {
-    background: white;
-    border: calc(1 * var(--u)) solid var(--border-soft);
-    border-left: calc(3 * var(--u)) solid var(--accent);
-    border-radius: calc(3 * var(--u));
-    padding: calc(2 * var(--u)) calc(8 * var(--u));
-    text-align: center;
-  }
-  .bs-num {
-    font-family: "Inter", sans-serif;
-    font-weight: 800;
-    font-size: calc(20 * var(--u));
-    color: var(--accent);
-    line-height: 1;
-  }
-  .bs-label {
-    font-family: "Inter", sans-serif;
-    font-size: calc(10 * var(--u));
-    color: var(--text-secondary);
-    margin-top: calc(2 * var(--u));
-    line-height: 1.2;
-  }
-
-  /* ---- BODY GRID ---- */
-  .body-grid {
-    display: grid;
-    grid-template-columns: 1fr 1.05fr 1.05fr 1fr;
-    gap: calc(10 * var(--u));
-    overflow: hidden;
-    min-height: 0;
-  }
-
-  .column {
-    display: flex;
-    flex-direction: column;
-    gap: calc(6 * var(--u));
-    min-height: 0;
-    height: 100%;
-    padding-bottom: calc(4 * var(--u));
-  }
-
-  .card {
-    background: var(--bg-card);
-    border-radius: calc(5 * var(--u));
-    padding: calc(4 * var(--u)) calc(9 * var(--u));
-    border: calc(1 * var(--u)) solid var(--border-soft);
-    box-shadow: none;
-    position: relative;
-  }
-  .card.tinted { background: var(--bg-card-tint); }
-  .card.highlight {
-    border-left: calc(6 * var(--u)) solid var(--accent);
-    background: var(--bg-card);
-  }
-  .card.alert {
-    border-left: calc(6 * var(--u)) solid var(--red-alert);
-    background: var(--bg-card);
-  }
-  .card.conclusion {
-    border-left: calc(6 * var(--u)) solid var(--accent-deep);
-    background: var(--bg-card);
-  }
-  .card.grow { flex-grow: 1; }
-
-  .section-title {
-    font-family: "Inter", "Helvetica Neue", sans-serif;
-    font-weight: 700;
-    font-size: calc(16 * var(--u));
-    color: var(--accent-deep);
-    margin-bottom: calc(3 * var(--u));
-    display: flex;
-    align-items: center;
-    gap: calc(5 * var(--u));
-    flex-wrap: wrap;
-  }
-  .section-title .num {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: calc(22 * var(--u));
-    height: calc(22 * var(--u));
-    background: var(--accent);
-    color: white;
-    border-radius: 50%;
-    font-size: calc(13 * var(--u));
-    font-weight: 700;
-    flex-shrink: 0;
-  }
-
-  .body-text, .card p, .card li {
-    font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
-    font-size: calc(12 * var(--u));
-    line-height: 1.28;
-    color: var(--text-primary);
-  }
-
-  /* Black-arrow bullets (AXXX brand graphic) */
-  .card ul, .card ol { padding-left: 0; list-style: none; }
-  .card li {
-    margin-bottom: calc(2 * var(--u));
-    position: relative;
-    padding-left: calc(16 * var(--u));
-  }
-  .card li::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: calc(3 * var(--u));
-    width: calc(11 * var(--u));
-    height: calc(10 * var(--u));
-    background: url("images/bullet_arrow.svg") no-repeat center center;
-    background-size: contain;
-  }
-
-  .keyword { color: var(--accent); font-weight: 700; }
-  .keyword-gold { color: var(--gold); font-weight: 700; }
-  .keyword-red { color: var(--red-alert); font-weight: 700; }
-
-  .eqn {
-    background: var(--bg-emphasis);
-    border-left: calc(3 * var(--u)) solid var(--accent);
-    padding: calc(4 * var(--u)) calc(10 * var(--u));
-    margin: calc(4 * var(--u)) 0;
-    font-size: calc(13 * var(--u));
-    overflow-x: hidden;
-  }
-  .eqn .label {
-    display: block;
-    font-family: "Inter", sans-serif;
-    font-size: calc(10 * var(--u));
-    color: var(--accent);
-    font-weight: 600;
-    margin-bottom: calc(2 * var(--u));
-    text-transform: uppercase;
-    letter-spacing: 1px;
-  }
-
-  .callout {
-    background: var(--accent);
-    color: white;
-    padding: calc(5 * var(--u)) calc(10 * var(--u));
-    border-radius: calc(4 * var(--u));
-    font-size: calc(12 * var(--u));
-    margin: calc(4 * var(--u)) 0;
-  }
-  .callout strong { color: var(--gold); }
-  .callout.gold {
-    background: var(--gold);
-    color: var(--accent-deep);
-  }
-  .callout.gold strong { color: var(--accent-deep); }
-  .callout.red {
-    background: var(--red-alert);
-  }
-
-  .figure {
-    margin: calc(4 * var(--u)) 0;
-    text-align: center;
-  }
-  .figure img {
-    width: 100%;
-    border-radius: calc(4 * var(--u));
-    border: calc(1 * var(--u)) solid var(--border-soft);
-    background: white;
-  }
-  .figure .caption {
-    font-family: "Inter", sans-serif;
-    font-size: calc(11 * var(--u));
-    color: var(--text-secondary);
-    margin-top: calc(3 * var(--u));
-    line-height: 1.3;
-    text-align: left;
-  }
-  .figure .caption strong { color: var(--accent-deep); }
-
-  .result-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: "Inter", sans-serif;
-    font-size: calc(11 * var(--u));
-    margin-top: calc(3 * var(--u));
-  }
-  .result-table th, .result-table td {
-    padding: calc(2 * var(--u)) calc(4 * var(--u));
-    text-align: center;
-    border-bottom: calc(1 * var(--u)) solid var(--border-soft);
-  }
-  .result-table thead th {
-    background: var(--accent);
-    color: white;
-    font-weight: 600;
-    font-size: calc(10 * var(--u));
-  }
-  .result-table tbody tr.ours td {
-    background: var(--gold-light);
-    font-weight: 700;
-  }
-  .result-table .method { text-align: left; padding-left: calc(8 * var(--u)); }
-  .result-table .best { color: var(--accent); font-weight: 700; }
-
-  .keybox {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: calc(4 * var(--u));
-    margin: calc(4 * var(--u)) 0 0 0;
-  }
-  .keybox .kb-item {
-    background: var(--bg-emphasis);
-    border-top: calc(2 * var(--u)) solid var(--accent);
-    padding: calc(3 * var(--u)) calc(3 * var(--u));
-    text-align: center;
-    border-radius: 0 0 calc(3 * var(--u)) calc(3 * var(--u));
-  }
-  .kb-item .kb-num {
-    font-family: "Inter", sans-serif;
-    font-weight: 800;
-    font-size: calc(15 * var(--u));
-    color: var(--accent);
-    line-height: 1;
-  }
-  .kb-item .kb-label {
-    font-family: "Inter", sans-serif;
-    font-size: calc(9 * var(--u));
-    color: var(--text-secondary);
-    margin-top: calc(2 * var(--u));
-    line-height: 1.1;
-  }
-
-  .stat-pop {
-    display: inline-block;
-    background: var(--accent);
-    color: white;
-    padding: calc(1 * var(--u)) calc(6 * var(--u));
-    border-radius: calc(3 * var(--u));
-    font-weight: 700;
-    font-family: "Inter", sans-serif;
-    font-size: calc(11 * var(--u));
-  }
-  .stat-pop.gold { background: var(--gold); color: var(--accent-deep); }
-  .stat-pop.red { background: var(--red-alert); color: white; }
-
-  /* ---- TAKEAWAYS ---- */
-  .takeaways-strip {
-    display: grid;
-    grid-template-columns: auto repeat(3, 1fr);
-    align-items: center;
-    gap: calc(10 * var(--u));
-    background: linear-gradient(90deg, var(--bg-emphasis) 0%, white 50%, var(--bg-emphasis) 100%);
-    border: calc(1 * var(--u)) solid var(--border-soft);
-    border-radius: calc(5 * var(--u));
-    padding: calc(8 * var(--u)) calc(12 * var(--u));
-  }
-  .takeaways-strip .ts-title {
-    font-family: "Inter", sans-serif;
-    font-size: calc(15 * var(--u));
-    font-weight: 800;
-    color: var(--accent-deep);
-    display: flex;
-    align-items: center;
-    gap: calc(6 * var(--u));
-  }
-  .takeaways-strip .ts-title .num {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: calc(22 * var(--u));
-    height: calc(22 * var(--u));
-    background: var(--accent);
-    color: white;
-    border-radius: 50%;
-    font-size: calc(13 * var(--u));
-    font-weight: 700;
-  }
-  .takeaways-strip .ts-item {
-    border-left: calc(3 * var(--u)) solid var(--accent);
-    padding-left: calc(8 * var(--u));
-    line-height: 1.3;
-    text-align: center;
-    text-wrap: balance;
-  }
-  .takeaways-strip .ts-key {
-    font-family: "Inter", sans-serif;
-    font-size: calc(11 * var(--u));
-    font-weight: 700;
-    color: var(--accent);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-  }
-  .takeaways-strip .ts-text {
-    font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
-    font-size: calc(12 * var(--u));
-    color: var(--text-primary);
-    margin-left: calc(4 * var(--u));
-  }
-
-  /* ---- FOOTER ---- */
-  .footer {
-    grid-column: 1 / -1;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-top: calc(8 * var(--u));
-    border-top: calc(1 * var(--u)) solid var(--border-soft);
-    font-family: "Inter", sans-serif;
-    font-size: calc(13 * var(--u));
-    color: var(--text-muted);
-  }
-  .footer .repo { color: var(--accent); font-weight: 600; }
-
-  /* ---- SPACE-FILL: enlarge under-filled columns to use their height ----
-     Columns 2 & 3 have spare vertical room; column 4 a little. Figures are
-     wide/short and can't grow tall, so we scale text, leading and spacing. */
-  .col-fill .section-title { font-size: calc(18 * var(--u)); margin-bottom: calc(5 * var(--u)); }
-  .col-fill .body-text,
-  .col-fill .card p,
-  .col-fill .card li { font-size: calc(13.5 * var(--u)); line-height: 1.42; }
-  .col-fill .figure .caption { font-size: calc(12.5 * var(--u)); line-height: 1.4; }
-  .col-fill .result-table { font-size: calc(12.5 * var(--u)); }
-  .col-fill .result-table thead th { font-size: calc(11.5 * var(--u)); }
-  .col-fill .result-table th,
-  .col-fill .result-table td { padding: calc(3 * var(--u)) calc(4 * var(--u)); }
-  .col-fill .kb-num { font-size: calc(18 * var(--u)); }
-  .col-fill .kb-label { font-size: calc(11 * var(--u)); }
-  .col-fill .card li { margin-bottom: calc(5 * var(--u)); }
-
-  /* Column 2 (medium): single grow card, tuned to just fill */
-  .col-fill-2 .section-title { font-size: calc(17.5 * var(--u)); margin-bottom: calc(4 * var(--u)); }
-  .col-fill-2 .body-text,
-  .col-fill-2 .card p,
-  .col-fill-2 .card li { font-size: calc(12.8 * var(--u)); line-height: 1.36; }
-  .col-fill-2 .figure .caption { font-size: calc(11.8 * var(--u)); line-height: 1.34; }
-  .col-fill-2 .kb-num { font-size: calc(17 * var(--u)); }
-  .col-fill-2 .kb-label { font-size: calc(10.5 * var(--u)); }
-  .col-fill-2 .card li { margin-bottom: calc(4 * var(--u)); }
-
-  /* Column 4 (light): the little slack lives in the Takeaways (grow) card */
-  .col-fill-sm .conclusion .section-title { font-size: calc(17 * var(--u)); }
-  .col-fill-sm .conclusion li { font-size: calc(12.8 * var(--u)); line-height: 1.46; margin-bottom: calc(6 * var(--u)); }
-
-  @media print {
-    html, body { background: white; }
-    .poster {
-      margin: 0;
-      box-shadow: none;
-      width: 60in;
-      height: 36in;
-      page-break-after: avoid;
-    }
-    :root { --u: 1mm; }
-  }
+@page { size: 594mm 840mm; margin: 0; }
+:root {
+/* ===== DESIGN TOKENS ===== */
+--accent:#0689D4; --accent-deep:#053957; --accent-light:#E6F4FD;
+--accent-mid:#0689D4; --gold:#50C0FF; --gold-light:#EAF6FE;
+--red-alert:#C0392B; --text-primary:#111111; --text-secondary:#687A86;
+--text-muted:#A7B3BB; --bg-page:#FFFFFF; --bg-card:#FFFFFF;
+--border-soft:#CDD5DA; --bg-screen:#2b2b2b;
+--u:1.6px;
+--fs-1:calc(4 * var(--u)); --fs-2:calc(4.8 * var(--u));
+--fs-3:calc(5.3 * var(--u)); --fs-4:calc(6.1 * var(--u));
+--fs-5:calc(6.5 * var(--u)); --fs-6:calc(7 * var(--u));
+--fs-7:calc(8 * var(--u)); --fs-8:calc(11 * var(--u)); --fs-9:calc(15 * var(--u));
+/* ===== END DESIGN TOKENS ===== */
+}
+* {box-sizing:border-box;margin:0;padding:0}
+html,body {background:var(--bg-screen);font-family:Inter,Arial,sans-serif;color:var(--text-primary)}
+.poster {width:calc(594 * var(--u));height:calc(840 * var(--u));padding:calc(12 * var(--u));margin:20px auto;background:var(--bg-page);display:grid;grid-template-rows:auto 1fr auto;gap:calc(9 * var(--u));position:relative}
+.poster::before {content:"";position:absolute;top:0;left:0;right:0;height:calc(3 * var(--u));background:var(--accent)}
+.header {display:grid;grid-template-columns:1fr auto;gap:calc(6 * var(--u));border-bottom:calc(.7 * var(--u)) solid var(--accent);padding-bottom:calc(6 * var(--u));align-items:center}
+.conf-badge {grid-column:1 / -1;display:flex;gap:calc(3 * var(--u));align-items:baseline;color:var(--accent)}
+.conf-name {font-size:var(--fs-6);font-weight:900}.conf-sub{font-size:var(--fs-2);font-weight:600}
+.title-block {min-width:0}.title{font-size:var(--fs-9);line-height:1.07;font-weight:800;color:var(--accent-deep);text-wrap:balance}.accent{color:var(--accent)}
+.subtitle{font-size:var(--fs-4);line-height:1.28;color:var(--text-secondary);margin-top:calc(4 * var(--u));font-style:italic}
+.authors-line{font-size:var(--fs-3);font-weight:600;color:var(--accent);line-height:1.5;margin-top:calc(4 * var(--u))}.author{white-space:nowrap}sup{font-size:.7em}.aff{display:block;color:var(--text-secondary);font-size:var(--fs-2);font-weight:400}
+.affiliations-logos{display:flex;align-items:center;gap:calc(8 * var(--u));margin-top:calc(4 * var(--u))}.affiliations-logos img{height:calc(9 * var(--u));width:auto;max-width:calc(65 * var(--u))}
+.qr-block{display:flex;flex-direction:column;align-items:center;gap:calc(2 * var(--u))}.qr-block img{width:calc(36 * var(--u));height:calc(36 * var(--u));border:calc(.6 * var(--u)) solid var(--accent);padding:calc(1 * var(--u));border-radius:calc(2 * var(--u))}.qr-label{font-size:var(--fs-2);color:var(--accent);font-weight:600}
+.body-grid{display:grid;grid-template-columns:1fr 1fr;gap:calc(8 * var(--u));min-height:0;align-items:start}
+.column{display:flex;flex-direction:column;gap:calc(5 * var(--u));min-width:0}
+.card{border:calc(.35 * var(--u)) solid var(--border-soft);border-radius:calc(2 * var(--u));padding:calc(4 * var(--u)) calc(5 * var(--u));position:relative;background:var(--bg-card)}
+.card.highlight{border-left:calc(1.5 * var(--u)) solid var(--accent)}.card.alert{border-left:calc(1.5 * var(--u)) solid var(--red-alert)}
+.section-title{display:flex;align-items:center;gap:calc(3 * var(--u));font-size:var(--fs-7);line-height:1.15;font-weight:800;color:var(--accent-deep);margin-bottom:calc(3 * var(--u))}
+.num{display:inline-flex;align-items:center;justify-content:center;width:calc(10 * var(--u));height:calc(10 * var(--u));flex-shrink:0;border-radius:50%;color:var(--bg-card);background:var(--accent);font-size:var(--fs-5)}
+p,li{font-size:var(--fs-4);line-height:1.3;text-wrap:pretty}p{margin-bottom:calc(2 * var(--u))}ul{list-style:none;margin-top:calc(2 * var(--u))}li{position:relative;padding-left:calc(6 * var(--u));margin-top:calc(1.5 * var(--u))}li::before{content:"→";position:absolute;left:0;font-weight:700}
+.keyword,.best{color:var(--accent);font-weight:700}.keyword-red{color:var(--red-alert);font-weight:700}
+.figure{margin:calc(3 * var(--u)) 0}.figure img{display:block;width:100%;height:auto}.caption{font-size:var(--fs-3);line-height:1.25;color:var(--text-secondary);margin-top:calc(2 * var(--u))}.caption strong{color:var(--accent-deep)}
+.result-table{width:100%;border-collapse:collapse;font-size:var(--fs-3);line-height:1.3;margin:calc(3 * var(--u)) 0}.result-table th{background:var(--accent);color:var(--bg-card);font-weight:700;padding:calc(1.5 * var(--u)) calc(1 * var(--u));white-space:nowrap}.result-table td{text-align:center;border-bottom:calc(.25 * var(--u)) solid var(--border-soft);padding:calc(1.5 * var(--u)) calc(1 * var(--u))}.result-table .method{text-align:left;white-space:nowrap}.result-table .ours{background:var(--gold-light);font-weight:700}
+.keybox{display:grid;grid-template-columns:1fr 1fr;gap:calc(2 * var(--u));margin:calc(3 * var(--u)) 0}.kb-item{background:var(--accent-light);text-align:center;padding:calc(3 * var(--u));display:flex;flex-direction:column;justify-content:center}.kb-num{font-size:var(--fs-8);font-weight:800;color:var(--accent)}.kb-label{font-size:var(--fs-3);line-height:1.2;color:var(--text-secondary)}
+.footer{font-size:var(--fs-2);color:var(--text-secondary);border-top:calc(.35 * var(--u)) solid var(--border-soft);padding-top:calc(2 * var(--u))}.footer strong{color:var(--accent-deep)}
+@media print {:root{--u:1mm}html,body{background:var(--bg-page);margin:0;padding:0}.poster{margin:0;width:594mm;height:840mm;break-after:avoid}}
 </style>
-</head>
+
+
+<style id="axxx-theme">
+/* =========================================================================
+   AXXX theme — :root design tokens (canonical source of truth)
+   Ported verbatim from the AXXX reference poster
+   (compression_horizon/poster/poster.html). apply_theme.py rewrites a
+   neutral posterly template's :root token VALUES to these. AXXX-only skill:
+   there is no neutral fallback (see docs/adr/0001).
+   ========================================================================= */
+:root {
+  /* AXXX brand palette — blue + grey (one semantic red kept for negatives) */
+  --accent:          #0689D4;   /* AXXX blue */
+  --accent-deep:     #053957;   /* AXXX dark blue */
+  --accent-light:    #E6F4FD;   /* light-blue tint */
+  --accent-soft:     #EAF6FE;   /* light-blue tint (soft) */
+  --accent-mid:      #0689D4;   /* AXXX blue (forward highlight) */
+
+  /* Secondary accent ("ours / best" emphasis). AXXX uses a light blue in
+     place of posterly's warm gold so the brand stays cool-monochrome. */
+  --gold:            #50C0FF;   /* AXXX light blue (ex-gold accent) */
+  --gold-soft:       #EAF6FE;   /* light-blue tint (ex-gold highlight rows) */
+  --gold-light:      #EAF6FE;
+
+  --red-alert:       #C0392B;   /* the single semantic red — negatives only */
+
+  /* Text */
+  --text-primary:    #111111;   /* near-black */
+  --text-secondary:  #687A86;   /* AXXX dark grey */
+  --text-muted:      #A7B3BB;   /* AXXX grey */
+
+  /* Backgrounds */
+  --bg-page:         #FFFFFF;   /* AXXX white */
+  --bg-card:         #FFFFFF;
+  --bg-card-tint:    #F4F8FB;
+  --bg-emphasis:     #E6F4FD;   /* light blue */
+
+  /* Borders */
+  --border-soft:     #CDD5DA;   /* light grey */
+  --border-strong:   #0689D4;   /* AXXX blue */
+
+  /* Fonts — AXXX is Inter everywhere (no serif). */
+  --font-serif:      "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-sans:       "Inter", "Helvetica Neue", Arial, sans-serif;
+}
+
+/* =========================================================================
+   AXXX brand rules — appended after a template's own <style> by
+   apply_theme.py. These are the AXXX-specific graphics layered on top of the
+   token override in theme_tokens.css: the Inter webfont, the top accent bar,
+   arrow-glyph bullets, and the affiliation-logo header strip. Selectors mirror
+   posterly's structural classes so the measure/polish gates still apply.
+   ========================================================================= */
+
+/* Inter — AXXX brand typeface. (apply_theme.py also injects the <link>
+   preconnect/stylesheet into <head>; this @import is the offline-safe echo.) */
+
+/* Top accent bar across the full poster width (AXXX brand device). */
+.poster::before {
+  content: "";
+  position: absolute; top: 0; left: 0; right: 0;
+  height: calc(6 * var(--u));
+  background: var(--accent);
+}
+
+/* Black-arrow bullets (AXXX brand graphic). Uses the local
+   images/bullet_arrow.svg that fetch_assets.py commits into the poster. */
+.card ul, .card ol { padding-left: 0; list-style: none; }
+.card li {
+  margin-bottom: calc(2 * var(--u));
+  position: relative;
+  padding-left: calc(16 * var(--u));
+}
+.card li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: calc(3 * var(--u));
+  width: calc(11 * var(--u));
+  height: calc(10 * var(--u));
+  background: url("images/bullet_arrow.svg") no-repeat center center;
+  background-size: contain;
+}
+
+/* Affiliation-logo header strip (AXXX institutions). Keep the .logo-slot /
+   .logo-chip class names so posterly's Gate E logo checks still see them. */
+.affiliations-logos {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(16 * var(--u));
+  margin-top: calc(3 * var(--u));
+}
+.affiliations-logos img {
+  height: calc(18 * var(--u));
+  width: auto;
+  object-fit: contain;
+}
+</style>
+<style id="portrait-components">
+/* Portrait variants: diagrams retain their aspect ratio and fit their content. */
+.section-1 .figure {width:80%;margin-left:auto;margin-right:auto}
+.section-2 .figure img {width:70%;margin:0 auto}
+.section-3 .figure img {width:90%;margin:0 auto}
+.card li {padding-left:calc(6 * var(--u));margin-bottom:0}
+.card li::before {top:calc(1.2 * var(--u));width:calc(4 * var(--u));height:calc(4 * var(--u))}
+.affiliations-logos {gap:calc(8 * var(--u));justify-content:flex-start}
+.affiliations-logos img {height:calc(9 * var(--u))}
+.poster {gap:calc(10 * var(--u))}
+
+.section-1 .figure {width:70%}
+.section-3 .figure img {width:82.5%}
+</style></head>
 <body>
-
 <div class="poster" data-measure-role="poster">
-
-  <!-- =========================== HEADER =========================== -->
-  <header class="header" data-measure-role="header">
-    <div class="conf-badge">
-      <div class="conf-name">ICML</div>
-      <div class="conf-sub">2026 &middot; POSTER</div>
-    </div>
-
-    <div class="title-block">
-      <div class="title">Progressive Cramming: Reliable Token <span class="accent">Compression</span><br>and What It Reveals</div>
-      <div class="subtitle">A frozen LM can compress &gt;1000 tokens into one embedding &mdash; but perfect reconstruction is brittle steering, not transferable semantics.</div>
-      <div class="authors-line">
-        <span class="author">Dmitrii Tarasov<sup>1,2</sup></span> &middot;
-        <span class="author">Timofei Lashukov<sup>2</sup></span> &middot;
-        <span class="author">Elizaveta Goncharova<sup>1,2</sup></span> &middot;
+<header class="header" data-measure-role="header">
+<div class="conf-badge">
+<div class="conf-name">ICML</div>
+<div class="conf-sub">2026 · POSTER</div>
+</div>
+<div class="title-block">
+<h1 class="title">Progressive Cramming: Reliable Token <span class="accent">Compression</span>and What It Reveals</h1>
+<div class="subtitle">A frozen LM can compress &gt;1000 tokens into one embedding — but perfect reconstruction is brittle steering, not transferable semantics.</div>
+<div class="authors-line">
+<span class="author">Dmitrii Tarasov<sup>1,2</sup></span> ·
+        <span class="author">Timofei Lashukov<sup>2</sup></span> ·
+        <span class="author">Elizaveta Goncharova<sup>1,2</sup></span> ·
         <span class="author">Andrey Kuznetsov<sup>1,3</sup></span>
-        <span class="aff"><sup>1</sup>FusionBrain Lab, AIRI &nbsp;&middot;&nbsp; <sup>2</sup>HSE University, Moscow &nbsp;&middot;&nbsp; <sup>3</sup>Innopolis University</span>
-      </div>
-      <div class="affiliations-logos">
-        <img src="https://storage.yandexcloud.net/papers-drafts/fusionbrain_combined.svg" alt="FusionBrain Lab" style="height: calc(24 * var(--u))">
-        <img src="images/airi_logo.svg" alt="AIRI">
-        <img src="images/hse_logo.svg" alt="HSE University">
-        <img src="https://storage.yandexcloud.net/papers-drafts/innopolis_logo.svg" alt="Innopolis University">
-      </div>
-    </div>
-
-    <div class="right-stack">
-      <div class="qr-block">
-        <img src="images/qr_code.png" alt="GitHub QR code">
-        <div class="qr-label">Project Page</div>
-      </div>
-    </div>
-  </header>
-
-
-  <!-- =========================== BODY (4 columns) =========================== -->
-  <div class="body-grid" data-measure-role="body">
-
-    <!-- =================== COLUMN 1: Problem + Method =================== -->
-    <div class="column" data-measure-role="column">
-
-      <!-- 1. Progressive Cramming -->
-      <div class="card highlight" data-measure-role="card">
-        <div class="section-title"><span class="num">1</span> Progressive Cramming</div>
-        <p class="body-text">
-          Optimize <strong>per-sample</strong> embedding $\mathbf{e}$ so a <span class="keyword">frozen LM</span> reconstructs tokens. Extend target <strong>one token at a time</strong>, advance only after <strong>perfect</strong>&nbsp;convergence:
+<span class="aff"><sup>1</sup>FusionBrain Lab, AIRI  ·  <sup>2</sup>HSE University, Moscow  ·  <sup>3</sup>Innopolis University</span>
+</div>
+<div class="affiliations-logos">
+<img alt="FusionBrain Lab" data-color-exempt="logo" src="images/fusionbrain_combined.svg"/>
+<img alt="AIRI" data-color-exempt="logo" src="images/airi_logo.svg"/>
+<img alt="HSE University" data-color-exempt="logo" src="images/hse_logo.svg"/>
+<img alt="Innopolis University" data-color-exempt="logo" src="images/innopolis_logo.svg"/>
+</div>
+</div>
+<div class="right-stack">
+<div class="qr-block">
+<img alt="GitHub QR code" src="images/qr_code.png"/>
+<div class="qr-label">Project Page</div>
+</div>
+</div>
+</header>
+<div class="body-grid" data-measure-role="body"><div class="column" data-measure-role="column"><div class="card highlight section-1" data-measure-role="card">
+<div class="section-title"><span class="num">1</span> Progressive Cramming</div>
+<p class="body-text">
+          Optimize <strong>per-sample</strong> embedding <i>e</i> so a <span class="keyword">frozen LM</span> reconstructs tokens. Extend target <strong>one token at a time</strong>, advance only after <strong>perfect</strong> convergence:
         </p>
-        <div class="figure" style="margin: calc(1*var(--u)) 0">
-          <img src="images/figure_progressive_cramming.png" alt="Progressive cramming: frozen LM, trainable embedding, warm-start between stages">
-        </div>
-        <ul style="margin-top: 0">
-          <li>Halt on first failure &rarr; <span class="keyword">sharp capacity&nbsp;boundary</span></li>
-          <li><span class="keyword">100% greedy generation</span> + honest per-sample&nbsp;capacity</li>
-          <li>Saved $\mathbf{e}$ at each step &rarr; <span class="keyword">optimizer&nbsp;trajectory</span></li>
-        </ul>
-      </div>
-
-      <!-- 2. Across Model Families -->
-      <div class="card highlight grow" data-measure-role="card">
-        <div class="section-title"><span class="num">2</span> Across Model Families</div>
-        <p class="body-text">
-          Maximum number of tokens a frozen model can <span class="keyword">perfectly reconstruct</span> from a single embedding via progressive&nbsp;cramming:
-        </p>
-        <table class="result-table">
-          <thead>
-            <tr>
-              <th class="method" style="text-align:left">Model</th>
-              <th>Tokens</th>
-              <th>+LowDim</th>
-              <th>Boost</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td class="method">Llama-3.1-8B</td><td>1438</td><td class="best">1697</td><td>1.2&times;</td></tr>
-            <tr><td class="method">Pythia-1.4b</td><td>430</td><td>500</td><td>1.2&times;</td></tr>
-            <tr><td class="method">SmolLM2-1.7B</td><td>335</td><td>957</td><td>2.9&times;</td></tr>
-            <tr><td class="method">Gemma-3-4B</td><td>214</td><td>697</td><td class="best">3.3&times;</td></tr>
-          </tbody>
-        </table>
-        <div class="figure" style="margin: calc(1 * var(--u)) 0 0 0">
-          <div class="caption" style="margin-bottom: calc(1 * var(--u))">
-            <strong>Low-dim projection.</strong> Optimize $\mathbf{z} \in \mathbb{R}^k$ with per-sample $W, \mathbf{b}$; $\mathbf{e} = W\mathbf{z} + \mathbf{b} \in \mathbb{R}^d$, $k \ll d$.
+<div class="figure">
+<img alt="Progressive cramming: frozen LM, trainable embedding, warm-start between stages" src="images/figure_progressive_cramming.png"/>
+</div>
+<ul>
+<li>Halt on first failure → <span class="keyword">sharp capacity boundary</span></li>
+<li><span class="keyword">100% greedy generation</span> + honest per-sample capacity</li>
+<li>Saved <i>e</i> at each step → <span class="keyword">optimizer trajectory</span></li>
+</ul>
+</div><div class="card highlight section-2" data-measure-role="card">
+<div class="section-title"><span class="num">2</span> Across Model Families</div>
+<p class="body-text">Mean number of tokens perfectly reconstructed from one embedding on <strong>50 PG19 samples</strong>:</p>
+<table class="result-table">
+<thead>
+<tr>
+<th class="method">Model</th>
+<th>Tokens</th>
+<th>+LowDim</th>
+<th>Boost</th>
+</tr>
+</thead>
+<tbody>
+<tr><td class="method">Llama-3.1-8B</td><td>1438</td><td class="best">1697</td><td>1.2×</td></tr>
+<tr><td class="method">Pythia-1.4b</td><td>430</td><td>500</td><td>1.2×</td></tr>
+<tr><td class="method">SmolLM2-1.7B</td><td>335</td><td>957</td><td>2.9×</td></tr>
+<tr><td class="method">Gemma-3-4B</td><td>214</td><td>697</td><td class="best">3.3×</td></tr>
+</tbody>
+</table>
+<div class="figure">
+<div class="caption">
+<strong>Low-dim projection.</strong> Optimize <i>z</i> ∈ ℝ<sup>k</sup> with per-sample <i>W</i>, <i>b</i>; <i>e</i> = <i>Wz</i> + <i>b</i> ∈ ℝ<sup>d</sup>, <i>k</i> ≪ <i>d</i>.
           </div>
-          <img src="images/figure_lowdim_projection.png" alt="Low-dim projection: z in R^k mapped through per-sample W,b to embedding e in R^d" style="padding: 0 calc(2*var(--u))">
-        </div>
-      </div>
-
-    </div>
-
-    <!-- =================== COLUMN 2: Cross-Model + Trajectory =================== -->
-    <div class="column col-fill-2" data-measure-role="column">
-
-      <!-- 3. Low-Dimensional Trajectories -->
-      <div class="card highlight grow" data-measure-role="card">
-        <div class="section-title"><span class="num">3</span> Optimisation Trajectories</div>
-        <div class="keybox" style="margin: 0 0 calc(2*var(--u)) 0">
-          <div class="kb-item">
-            <div class="kb-num">30&ndash;100</div>
-            <div class="kb-label">PCA components<br>for 99% variance</div>
-          </div>
-          <div class="kb-item">
-            <div class="kb-num">~log</div>
-            <div class="kb-label">growth with<br>sequence length</div>
-          </div>
-        </div>
-        <ul style="margin: calc(2*var(--u)) 0 0 0">
-          <li>Embedding trajectories are <span class="keyword">intrinsically low-dimensional</span> despite living in $\mathbb{R}^{4096}$</li>
-          <li>Accuracy basins <span class="keyword">shrink</span> with sequence length &mdash; longer sequences leave less room for&nbsp;error</li>
-        </ul>
-        <div class="figure" style="margin: calc(2*var(--u)) 0">
-          <img src="images/visual_abstract_pc1_pc2_joined.png" alt="PCA trajectory visualization for Llama-3.1-8B">
-          <div class="caption">
-            <strong>Llama-3.1-8B</strong> trajectory projected onto PC1&ndash;PC2 (<strong>65.7%</strong> variance). <strong>Black dots:</strong> optimized embedding at each prefix length. <strong>Colored regions:</strong> local accuracy landscape at lengths {100, 200, 400, 800, 1000}; saturation &prop; reconstruction accuracy. Basins <strong>shrink</strong> as sequence length grows.
-          </div>
-        </div>
-        <!--
-          Regenerate step-100 figure (80×80 mesh):
-
-          1. Regenerate NPZ cache (requires GPU, ~1h):
-             python scripts/paper/visualize_landscale_2pca.py \
-               --dataset_path artifacts/experiments_progressive/sl_4096_Meta-Llama-3.1-8B_ds_pg19_1k_limit_50_lowdim_256_lowproj_lr_0.1/progressive_prefixes \
-               --sample_id 0 --mesh_resolution 80 --num-frames 19 \
-               --anchor-indices 0 50 100 150 200 250 300 350 400 450 500 550 600 650 700 750 800 850 866 \
-               --batch_size 32 --save-npz-only \
-               --output_dir artifacts/experiments_progressive/sl_4096_Meta-Llama-3.1-8B_ds_pg19_1k_limit_50_lowdim_256_lowproj_lr_0.1/visualizations
-
-          2. Rename output to from692 variant:
-             mv .../visualizations/landscape_pca_pairs.npz .../visualizations/landscape_pca_pairs_from692.npz
-
-          3. Render visual abstract (CPU only):
-             python scripts/paper/visual_abstract.py \
-               --npz_path artifacts/experiments_progressive/sl_4096_Meta-Llama-3.1-8B_ds_pg19_1k_limit_50_lowdim_256_lowproj_lr_0.1/visualizations/landscape_pca_pairs_from692.npz \
-               --zoom_in_start_point 692 --skip_first_anchor --num_anchors 10 \
-               --scatter_alpha 0.05 --threshold 0.9 --dpi 250 \
-               --output artifacts/experiments_progressive/sl_4096_Meta-Llama-3.1-8B_ds_pg19_1k_limit_50_lowdim_256_lowproj_lr_0.1/visualizations/visual_abstract_pc1_pc2.png
-
-          4. Copy joined image to poster:
-             cp .../visualizations/visual_abstract_pc1_pc2_joined.png poster/images/visual_abstract_pc1_pc2_joined_step100.png
-        -->
-        <div class="figure" style="margin: calc(2*var(--u)) 0">
-          <img src="images/visual_abstract_pc1_pc2_joined_step100.png" alt="PCA accuracy landscape with step-100 anchors for Llama-3.1-8B">
-          <div class="caption">
-            <strong>Llama-3.1-8B + low-dim projection</strong> projected onto PC1&ndash;PC2 (<strong>61.0%</strong> variance). <strong>Colored regions:</strong> &gt;90% accuracy basin at every 100th stage. Basin area contracts monotonically with prefix length. <span class="keyword">Low-dim projection</span> enables the optimizer to escape local minima and explore multiple basins.
-          </div>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- =================== COLUMN 3: Downstream + Knockout =================== -->
-    <div class="column col-fill" data-measure-role="column">
-
-      <!-- 4. Downstream Collapse -->
-      <div class="card alert" data-measure-role="card">
-        <div class="section-title"><span class="num">4</span> Reconstruction &ne;&nbsp;Understanding</div>
-
-        <p class="body-text" style="font-family:'Inter',sans-serif; font-weight:700; color:var(--accent); margin-top:calc(2*var(--u))">Likelihood evaluation</p>
-        <div class="figure" style="margin: calc(2*var(--u)) 0">
-          <img src="images/evaluation_protocol.png" alt="Likelihood evaluation protocol: compression embedding + prefix + candidate suffixes scored by NLL">
-        </div>
-        <p class="body-text">
+<img alt="Low-dim projection: z in R^k mapped through per-sample W,b to embedding e in R^d" src="images/figure_lowdim_projection.png"/>
+</div>
+</div><div class="card highlight section-3" data-measure-role="card">
+<div class="section-title"><span class="num">3</span> Optimisation Trajectories</div>
+<div class="keybox">
+<div class="kb-item">
+<div class="kb-num">30–100</div>
+<div class="kb-label">PCA components<br/>for 99% variance</div>
+</div>
+<div class="kb-item">
+<div class="kb-num">~log</div>
+<div class="kb-label">growth with<br/>sequence length</div>
+</div>
+</div>
+<ul>
+<li>Embedding trajectories are <span class="keyword">intrinsically low-dimensional</span> despite living in ℝ<sup>4096</sup></li>
+<li>Accuracy basins <span class="keyword">shrink</span> with sequence length — longer sequences leave less room for error</li>
+</ul>
+<div class="figure">
+<img alt="PCA trajectory visualization for Llama-3.1-8B" src="images/visual_abstract_pc1_pc2_joined.png"/>
+<div class="caption"><strong>Llama-3.1-8B, PC1–PC2 (65.7% variance).</strong> Dots: stage embeddings. Colored regions: reconstruction accuracy at prefixes of 100–1000 tokens.</div>
+</div>
+<div class="figure">
+<img alt="PCA accuracy landscape with step-100 anchors for Llama-3.1-8B" src="images/visual_abstract_pc1_pc2_joined_step100.png"/>
+<div class="caption"><strong>With low-dim projection (61.0% variance).</strong> Colored regions: &gt;90% accuracy at 100-stage intervals. Longer prefixes leave smaller reconstruction basins.</div>
+</div>
+</div></div><div class="column" data-measure-role="column"><div class="card alert section-4" data-measure-role="card">
+<div class="section-title"><span class="num">4</span> Reconstruction ≠ Understanding</div>
+<p class="body-text">Likelihood evaluation</p>
+<div class="figure">
+<img alt="Likelihood evaluation protocol: compression embedding + prefix + candidate suffixes scored by NLL" src="images/evaluation_protocol.png"/>
+</div>
+<p class="body-text">
           Prepending a crammed embedding <span class="keyword-red">drops</span> benchmark accuracy, even with the original prefix in context:
         </p>
-        <table class="result-table" style="margin-top: calc(3 * var(--u))">
-          <thead>
-            <tr>
-              <th class="method" style="text-align:left">Model</th>
-              <th>HS Base</th>
-              <th>HS +Emb</th>
-              <th>ARC Base</th>
-              <th>ARC +Emb</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td class="method">Pythia-1.4b</td><td>44.0%</td><td style="color:var(--red-alert)">37.6%</td><td>53.1%</td><td style="color:var(--red-alert)">49.1%</td></tr>
-            <tr><td class="method">SmolLM2-1.7B</td><td>53.6%</td><td style="color:var(--red-alert)">37.0%</td><td>67.3%</td><td style="color:var(--red-alert)">56.0%</td></tr>
-            <tr><td class="method">Llama-3.1-8B</td><td>61.9%</td><td style="color:var(--red-alert)">40.8%</td><td>63.5%</td><td style="color:var(--red-alert)">43.3%</td></tr>
-          </tbody>
-        </table>
-
-        <p class="body-text" style="font-family:'Inter',sans-serif; font-weight:700; color:var(--accent); margin-top:calc(4*var(--u))">Generative evaluation</p>
-        <p class="body-text" style="margin-top: calc(2 * var(--u))">
+<table class="result-table">
+<thead>
+<tr>
+<th class="method">Model</th>
+<th>HS Base</th>
+<th>HS +Emb</th>
+<th>ARC Base</th>
+<th>ARC +Emb</th>
+</tr>
+</thead>
+<tbody>
+<tr><td class="method">Pythia-1.4b</td><td>44.0%</td><td>37.6%</td><td>53.1%</td><td>49.1%</td></tr>
+<tr><td class="method">SmolLM2-1.7B</td><td>53.6%</td><td>37.0%</td><td>67.3%</td><td>56.0%</td></tr>
+<tr><td class="method">Llama-3.1-8B</td><td>61.9%</td><td>40.8%</td><td>63.5%</td><td>43.3%</td></tr>
+</tbody>
+</table><p class="caption">HS = HellaSwag; ARC = ARC-E. +Emb prepends the optimized embedding to the original context.</p>
+<p class="body-text">Generative evaluation</p>
+<p class="body-text">
           On <strong>generative 5-shot MMLU</strong>: accuracy drops to <span class="keyword-red">~0%</span> with the optimized embedding. A random control stays at baseline.
         </p>
-      </div>
-
-      <!-- 5. Attention Knockout -->
-      <div class="card highlight grow" data-measure-role="card">
-        <div class="section-title"><span class="num">5</span> Attention Knockout</div>
-        <div class="figure" style="margin: calc(2*var(--u)) 0; flex: 1 1 auto; display: flex; flex-direction: column; align-items: center">
-          <img src="images/attention_knockout_cumulative_vertical.png" alt="Forward vs reverse cumulative knockout on Llama-3.1-8B" style="max-height: calc(320 * var(--u)); object-fit: contain">
-          <div class="caption">
-            <strong>Llama-3.1-8B.</strong> <strong style="color:var(--accent-mid)">Forward</strong> (mask early layers) restores downstream accuracy. <strong style="color:var(--red-alert)">Reverse</strong> fails until early layers are&nbsp;reached.
+</div><div class="card highlight section-5" data-measure-role="card">
+<div class="section-title"><span class="num">5</span> Attention Knockout</div>
+<div class="figure">
+<img alt="Forward vs reverse cumulative knockout on Llama-3.1-8B" src="images/attention_knockout_cumulative_vertical.png"/>
+<div class="caption">
+<strong>Llama-3.1-8B.</strong> <strong>Forward</strong> (mask early layers) restores downstream accuracy. <strong>Reverse</strong> fails until early layers are reached.
           </div>
-        </div>
-        <p class="body-text" style="margin-top: calc(1 * var(--u))">
-          <span class="keyword">Early layers</span> cause both reconstruction <em>and</em> capability collapse. Late-layer attention mass (20&ndash;60%) is a symptom. Consistent across Llama-3.1-8B, Pythia-1.4B, SmolLM2-1.7B.
-        </p>
-      </div>
-
-
-    </div>
-
-    <!-- =================== COLUMN 4: Cross-Model + Contributions =================== -->
-    <div class="column col-fill-sm" data-measure-role="column">
-
-      <!-- 6. Why Not Full Cramming? -->
-      <div class="card" data-measure-role="card">
-        <div class="section-title"><span class="num">6</span> Why Not Full Cramming?</div>
-        <p class="body-text">
-          Full cramming (Kuratov et al., 2025) fixes the <span class="keyword">number of tokens</span> and optimizes all at once; progressive cramming fixes <span class="keyword">reconstruction accuracy</span> at 100% and grows the sequence. Full cramming reaches higher capacity &mdash; but residual errors concentrate on <span class="keyword-red">early positions</span>, and one early miss cascades through autoregressive&nbsp;generation:
-        </p>
-        <div class="figure" style="margin: calc(2*var(--u)) 0">
-          <img src="images/figure_full_cramming.png" alt="Full cramming: TF accuracy ~99% but greedy accuracy ~1% due to early-position error cascade">
-        </div>
-        <table class="result-table" style="margin-top: calc(2 * var(--u))">
-          <thead>
-            <tr>
-              <th class="method" style="text-align:left">Model / Type</th>
-              <th>Tokens</th>
-              <th>TF Acc</th>
-              <th>Greedy</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td class="method">Llama-8B / Full</td><td>1568</td><td>99.96%</td><td style="color:var(--red-alert)">40.4%</td></tr>
-            <tr class="ours"><td class="method">Llama-8B / Progr.</td><td>1353</td><td class="best">100%</td><td class="best">89.8%</td></tr>
-            <tr><td class="method">Pythia / Full</td><td>512</td><td>99.71%</td><td style="color:var(--red-alert)">44.2%</td></tr>
-            <tr class="ours"><td class="method">Pythia / Progr.</td><td>390</td><td class="best">100%</td><td class="best">96.9%</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- 7. Limitations & Future Work -->
-      <div class="card" data-measure-role="card">
-        <div class="section-title"><span class="num">7</span> Limitations &amp; Future Work</div>
-        <ul>
-          <li><span class="keyword">Reconstruction &ne; semantics</span> &mdash; we do not yet know how to make a single embedding both perfectly reconstructable and semantically&nbsp;faithful</li>
-          <li><span class="keyword">Optimizer headroom</span> &mdash; low-dim projection results suggest better optimizers could compress longer sequences than we&nbsp;reach</li>
-        </ul>
-      </div>
-
-      <!-- 8. Takeaways -->
-      <div class="card conclusion grow" data-measure-role="card">
-        <div class="section-title"><span class="num" style="background:var(--accent-deep)">&#10003;</span> Takeaways</div>
-        <ul>
-          <li><span class="keyword">Brittle Steering</span> &mdash; perfect reconstruction stores nothing the model can use; downstream benchmarks drop, generative MMLU collapses to&nbsp;~0%</li>
-          <li><span class="keyword">Early Layers</span> &mdash; across all model families, the embedding&rsquo;s causal influence concentrates in the first few layers; late-layer attention mass is a&nbsp;symptom</li>
-        </ul>
-      </div>
-
-    </div>
-
-  </div>
-
-  <div class="footer" data-measure-role="footer" style="min-height: calc(4 * var(--u))">
-    <div><strong style="color:var(--accent-deep)">Progressive Cramming</strong> &middot; ICML 2026</div>
-  </div>
-
 </div>
-
+<p class="body-text">
+<span class="keyword">Early layers</span> cause both reconstruction <em>and</em> capability collapse. Late-layer attention mass (20–60%) is a symptom. Consistent across Llama-3.1-8B, Pythia-1.4B, SmolLM2-1.7B.
+        </p>
+</div><div class="card highlight section-6" data-measure-role="card">
+<div class="section-title"><span class="num">6</span> Why Not Full Cramming?</div>
+<p class="body-text">
+          Full cramming (Kuratov et al., 2025) fixes the <span class="keyword">number of tokens</span> and optimizes all at once; progressive cramming fixes <span class="keyword">reconstruction accuracy</span> at 100% and grows the sequence. Full cramming reaches higher capacity — but residual errors concentrate on <span class="keyword-red">early positions</span>, and one early miss cascades through autoregressive generation:
+        </p>
+<div class="figure">
+<img alt="Full cramming: TF accuracy ~99% but greedy accuracy ~1% due to early-position error cascade" src="images/figure_full_cramming.png"/>
+</div>
+<table class="result-table">
+<thead>
+<tr>
+<th class="method">Model / Type</th>
+<th>Tokens</th>
+<th>TF Acc</th>
+<th>Greedy</th>
+</tr>
+</thead>
+<tbody>
+<tr><td class="method">Llama-8B / Full</td><td>1568</td><td>99.96%</td><td>40.4%</td></tr>
+<tr class="ours"><td class="method">Llama-8B / Progr.</td><td>1438</td><td class="best">100%</td><td class="best">100%</td></tr>
+<tr><td class="method">Pythia / Full</td><td>512</td><td>99.71%</td><td>44.2%</td></tr>
+<tr class="ours"><td class="method">Pythia / Progr.</td><td>430</td><td class="best">100%</td><td class="best">100%</td></tr>
+</tbody>
+</table>
+</div><div class="card highlight section-7" data-measure-role="card">
+<div class="section-title"><span class="num">7</span> Limitations &amp; Future Work</div>
+<ul>
+<li><span class="keyword">Reconstruction ≠ semantics</span> — we do not yet know how to make a single embedding both perfectly reconstructable and semantically faithful</li>
+<li><span class="keyword">Optimizer headroom</span> — low-dim projection results suggest better optimizers could compress longer sequences than we reach</li>
+</ul>
+</div><div class="card highlight section-8" data-measure-role="card">
+<div class="section-title"><span class="num">✓</span> Takeaways</div>
+<ul>
+<li><span class="keyword">Brittle Steering</span> — perfect reconstruction does not preserve useful semantics in the tested tasks; downstream benchmarks drop, generative MMLU collapses to ~0%</li>
+<li><span class="keyword">Early Layers</span> — across the three tested families, the embedding’s causal influence concentrates in the first few layers; late-layer attention mass is a symptom</li>
+</ul>
+</div></div></div>
+<div class="footer" data-measure-role="footer">
+<div><strong>Progressive Cramming</strong> · ICML 2026</div>
+</div>
+</div>
 </body>
 </html>
