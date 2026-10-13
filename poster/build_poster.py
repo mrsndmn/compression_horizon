@@ -73,21 +73,21 @@ def convert(gs, rgb, converted, final):
             "-dNOPAUSE",
             "-sDEVICE=pdfwrite",
             "-dCompatibilityLevel=1.6",
-            "-r300",
+            "-r299",
             "-sColorConversionStrategy=CMYK",
             "-sProcessColorModel=DeviceCMYK",
             f"-sOutputICCProfile={ICC}",
             "-dOverrideICC",
             "-dRenderIntent=1",
             "-dDownsampleColorImages=true",
-            "-dColorImageResolution=300",
+            "-dColorImageResolution=299",
             "-dColorImageDownsampleThreshold=1.0",
             "-dColorImageDownsampleType=/Bicubic",
             "-dDownsampleGrayImages=true",
-            "-dGrayImageResolution=300",
+            "-dGrayImageResolution=299",
             "-dGrayImageDownsampleThreshold=1.0",
             "-dDownsampleMonoImages=true",
-            "-dMonoImageResolution=300",
+            "-dMonoImageResolution=299",
             "-dMonoImageDownsampleThreshold=1.0",
             "-dAutoFilterColorImages=false",
             "-dColorImageFilter=/FlateEncode",
@@ -141,7 +141,7 @@ def verify(final):
         xref, _, width, height = im[:4]
         for rect in page.get_image_rects(xref):
             dpi = [width * 72 / rect.width, height * 72 / rect.height]
-            assert all(149.5 <= d <= 301 for d in dpi), (xref, dpi)
+            assert all(150 <= d <= 300 for d in dpi), (xref, dpi)
             images.append({"xref": xref, "dpi": [round(d, 2) for d in dpi]})
     assert images, "No raster images found"
     text = page.get_text()
