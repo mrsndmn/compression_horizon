@@ -5,9 +5,6 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>Progressive Cramming — ICML 2026 Poster</title>
-
-
-
 <style>
 @page { size: 594mm 840mm; margin: 0; }
 :root {
@@ -18,10 +15,10 @@
 --text-muted:#A7B3BB; --bg-page:#FFFFFF; --bg-card:#FFFFFF;
 --border-soft:#CDD5DA; --bg-screen:#2b2b2b;
 --u:1.6px;
---fs-1:calc(4 * var(--u)); --fs-2:calc(4.8 * var(--u));
---fs-3:calc(5.3 * var(--u)); --fs-4:calc(6.1 * var(--u));
---fs-5:calc(6.5 * var(--u)); --fs-6:calc(7 * var(--u));
---fs-7:calc(8 * var(--u)); --fs-8:calc(11 * var(--u)); --fs-9:calc(15 * var(--u));
+--fs-1:calc(4 * var(--u)); --fs-2:calc(5.8 * var(--u));
+--fs-3:calc(7.4 * var(--u)); --fs-4:calc(8.5 * var(--u));
+--fs-5:calc(8 * var(--u)); --fs-6:calc(8.5 * var(--u));
+--fs-7:calc(10 * var(--u)); --fs-8:calc(13 * var(--u)); --fs-9:calc(17 * var(--u));
 /* ===== END DESIGN TOKENS ===== */
 }
 * {box-sizing:border-box;margin:0;padding:0}
@@ -50,8 +47,6 @@ p,li{font-size:var(--fs-4);line-height:1.3;text-wrap:pretty}p{margin-bottom:calc
 .footer{font-size:var(--fs-2);color:var(--text-secondary);border-top:calc(.35 * var(--u)) solid var(--border-soft);padding-top:calc(2 * var(--u))}.footer strong{color:var(--accent-deep)}
 @media print {:root{--u:1mm}html,body{background:var(--bg-page);margin:0;padding:0}.poster{margin:0;width:594mm;height:840mm;break-after:avoid}}
 </style>
-
-
 <style id="axxx-theme">
 /* =========================================================================
    AXXX theme — :root design tokens (canonical source of truth)
@@ -150,18 +145,25 @@ p,li{font-size:var(--fs-4);line-height:1.3;text-wrap:pretty}p{margin-bottom:calc
 }
 </style>
 <style id="portrait-components">
-/* Portrait variants: diagrams retain their aspect ratio and fit their content. */
-.section-1 .figure {width:80%;margin-left:auto;margin-right:auto}
-.section-2 .figure img {width:70%;margin:0 auto}
-.section-3 .figure img {width:90%;margin:0 auto}
-.card li {padding-left:calc(6 * var(--u));margin-bottom:0}
-.card li::before {top:calc(1.2 * var(--u));width:calc(4 * var(--u));height:calc(4 * var(--u))}
+/* Readable portrait components: no reduced-width plots or redundant diagrams. */
+.authors-line {font-size:calc(6.8 * var(--u))}
 .affiliations-logos {gap:calc(8 * var(--u));justify-content:flex-start}
-.affiliations-logos img {height:calc(9 * var(--u))}
+.affiliations-logos img {height:calc(10 * var(--u))}
+.title {font-size:var(--fs-9)}
+p,li {line-height:1.22}
+.card li {padding-left:calc(6 * var(--u));margin-bottom:0}
+.card li::before {top:calc(2 * var(--u));width:calc(4 * var(--u));height:calc(4 * var(--u))}
+.caption {line-height:1.2;color:var(--text-secondary)}
+.result-table {font-size:var(--fs-3)}
+.result-table th {white-space:normal}
+.section-4 .result-table .method {white-space:normal}
+.section-2 .caption {margin-top:calc(3 * var(--u))}
 .poster {gap:calc(10 * var(--u))}
+.section-3 .figure img {width:100%}
 
-.section-1 .figure {width:70%}
-.section-3 .figure img {width:82.5%}
+/* Avoid stacking a final paragraph/table margin on top of card padding. */
+.card > p:last-child {margin-bottom:0}
+.card > .result-table:last-child {margin-bottom:calc(1 * var(--u))}
 </style></head>
 <body>
 <div class="poster" data-measure-role="poster">
@@ -172,7 +174,7 @@ p,li{font-size:var(--fs-4);line-height:1.3;text-wrap:pretty}p{margin-bottom:calc
 </div>
 <div class="title-block">
 <h1 class="title">Progressive Cramming: Reliable Token <span class="accent">Compression</span> and What It Reveals</h1>
-<div class="subtitle">A frozen LM can compress &gt;1000 tokens into one embedding — but perfect reconstruction is brittle steering, not transferable semantics.</div>
+<div class="subtitle">One embedding reconstructs &gt;1000 tokens — yet perfect reconstruction does not preserve useful semantics.</div>
 <div class="authors-line">
 <span class="author">Dmitrii Tarasov<sup>1,2</sup></span> ·
         <span class="author">Timofei Lashukov<sup>2</sup></span> ·
@@ -196,44 +198,13 @@ p,li{font-size:var(--fs-4);line-height:1.3;text-wrap:pretty}p{margin-bottom:calc
 </header>
 <div class="body-grid" data-measure-role="body"><div class="column" data-measure-role="column"><div class="card highlight section-1" data-measure-role="card">
 <div class="section-title"><span class="num">1</span> Progressive Cramming</div>
-<p class="body-text">
-          Optimize <strong>per-sample</strong> embedding <i>e</i> so a <span class="keyword">frozen LM</span> reconstructs tokens. Extend target <strong>one token at a time</strong>, advance only after <strong>perfect</strong> convergence:
-        </p>
+<p class="body-text">Train one embedding for a <span class="keyword">frozen LM</span>. Grow the target <strong>one token at a time</strong>; advance only after perfect reconstruction.</p>
 <div class="figure">
-<img alt="Progressive cramming: frozen LM, trainable embedding, warm-start between stages" src="images/figure_progressive_cramming.png"/>
+<img alt="Progressive cramming: frozen LM, trainable embedding, warm-start between stages" data-source="paper" src="images/figure_progressive_cramming_trimmed.png"/>
 </div>
-<ul>
-<li>Halt on first failure → <span class="keyword">sharp capacity boundary</span></li>
-<li><span class="keyword">100% greedy generation</span> + honest per-sample capacity</li>
-<li>Saved <i>e</i> at each step → <span class="keyword">optimizer trajectory</span></li>
-</ul>
-</div><div class="card highlight section-2" data-measure-role="card">
-<div class="section-title"><span class="num">2</span> Across Model Families</div>
-<p class="body-text">Mean number of tokens perfectly reconstructed from one embedding on <strong>50 PG19 samples</strong>:</p>
-<table class="result-table">
-<thead>
-<tr>
-<th class="method">Model</th>
-<th>Tokens</th>
-<th>+LowDim</th>
-<th>Boost</th>
-</tr>
-</thead>
-<tbody>
-<tr><td class="method">Llama-3.1-8B</td><td>1438</td><td class="best">1697</td><td>1.2×</td></tr>
-<tr><td class="method">Pythia-1.4b</td><td>430</td><td>500</td><td>1.2×</td></tr>
-<tr><td class="method">SmolLM2-1.7B</td><td>335</td><td>957</td><td>2.9×</td></tr>
-<tr><td class="method">Gemma-3-4B</td><td>214</td><td>697</td><td class="best">3.3×</td></tr>
-</tbody>
-</table>
-<div class="figure">
-<div class="caption">
-<strong>Low-dim projection.</strong> Optimize <i>z</i> ∈ ℝ<sup>k</sup> with per-sample <i>W</i>, <i>b</i>; <i>e</i> = <i>Wz</i> + <i>b</i> ∈ ℝ<sup>d</sup>, <i>k</i> ≪ <i>d</i>.
-          </div>
-<img alt="Low-dim projection: z in R^k mapped through per-sample W,b to embedding e in R^d" src="images/figure_lowdim_projection.png"/>
-</div>
+<ul><li><span class="keyword">100% greedy reconstruction</span> at every accepted stage.</li><li>Stop at first failure; save the embedding trajectory.</li></ul>
 </div><div class="card highlight section-3" data-measure-role="card">
-<div class="section-title"><span class="num">3</span> Optimisation Trajectories</div>
+<div class="section-title"><span class="num">2</span> Optimisation Trajectories</div>
 <div class="keybox">
 <div class="kb-item">
 <div class="kb-num">30–100</div>
@@ -244,67 +215,17 @@ p,li{font-size:var(--fs-4);line-height:1.3;text-wrap:pretty}p{margin-bottom:calc
 <div class="kb-label">growth with<br/>sequence length</div>
 </div>
 </div>
-<ul>
-<li>Embedding trajectories are <span class="keyword">intrinsically low-dimensional</span> despite living in ℝ<sup>4096</sup></li>
-<li>Accuracy basins <span class="keyword">shrink</span> with sequence length — longer sequences leave less room for error</li>
-</ul>
+<ul><li><span class="keyword">Low-dimensional paths:</span> a few PCA components explain 99% of variance.</li><li>Longer prefixes leave <span class="keyword">smaller accuracy basins</span>.</li></ul>
 <div class="figure">
-<img alt="PCA trajectory visualization for Llama-3.1-8B" src="images/visual_abstract_pc1_pc2_joined.png"/>
-<div class="caption"><strong>Llama-3.1-8B, PC1–PC2 (65.7% variance).</strong> Dots: stage embeddings. Colored regions: reconstruction accuracy at prefixes of 100–1000 tokens.</div>
+<img alt="PCA trajectory visualization for Llama-3.1-8B" data-source="paper" src="images/visual_abstract_pc1_pc2_joined_trimmed.png"/>
+<div class="caption"><strong>Llama-3.1-8B.</strong> PC1–PC2 explain 65.7% of trajectory variance. Color: reconstruction accuracy.</div>
 </div>
-<div class="figure">
-<img alt="PCA accuracy landscape with step-100 anchors for Llama-3.1-8B" src="images/visual_abstract_pc1_pc2_joined_step100.png"/>
-<div class="caption"><strong>With low-dim projection (61.0% variance).</strong> Colored regions: &gt;90% accuracy at 100-stage intervals. Longer prefixes leave smaller reconstruction basins.</div>
-</div>
-</div></div><div class="column" data-measure-role="column"><div class="card alert section-4" data-measure-role="card">
-<div class="section-title"><span class="num">4</span> Reconstruction ≠ Understanding</div>
-<p class="body-text">Likelihood evaluation</p>
-<div class="figure">
-<img alt="Likelihood evaluation protocol: compression embedding + prefix + candidate suffixes scored by NLL" src="images/evaluation_protocol.png"/>
-</div>
-<p class="body-text">
-          Prepending a crammed embedding <span class="keyword-red">drops</span> benchmark accuracy, even with the original prefix in context:
-        </p>
-<table class="result-table">
-<thead>
-<tr>
-<th class="method">Model</th>
-<th>HS Base</th>
-<th>HS +Emb</th>
-<th>ARC Base</th>
-<th>ARC +Emb</th>
-</tr>
-</thead>
-<tbody>
-<tr><td class="method">Pythia-1.4b</td><td>44.0%</td><td>37.6%</td><td>53.1%</td><td>49.1%</td></tr>
-<tr><td class="method">SmolLM2-1.7B</td><td>53.6%</td><td>37.0%</td><td>67.3%</td><td>56.0%</td></tr>
-<tr><td class="method">Llama-3.1-8B</td><td>61.9%</td><td>40.8%</td><td>63.5%</td><td>43.3%</td></tr>
-</tbody>
-</table><p class="caption">HS = HellaSwag; ARC = ARC-E. +Emb prepends the optimized embedding to the original context.</p>
-<p class="body-text">Generative evaluation</p>
-<p class="body-text">
-          On <strong>generative 5-shot MMLU</strong>: accuracy drops to <span class="keyword-red">~0%</span> with the optimized embedding. A random control stays at baseline.
-        </p>
-</div><div class="card highlight section-5" data-measure-role="card">
-<div class="section-title"><span class="num">5</span> Attention Knockout</div>
-<div class="figure">
-<img alt="Forward vs reverse cumulative knockout on Llama-3.1-8B" src="images/attention_knockout_cumulative_vertical.png"/>
-<div class="caption">
-<strong>Llama-3.1-8B.</strong> <strong>Forward</strong> (mask early layers) restores downstream accuracy. <strong>Reverse</strong> fails until early layers are reached.
-          </div>
-</div>
-<p class="body-text">
-<span class="keyword">Early layers</span> cause both reconstruction <em>and</em> capability collapse. Late-layer attention mass (20–60%) is a symptom. Consistent across Llama-3.1-8B, Pythia-1.4B, SmolLM2-1.7B.
-        </p>
 </div><div class="card highlight section-6" data-measure-role="card">
-<div class="section-title"><span class="num">6</span> Why Not Full Cramming?</div>
-<p class="body-text">
-          Full cramming (Kuratov et al., 2025) fixes the <span class="keyword">number of tokens</span> and optimizes all at once; progressive cramming fixes <span class="keyword">reconstruction accuracy</span> at 100% and grows the sequence. Full cramming reaches higher capacity — but residual errors concentrate on <span class="keyword-red">early positions</span>, and one early miss cascades through autoregressive generation:
-        </p>
+<div class="section-title"><span class="num">3</span> Why Not Full Cramming?</div>
+<p class="body-text">Full cramming fixes length; progressive cramming fixes <span class="keyword">100% reconstruction</span>. Small teacher-forcing errors can cascade during generation:</p>
 <div class="figure">
-<img alt="Full cramming: TF accuracy ~99% but greedy accuracy ~1% due to early-position error cascade" src="images/figure_full_cramming.png"/>
-</div>
-<table class="result-table">
+<img alt="Full cramming: TF accuracy ~99% but greedy accuracy ~1% due to early-position error cascade" src="images/figure_full_cramming_trimmed.png"/>
+<div class="caption">Schematic: early errors can derail generation.</div></div><table class="result-table">
 <thead>
 <tr>
 <th class="method">Model / Type</th>
@@ -320,18 +241,61 @@ p,li{font-size:var(--fs-4);line-height:1.3;text-wrap:pretty}p{margin-bottom:calc
 <tr class="ours"><td class="method">Pythia / Progr.</td><td>430</td><td class="best">100%</td><td class="best">100%</td></tr>
 </tbody>
 </table>
+</div></div><div class="column" data-measure-role="column"><div class="card highlight section-2" data-measure-role="card">
+<div class="section-title"><span class="num">4</span> Across Model Families</div>
+<p class="body-text">Mean compressed tokens on <strong>50 PG19 samples</strong>:</p>
+<table class="result-table">
+<thead>
+<tr>
+<th class="method">Model</th>
+<th>Tokens</th>
+<th>+LowDim</th>
+<th>Boost</th>
+</tr>
+</thead>
+<tbody>
+<tr><td class="method">Llama-3.1-8B</td><td>1438</td><td class="best">1697</td><td>1.2×</td></tr>
+<tr><td class="method">Pythia-1.4b</td><td>430</td><td>500</td><td>1.2×</td></tr>
+<tr><td class="method">SmolLM2-1.7B</td><td>335</td><td>957</td><td>2.9×</td></tr>
+<tr><td class="method">Gemma-3-4B</td><td>214</td><td>697</td><td class="best">3.3×</td></tr>
+</tbody>
+</table><p><strong class="keyword">Up to 3.3× more tokens.</strong></p>
+<div class="figure">
+<div class="caption"><strong>Low-dim projection:</strong> jointly optimize per-sample <i>W</i>, <i>z</i>, <i>b</i>; <i>e</i> = <i>Wz</i> + <i>b</i>, with <i>z</i> ∈ ℝ<sup>k</sup>, <i>k</i> ≪ <i>d</i>.</div>
+</div>
+<div class="figure">
+<img alt="PCA accuracy landscape with step-100 anchors for Llama-3.1-8B" data-source="paper" src="images/visual_abstract_pc1_pc2_joined_step100_trimmed.png"/>
+<div class="caption"><strong>With low-dim projection.</strong> PC1–PC2: 61.0% variance. Color: &gt;90% reconstruction regions.</div>
+</div></div><div class="card alert section-4" data-measure-role="card">
+<div class="section-title"><span class="num">5</span> Reconstruction ≠ Understanding</div>
+<p class="body-text">Prepending the optimized embedding <span class="keyword-red">reduces accuracy</span>, even with the original prefix in context:</p>
+<table class="result-table">
+<thead>
+<tr>
+<th class="method">Model</th>
+<th>HS Base</th>
+<th>HS +Emb</th>
+<th>ARC Base</th>
+<th>ARC +Emb</th>
+</tr>
+</thead>
+<tbody>
+<tr><td class="method">Pythia-1.4b</td><td>44.0%</td><td>37.6%</td><td>53.1%</td><td>49.1%</td></tr>
+<tr><td class="method">SmolLM2-1.7B</td><td>53.6%</td><td>37.0%</td><td>67.3%</td><td>56.0%</td></tr>
+<tr><td class="method">Llama-3.1-8B</td><td>61.9%</td><td>40.8%</td><td>63.5%</td><td>43.3%</td></tr>
+</tbody>
+</table><p class="caption">HS = HellaSwag; ARC = ARC-E. +Emb = original context with the optimized embedding.</p>
+<p class="body-text"><strong>Generative 5-shot MMLU:</strong> accuracy falls to <span class="keyword-red">~0%</span>. A random embedding stays near baseline.</p>
+</div><div class="card highlight section-5" data-measure-role="card">
+<div class="section-title"><span class="num">6</span> Attention Knockout</div>
+<div class="figure">
+<img alt="Forward vs reverse cumulative knockout on Llama-3.1-8B" data-source="paper" src="images/attention_knockout_cumulative_vertical_trimmed.png"/>
+<div class="caption"><strong>Llama-3.1-8B.</strong> Masking early layers restores downstream accuracy; masking late layers does not.</div>
+</div>
+<p class="body-text"><span class="keyword">Early layers drive the disruption.</span> The same pattern holds for Pythia-1.4B and SmolLM2-1.7B.</p>
 </div><div class="card highlight section-7" data-measure-role="card">
-<div class="section-title"><span class="num">7</span> Limitations &amp; Future Work</div>
-<ul>
-<li><span class="keyword">Reconstruction ≠ semantics</span> — we do not yet know how to make a single embedding both perfectly reconstructable and semantically faithful</li>
-<li><span class="keyword">Optimizer headroom</span> — low-dim projection results suggest better optimizers could compress longer sequences than we reach</li>
-</ul>
-</div><div class="card highlight section-8" data-measure-role="card">
-<div class="section-title"><span class="num">✓</span> Takeaways</div>
-<ul>
-<li><span class="keyword">Brittle Steering</span> — perfect reconstruction does not preserve useful semantics in the tested tasks; downstream benchmarks drop, generative MMLU collapses to ~0%</li>
-<li><span class="keyword">Early Layers</span> — across the three tested families, the embedding’s causal influence concentrates in the first few layers; late-layer attention mass is a symptom</li>
-</ul>
+<div class="section-title"><span class="num">✓</span> Takeaways &amp; Next Steps</div>
+<ul><li><span class="keyword">Reconstruction ≠ semantics.</span> Perfect decoding can coexist with downstream collapse.</li><li><span class="keyword">Optimization headroom.</span> Low-dim projection improves capacity; useful semantic compression remains open.</li></ul>
 </div></div></div>
 <div class="footer" data-measure-role="footer">
 <div><strong>Progressive Cramming</strong> · ICML 2026</div>

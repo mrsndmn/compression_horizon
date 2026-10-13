@@ -49,12 +49,21 @@ def render(path):
             const r = e.getBoundingClientRect();
             return r.left < bounds.left - 1 || r.right > bounds.right + 1 || r.bottom > bounds.bottom + 1;
           }).map(e => e.className || e.tagName);
-          return {spread_px: Math.max(...ends)-Math.min(...ends),
+          const pt = e => parseFloat(getComputedStyle(e).fontSize) * 72 / 96;
+          const typography = {
+            body_min_pt: Math.min(...[...document.querySelectorAll('.card p:not(.caption), .card li')].map(pt)),
+            caption_min_pt: Math.min(...[...document.querySelectorAll('.caption, .kb-label')].map(pt)),
+            table_min_pt: Math.min(...[...document.querySelectorAll('.result-table')].map(pt)),
+          };
+          return {typography, spread_px: Math.max(...ends)-Math.min(...ends),
                   footer_gaps_px: ends.map(y => footer-y), card_gaps_px: gaps,
                   broken_images: [...document.images].filter(i => !i.complete || !i.naturalWidth).map(i => i.src),
                   overflow};
         }"""
         )
+        assert layout["typography"]["body_min_pt"] >= 24, layout
+        assert layout["typography"]["caption_min_pt"] >= 20, layout
+        assert layout["typography"]["table_min_pt"] >= 20, layout
         assert layout["spread_px"] < 5, layout
         assert all(30 <= x <= 50 for x in layout["footer_gaps_px"]), layout
         assert all(12 <= x <= 50 for x in layout["card_gaps_px"]), layout
@@ -73,21 +82,21 @@ def convert(gs, rgb, converted, final):
             "-dNOPAUSE",
             "-sDEVICE=pdfwrite",
             "-dCompatibilityLevel=1.6",
-            "-r299",
+            "-r295",
             "-sColorConversionStrategy=CMYK",
             "-sProcessColorModel=DeviceCMYK",
             f"-sOutputICCProfile={ICC}",
             "-dOverrideICC",
             "-dRenderIntent=1",
             "-dDownsampleColorImages=true",
-            "-dColorImageResolution=299",
+            "-dColorImageResolution=295",
             "-dColorImageDownsampleThreshold=1.0",
             "-dColorImageDownsampleType=/Bicubic",
             "-dDownsampleGrayImages=true",
-            "-dGrayImageResolution=299",
+            "-dGrayImageResolution=295",
             "-dGrayImageDownsampleThreshold=1.0",
             "-dDownsampleMonoImages=true",
-            "-dMonoImageResolution=299",
+            "-dMonoImageResolution=295",
             "-dMonoImageDownsampleThreshold=1.0",
             "-dAutoFilterColorImages=false",
             "-dColorImageFilter=/FlateEncode",

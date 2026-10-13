@@ -2,6 +2,10 @@ The print poster is `poster.pdf`: one portrait page, **594 × 840 mm**, CMYK wit
 an embedded **FOGRA39L Coated** output profile. The organizer explicitly specifies
 840 mm height (standard ISO A1 is 841 mm). `poster_preview.pdf` is an identical
 copy; `poster_preview.png` is rendered from the final CMYK PDF for screen review.
+Main copy is 24 pt; captions and tables are 21 pt. The build enforces minimum
+24 pt body copy and 20 pt captions/tables. Five figures use whitespace-trimmed
+versions (`images/*_trimmed.png`); the unmodified source images are retained.
+Redundant projection/scoring diagrams and repeated conclusion copy are omitted.
 Text and SVG logos remain vector; raster elements are between 150 and 300 DPI
 (with subpixel rounding at the upper bound).
 
@@ -17,7 +21,8 @@ Dependencies: `playwright` with its Chromium browser, `pikepdf`, `pymupdf`,
 `Pillow`, and Ghostscript. The build needs no network access. Fonts, logos,
 figures, QR code, and ICC profile are committed locally. The builder validates
 column alignment, footer/card gaps, broken images, page overflow, page size,
-page count, the embedded profile, image color spaces, and effective raster DPI.
+page count, the embedded profile, image color spaces, effective raster DPI,
+and minimum physical font sizes.
 It writes the measured results to `print_report.json`.
 
 Layout adapted with the `paper-to-poster` skill's portrait two-column workflow,

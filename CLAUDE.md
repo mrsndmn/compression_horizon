@@ -71,6 +71,7 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
 - Poster rendering: `python poster/build_poster.py`; Playwright print emulation
   checks layout before Ghostscript converts RGB to FOGRA39 CMYK. pikepdf embeds
   the output intent; PyMuPDF verifies print dimensions and effective raster DPI.
+  The renderer also enforces minimum body/caption/table sizes of 24/20/20 pt.
 - Poster delivery/review: `poster/poster.pdf` is the print artifact;
   `poster/poster_preview.pdf` is identical; `poster/poster_preview.png` comes
   from the final PDF. `poster/print_report.json` records the validated dimensions,
