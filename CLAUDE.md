@@ -105,3 +105,5 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
 - `analysis.information_gain.compute_information_gain` uses embedding forwards
   for both baseline and memory contexts, keeping EOS document policy consistent
   with single-text cramming for native checkpoints and ordinary HF models.
+- `tests/test_sps_launcher.py` verifies MLS's single-line shell contract,
+  compute-node mount paths, and that the completion marker requires exit zero.

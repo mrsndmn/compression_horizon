@@ -46,21 +46,29 @@ TRAINING_ARGS = {
 }
 
 
+def cluster_path(path):
+    """Translate the notebook mount to the established MLS compute-node mount."""
+    path = Path(path)
+    notebook_root = Path("/mnt/virtual_ai0001053-00054_SR004-nfs2")
+    if path.is_relative_to(notebook_root):
+        return str(Path("/workspace-SR004.nfs2") / path.relative_to(notebook_root))
+    return str(path)
+
+
 def build_config(exp, commit):
     design = dict(experiment=exp, training_args=TRAINING_ARGS, commit=commit)
     signature = hashlib.sha256(json.dumps(design, sort_keys=True).encode()).hexdigest()[:12]
     output = ARTIFACTS / f"{exp['name']}_{signature}"
     stage = ARTIFACTS / "code" / commit
-    args = dict(TRAINING_ARGS, model_checkpoint=exp["checkpoint"], output_dir=str(output))
+    args = dict(TRAINING_ARGS, model_checkpoint=cluster_path(exp["checkpoint"]), output_dir=cluster_path(output))
     command = [PYTHON, "scripts/activation_distillation.py"]
     for key, value in args.items():
         command.extend([f"--{key}", str(value)])
-    script = "\n".join(
+    script = " && ".join(
         [
-            "set -euo pipefail",
-            f"cd {shlex.quote(str(stage))}",
+            f"cd {shlex.quote(cluster_path(stage))}",
             shlex.join(command),
-            f"touch {shlex.quote(str(output / 'completed'))}",
+            f"touch {shlex.quote(cluster_path(output / 'completed'))}",
         ]
     )
     return dict(
@@ -111,7 +119,12 @@ def main():
             payload={
                 "script": cfg["script"],
                 "job_desc": cfg["job_desc"],
-                "env_variables": {"PYTHONPATH": str(stage / "src"), "HF_HOME": "/workspace-SR004.nfs2/.cache/huggingface"},
+                "env_variables": {
+                    "PYTHONPATH": cluster_path(stage / "src"),
+                    "PYTHONUNBUFFERED": "1",
+                    "OMP_NUM_THREADS": "8",
+                    "HF_HOME": "/workspace-SR004.nfs2/.cache/huggingface",
+                },
                 "instance_type": "a100.1gpu",
                 "queue_name": "fusionbrainlab-job",
                 "region": options["region"],
