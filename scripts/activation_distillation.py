@@ -294,7 +294,12 @@ if __name__ == "__main__":
         or "experiments_compression_head/ch_head_" in training_args.model_checkpoint
         or dual_ckpt
     )
-    if load_compression_head:
+    native_sps = os.path.isfile(training_args.model_checkpoint) and training_args.model_checkpoint.endswith(".pt")
+    if native_sps:
+        from compression_horizon.models.sps_causal_lm import load_sps_checkpoint
+
+        model = load_sps_checkpoint(training_args.model_checkpoint, torch_dtype=torch_dtype)
+    elif load_compression_head:
         from compression_horizon.models.llama_compression_head import LlamaForCausalLMCompressionHead
 
         ch_model_path = compressor_path if dual_ckpt else training_args.model_checkpoint
@@ -348,7 +353,12 @@ if __name__ == "__main__":
             p.requires_grad = False
 
     tokenizer_path = compressor_path if dual_ckpt else training_args.model_checkpoint
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+    if native_sps:
+        from compression_horizon.models.sps_causal_lm import load_sps_tokenizer
+
+        tokenizer = load_sps_tokenizer()
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
 

@@ -81,3 +81,24 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   `make paper-check`, `make paper-clean`, and `make tables` are independent of
   the poster build. Generated paper tables are inputs for poster claims,
   never edited as part of poster generation.
+
+## Native SPS usage arms
+
+- `scripts/jobs/run_jobs_sps.py --dry` describes the matched native-checkpoint
+  progressive cramming pair; without `--dry` it submits MLS jobs from a committed
+  snapshot under `artifacts/sps_cramming/code/`. Designs and complete job IDs are
+  saved beside each run; `completed` is written only after successful training.
+- `scripts/activation_distillation.py --model_checkpoint <native.pt>` loads the
+  checkpoint with `models.sps_causal_lm.load_sps_checkpoint` and the GPT-2 tokenizer.
+  Existing HF loading paths remain in use for non-native checkpoints.
+- Native inference/analysis must explicitly use `load_sps_checkpoint` and
+  `load_sps_tokenizer`; these models are not registered with HF AutoModel.
+  Both `input_ids` and differentiable `inputs_embeds` produce HF-shaped logits.
+  SPS preserves its interleaved prediction stream and temporary-key mask.
+- `tests/test_sps_causal_lm.py` covers masking, causal isolation, embedding
+  gradients, strict loading and native trainer integration. Vendored source
+  provenance and interface limits are in `models/sps_vendor/README.md`.
+- `scripts/validation/validate_sps_port.py --source-repo <sps> --checkpoint <native.pt>`
+  compares real-checkpoint logits and input gradients against the upstream GPU
+  kernels. `--long-smoke` also checks a full-context differentiable forward and
+  records peak GPU memory. The source checkout is used only for validation.
