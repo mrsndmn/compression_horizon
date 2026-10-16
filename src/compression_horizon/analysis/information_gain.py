@@ -86,7 +86,10 @@ def compute_information_gain(
             base_attention_mask = torch.cat((sample_prefix_attention_mask, sample_attention_mask), dim=1)
             base_outputs = model(inputs_embeds=base_token_embeddings, attention_mask=base_attention_mask)
         else:
-            base_outputs = model(input_ids=sample_input_ids, attention_mask=sample_attention_mask)
+            # Match the compressed forward's document policy. Native SPS
+            # token-ID forwards may infer EOS boundaries; embeddings represent
+            # the single-text context used throughout cramming.
+            base_outputs = model(inputs_embeds=sample_token_embeddings, attention_mask=sample_attention_mask)
         h_lm_bits = _sequence_cross_entropy_bits(
             base_outputs.logits, sample_input_ids, sample_attention_mask, align_offset=prefix_len
         )

@@ -153,3 +153,26 @@ def test_progressive_trainer_native_smoke(tmp_path, sps):
     )
     out = trainer.train()
     assert out and (tmp_path / "progressive_prefixes").exists()
+
+
+@pytest.mark.parametrize("sps", [False, True])
+def test_information_gain_without_memory_is_zero_across_eos(sps):
+    from compression_horizon.analysis.information_gain import compute_information_gain
+
+    torch.manual_seed(42)
+    model = SPSCausalLM(tiny_args(), sps=sps).eval()
+    ids = torch.tensor([[1, 29, 2, 3]])
+    embeddings = model.get_input_embeddings()(ids)
+    mask = torch.ones_like(ids)
+    # Make sure EOS inference really distinguishes these contexts: a zero-IG
+    # assertion would be vacuous if both forward paths accidentally matched.
+    assert not torch.allclose(model(input_ids=ids).logits, model(inputs_embeds=embeddings).logits)
+    gain = compute_information_gain(
+        model=model,
+        input_ids=ids,
+        attention_mask=mask,
+        token_embeddings=embeddings,
+        compression_token_embeddings=embeddings[:, :0],
+        compression_attention_mask=mask[:, :0],
+    )
+    assert gain == [0.0]

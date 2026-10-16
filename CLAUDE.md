@@ -102,3 +102,6 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   compares real-checkpoint logits and input gradients against the upstream GPU
   kernels. `--long-smoke` also checks a full-context differentiable forward and
   records peak GPU memory. The source checkout is used only for validation.
+- `analysis.information_gain.compute_information_gain` uses embedding forwards
+  for both baseline and memory contexts, keeping EOS document policy consistent
+  with single-text cramming for native checkpoints and ordinary HF models.
