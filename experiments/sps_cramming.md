@@ -11,10 +11,21 @@ Native checkpoint loading and SPS attention semantics live in
 `compression_horizon.models.sps_causal_lm`.
 
 ## Results
-Pending.
+Port validation passed: logits matched upstream argmax, input-gradient cosine
+similarity exceeded 0.99996 for both checkpoints, and full-context backward
+checks fit on one A100. Native trainer, existing cramming, information-gain and
+launcher tests passed. Independent adversarial review approved the final fixes.
+
+Training submitted from commit `2683216db54e0ae8f51a69fa467c2dc07f5509f9`:
+- Standard: `lm-mpi-job-e1447677-1cba-4b9f-b022-93fa6b7c1dce`.
+- SPS: `lm-mpi-job-818d7b80-9a5f-480c-9acb-db17b07941dd`.
+
+Training results are pending. Submission records and validation logs are under
+`artifacts/sps_cramming/`.
 
 ## Conclusions
 Compare reconstruction convergence after both jobs complete.
 
 ## Changelog
 - 2026-10-16: Added the native Standard/SPS comparison and checkpoint adapter.
+- 2026-10-16: Validated upstream parity, fixed review findings, submitted both jobs.
