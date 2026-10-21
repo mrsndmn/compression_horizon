@@ -107,3 +107,12 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   with single-text cramming for native checkpoints and ordinary HF models.
 - `tests/test_sps_launcher.py` verifies MLS's single-line shell contract,
   compute-node mount paths, and that the completion marker requires exit zero.
+- `scripts/analyze_sps_cramming.py --phase summary|plot` audits paired saved
+  stages and plots exact-reconstruction horizons. `--phase probe` runs bounded
+  checkpoint diagnostics; `--phase dry|submit` describes/submits that probe from
+  a committed snapshot. Its code contains all diagnostic variants. Shared
+  artifacts are absolute paths, so worker snapshots read the original caches.
+  The probe checks natural-prefix loss, memory sensitivity/attention, and Adam
+  restarts at each sample's **first failed stage**, excluding later frozen rows.
+- `tests/test_sps_diagnostics.py` checks first-failure selection, the exact loss
+  offset/masking against the native trainer, and freezing of converged samples.

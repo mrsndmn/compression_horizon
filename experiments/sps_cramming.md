@@ -20,12 +20,18 @@ Training submitted from commit `2683216db54e0ae8f51a69fa467c2dc07f5509f9`:
 - Standard: `lm-mpi-job-e1447677-1cba-4b9f-b022-93fa6b7c1dce`.
 - SPS: `lm-mpi-job-818d7b80-9a5f-480c-9acb-db17b07941dd`.
 
-Training results are pending. Submission records and validation logs are under
-`artifacts/sps_cramming/`.
+Both runs completed successfully on 2026-10-16. On 48 matched texts, mean
+exact-reconstruction horizons were 32.0625 tokens for Standard and 17.1667 for
+SPS. Standard won on every pair. Submission records, saved embeddings and
+validation logs are under `artifacts/sps_cramming/`.
 
 ## Conclusions
-Compare reconstruction convergence after both jobs complete.
+Standard reaches longer exactly reconstructed prefixes under the current
+optimization protocol. Mechanism diagnostics are described in
+`sps_cramming_diagnostics.md`; the horizon should not be read as a proven
+representational capacity limit.
 
 ## Changelog
 - 2026-10-16: Added the native Standard/SPS comparison and checkpoint adapter.
 - 2026-10-16: Validated upstream parity, fixed review findings, submitted both jobs.
+- 2026-10-21: Recorded completed results and linked mechanism diagnostics.
