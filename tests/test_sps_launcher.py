@@ -36,3 +36,17 @@ def test_generated_job_paths_use_cluster_mount():
     assert "/mnt/virtual_ai" not in cfg["script"]
     assert "/workspace-SR004.nfs2/d.tarasov/sps-artifacts/" in cfg["script"]
     assert shlex.split(cfg["script"])[0] == "cd"
+
+
+def test_post_training_audit_failure_prevents_completion(tmp_path, monkeypatch):
+    monkeypatch.setattr(launcher, "ARTIFACTS", tmp_path)
+    monkeypatch.setattr(launcher, "cluster_path", str)
+    python = tmp_path / "fake-python"
+    python.write_text('#!/bin/sh\ncase "$1" in\n  *validate_sps_batch1_run.py) exit 7;;\n  *) exit 0;;\nesac\n')
+    python.chmod(0o755)
+    monkeypatch.setattr(launcher, "PYTHON", str(python))
+    cfg = launcher.build_config(launcher.experiment_configs[0], "test")
+    cfg["stage"].mkdir(parents=True)
+    cfg["output"].mkdir()
+    assert subprocess.run(["bash", "-c", cfg["script"]]).returncode == 7
+    assert not (cfg["output"] / "completed").exists()

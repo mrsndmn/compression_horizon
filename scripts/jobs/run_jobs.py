@@ -94,7 +94,7 @@ def build_args() -> argparse.Namespace:
     )
 
     # Training defaults that were previously hardcoded
-    parser.add_argument("--per_device_train_batch_size", type=int, default=4)
+    parser.add_argument("--per_device_train_batch_size", type=int, choices=[1], default=1)
     parser.add_argument("--max_optimization_steps_per_sample", type=int, default=1000)
     parser.add_argument("--learning_rate", type=float, default=0.01)
     parser.add_argument("--warmup_steps", type=int, default=100)

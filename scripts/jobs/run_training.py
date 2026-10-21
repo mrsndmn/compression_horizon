@@ -34,7 +34,7 @@ MAX_OPTIMIZATION_STEPS_PER_TOKEN = 1_000  # Reduced for quick validation
 EMBEDDING_INIT_METHOD = "random0.02"
 
 # Training configuration
-PER_DEVICE_TRAIN_BATCH_SIZE = 10
+PER_DEVICE_TRAIN_BATCH_SIZE = 1
 NUM_GPUS = 1  # from a100.1gpu instance
 GRADIENT_ACCUMULATION_STEPS = 1
 TOTAL_BATCH_SIZE = PER_DEVICE_TRAIN_BATCH_SIZE * NUM_GPUS * GRADIENT_ACCUMULATION_STEPS
@@ -48,7 +48,7 @@ MODEL_CONFIGS = [
         "low_dim_size": 256,
         "hybrid_num_alignment_layers": 4,
         "hybrid_lowdim_num_alignment_layers": 8,
-        "per_device_train_batch_size": 10,
+        "per_device_train_batch_size": 1,
     },
     {
         "checkpoint": "EleutherAI/pythia-1.4b",
@@ -56,7 +56,7 @@ MODEL_CONFIGS = [
         "low_dim_size": 256,
         "hybrid_num_alignment_layers": 8,
         "hybrid_lowdim_num_alignment_layers": 8,
-        "per_device_train_batch_size": 25,
+        "per_device_train_batch_size": 1,
     },
     {
         "checkpoint": "HuggingFaceTB/SmolLM2-1.7B",
@@ -64,7 +64,7 @@ MODEL_CONFIGS = [
         "low_dim_size": 256,
         "hybrid_num_alignment_layers": 8,
         "hybrid_lowdim_num_alignment_layers": 8,
-        "per_device_train_batch_size": 25,
+        "per_device_train_batch_size": 1,
     },
     {
         "checkpoint": "unsloth/gemma-3-4b-pt",
@@ -72,7 +72,7 @@ MODEL_CONFIGS = [
         "low_dim_size": 32,
         "hybrid_num_alignment_layers": 8,
         "hybrid_lowdim_num_alignment_layers": 8,
-        "per_device_train_batch_size": 10,
+        "per_device_train_batch_size": 1,
     },
 ]
 
@@ -210,7 +210,7 @@ def build_experiment_configs(
 
             cmd_args.append(f"--output_dir {output_dir_in_progress}")
 
-            base_cmd = f"cd {workdir} && {PYTHON_PATH} scripts/activation_distillation.py" f" {' '.join(cmd_args)}"
+            base_cmd = f"cd {workdir} && {PYTHON_PATH} scripts/activation_distillation.py {' '.join(cmd_args)}"
 
             config = {
                 "experiment_name": exp_suffix,
@@ -373,7 +373,7 @@ if __name__ == "__main__":
             print(f"\033[33mSkipping: experiment already exists at:\033[0m {cfg['output_dir_final']}")
             continue
 
-        job_desc = f"CH: progressive {cfg['experiment_name']}" f" #{AUTHOR_NAME} #multimodal #notify_completed @mrsndmn"
+        job_desc = f"CH: progressive {cfg['experiment_name']} #{AUTHOR_NAME} #multimodal #notify_completed @mrsndmn"
 
         if job_desc in in_progress_job_descs:
             print(f"\033[33mSkipping: job already in queue:\033[0m {job_desc}")

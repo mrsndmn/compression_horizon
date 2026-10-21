@@ -25,7 +25,7 @@ from compression_horizon.train import (
 )
 from compression_horizon.train.arguments import MyTrainingArguments
 from compression_horizon.utils.exceptions import NvidiaSMIError
-from compression_horizon.utils.launch import resolve_torch_dtype, set_launch_seed
+from compression_horizon.utils.launch import resolve_torch_dtype, set_launch_seed, validate_cramming_batch_size
 
 
 def load_or_create_tokenized_dataset(
@@ -171,6 +171,7 @@ if __name__ == "__main__":
     # Parse command-line arguments and defaults
     hf_parser = transformers.HfArgumentParser(MyTrainingArguments)
     (training_args,) = hf_parser.parse_args_into_dataclasses()
+    validate_cramming_batch_size(training_args)
 
     # Determine output directory:
     # - If user provided --output_dir, respect it.
@@ -439,12 +440,12 @@ if __name__ == "__main__":
 
     # Move from experiments_in_progress to final directory after successful training
     if output_dir_final:
-        print(f"\n{'='*80}")
+        print(f"\n{'=' * 80}")
         print("Training completed successfully!")
         print("Moving results from in-progress to final location:")
         print(f"  From: {output_dir}")
         print(f"  To:   {output_dir_final}")
-        print(f"{'='*80}\n")
+        print(f"{'=' * 80}\n")
 
         # Ensure parent directory of final location exists
         os.makedirs(os.path.dirname(output_dir_final), exist_ok=True)

@@ -1,3 +1,12 @@
+# Cramming execution policy
+
+User instruction (2026-10-21): always launch per-sample cramming with
+`per_device_train_batch_size=1`, including full, progressive, prefix-tuning,
+low-dimensional cramming and future memory-optimization diagnostics. Preserve
+this across sessions and models. Shared compression-head/model-weight training
+is a separate task. Historical snapshots and already-submitted jobs retain
+their original settings.
+
 # Project conventions
 
 ## Building the paper
@@ -127,3 +136,16 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   ordinary-history reference, and holds quantized weights/inputs fixed to
   distinguish BF16 arithmetic changes across batch/context shapes from mask
   semantics. Results go to `diagnostics_20261021/generation_audit.json`.
+- `utils.launch.validate_cramming_batch_size` runs immediately after argument
+  parsing in `scripts/activation_distillation.py`. It rejects multi-sample
+  cramming before model/data/output setup; shared compression-head training is
+  exempt. The SPS pair, generic grid, model grid and low-dim launchers use the
+  single-sample setting. `tests/test_cramming_batch_policy.py` checks the CLI
+  boundary and rendered jobs. The current SPS registry reuses the original
+  matched text subset and writes new run identities, preserving earlier results.
+- The current SPS launcher runs `scripts/validation/validate_sps_batch1_run.py`
+  after training and writes `completed` only after that audit exits zero. It
+  verifies the complete expected sample set, reuses exact original cached token
+  IDs, and records teacher-forcing replay and greedy reconstruction separately
+  in `single_sample_validation.json`, always one sample per forward. Early-EOS
+  missing tokens count as errors. The audit can also be rerun with `--run-dir`.

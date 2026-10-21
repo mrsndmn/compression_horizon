@@ -19,24 +19,31 @@ PYTHON = "/workspace-SR004.nfs2/d.tarasov/envs/compression_horizon/bin/python"
 SOURCE_RUNS = REPO.parent / "sps-artifacts" / "runs" / "out"
 
 experiment_configs = [
-    {"name": "standard_pilot_1b", "checkpoint": str(SOURCE_RUNS / "s_standard_pilot_1b" / "ckpt_tokens_1000341504_final.pt")},
-    {"name": "sps_w0_pilot_1b", "checkpoint": str(SOURCE_RUNS / "s_sps_w0_pilot_1b" / "ckpt_tokens_1000341504_final.pt")},
+    {
+        "name": "standard_pilot_1b_batch1",
+        "checkpoint": str(SOURCE_RUNS / "s_standard_pilot_1b" / "ckpt_tokens_1000341504_final.pt"),
+    },
+    {
+        "name": "sps_w0_pilot_1b_batch1",
+        "checkpoint": str(SOURCE_RUNS / "s_sps_w0_pilot_1b" / "ckpt_tokens_1000341504_final.pt"),
+    },
 ]
-# Matched baseline from run_training.py: progressive + CE, one memory token.
+# Re-measure the same 48 texts actually processed by the original batch-four runs.
+# Single-sample cramming is required for all future launches.
 TRAINING_ARGS = {
     "remove_unused_columns": False,
     "num_alignment_layers": 1,
     "loss_type": "cross_entropy",
     "max_sequence_length": 4096,
     "warmup_steps": 100,
-    "per_device_train_batch_size": 4,
+    "per_device_train_batch_size": 1,
     "gradient_accumulation_steps": 1,
     "max_optimization_steps_per_sample": 10000,
     "max_optimization_steps_per_token": 1000,
     "learning_rate": 0.1,
     "progressive_train": True,
     "embedding_init_method": "random0.02",
-    "limit_dataset_items": 50,
+    "limit_dataset_items": 48,
     "dataset_name": "LarryLovestein/pg19_1k",
     "random_seed": 42,
     "dtype": "bfloat16",
@@ -68,6 +75,7 @@ def build_config(exp, commit):
         [
             f"cd {shlex.quote(cluster_path(stage))}",
             shlex.join(command),
+            shlex.join([PYTHON, "scripts/validation/validate_sps_batch1_run.py", "--run-dir", cluster_path(output)]),
             f"touch {shlex.quote(cluster_path(output / 'completed'))}",
         ]
     )

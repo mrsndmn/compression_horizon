@@ -67,8 +67,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--per_device_train_batch_size",
         type=int,
-        default=None,
-        help="Limit the number of dataset items to use. If not specified, defaults to 10 and is not included in output dir.",
+        choices=[1],
+        default=1,
+        help="Cramming uses one sample per device to avoid batch-shape sensitivity.",
     )
     parser.add_argument(
         "--dataset_name",
@@ -202,7 +203,7 @@ if __name__ == "__main__":
         limit_dataset_items = args.limit_dataset_items if args.limit_dataset_items is not None else 100
         embedding_init_method = args.embedding_init_method if args.embedding_init_method is not None else "random0.02"
         learning_rate = args.learning_rate if args.learning_rate is not None else 0.01
-        per_device_train_batch_size = args.per_device_train_batch_size if args.per_device_train_batch_size else 100
+        per_device_train_batch_size = args.per_device_train_batch_size
 
         assert (
             limit_dataset_items >= per_device_train_batch_size
