@@ -69,3 +69,22 @@ def test_actual_validator_imports_with_staged_environment(monkeypatch):
     )
     assert result.returncode == 0, result.stderr
     assert "--run-dir" in result.stdout
+
+
+def test_lr_sweep_changes_only_learning_rate_and_keeps_resolved_design():
+    baseline = dict(launcher.TRAINING_ARGS)
+    assert len(launcher.lr_sweep_experiment_configs) == 8
+    for checkpoint in {e["checkpoint"] for e in launcher.experiment_configs}:
+        experiments = [e for e in launcher.lr_sweep_experiment_configs if e["checkpoint"] == checkpoint]
+        assert {e["training_args"]["learning_rate"] for e in experiments} == {0.01, 0.03, 0.3, 1.0}
+        for exp in experiments:
+            cfg = launcher.build_config(exp, "test")
+            resolved = cfg["design"]["training_args"]
+            assert resolved == dict(baseline, learning_rate=exp["training_args"]["learning_rate"])
+            argv = shlex.split(cfg["script"])
+            assert float(argv[argv.index("--learning_rate") + 1]) == resolved["learning_rate"]
+            assert argv[argv.index("--per_device_train_batch_size") + 1] == "1"
+            assert "baseline_run" not in argv
+            assert exp["baseline_run"] in {str(p) for p in launcher.BASELINE_RUNS.values()}
+    assert launcher.TRAINING_ARGS == baseline
+    assert len({launcher.build_config(e, "test")["output"] for e in launcher.lr_sweep_experiment_configs}) == 8

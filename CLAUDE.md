@@ -146,6 +146,10 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   Its explicit `tokenized_dataset_path` pins the old saved token IDs for both
   training and audit; offset/limit selection applies to that saved dataset.
   Stage root and src are both on PYTHONPATH for executable audit imports.
+  `scripts/jobs/run_jobs_sps.py --suite lr_sweep [--dry]` selects paired
+  `lr_sweep_experiment_configs`, merges per-experiment LR into saved design and
+  CLI args, and references completed single-sample baselines without relaunching
+  them. Default `--suite batch1` retains the original pair registry.
 - The current SPS launcher runs `scripts/validation/validate_sps_batch1_run.py`
   after training and writes `completed` only after that audit exits zero. It
   verifies the complete expected sample set, reuses exact original cached token

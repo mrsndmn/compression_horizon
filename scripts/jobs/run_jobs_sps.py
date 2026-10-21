@@ -59,6 +59,23 @@ TRAINING_ARGS = {
 }
 
 
+# Completed single-sample baselines are reused instead of launching duplicates.
+BASELINE_RUNS = {
+    "standard_pilot_1b_batch1": ARTIFACTS / "standard_pilot_1b_batch1_a5db9c4c6583",
+    "sps_w0_pilot_1b_batch1": ARTIFACTS / "sps_w0_pilot_1b_batch1_48d1890a7c90",
+}
+lr_sweep_experiment_configs = [
+    dict(
+        name=f"{exp['name']}_lr{lr:g}",
+        checkpoint=exp["checkpoint"],
+        training_args={"learning_rate": lr},
+        baseline_run=str(BASELINE_RUNS[exp["name"]]),
+    )
+    for exp in experiment_configs
+    for lr in (0.01, 0.03, 0.3, 1.0)
+]
+
+
 def cluster_path(path):
     """Translate the notebook mount to the established MLS compute-node mount."""
     path = Path(path)
@@ -69,11 +86,12 @@ def cluster_path(path):
 
 
 def build_config(exp, commit):
-    design = dict(experiment=exp, training_args=TRAINING_ARGS, commit=commit)
+    training_args = dict(TRAINING_ARGS, **exp.get("training_args", {}))
+    design = dict(experiment=exp, training_args=training_args, commit=commit)
     signature = hashlib.sha256(json.dumps(design, sort_keys=True).encode()).hexdigest()[:12]
     output = ARTIFACTS / f"{exp['name']}_{signature}"
     stage = ARTIFACTS / "code" / commit
-    args = dict(TRAINING_ARGS, model_checkpoint=cluster_path(exp["checkpoint"]), output_dir=cluster_path(output))
+    args = dict(training_args, model_checkpoint=cluster_path(exp["checkpoint"]), output_dir=cluster_path(output))
     args["tokenized_dataset_path"] = cluster_path(args["tokenized_dataset_path"])
     command = [PYTHON, "scripts/activation_distillation.py"]
     for key, value in args.items():
@@ -103,9 +121,11 @@ def staged_pythonpath(stage):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry", action="store_true")
+    parser.add_argument("--suite", choices=("batch1", "lr_sweep"), default="batch1")
     args = parser.parse_args()
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
-    configs = [build_config(exp, commit) for exp in experiment_configs]
+    experiments = lr_sweep_experiment_configs if args.suite == "lr_sweep" else experiment_configs
+    configs = [build_config(exp, commit) for exp in experiments]
     if args.dry:
         for cfg in configs:
             print(cfg["job_desc"], cfg["script"], sep="\n")
