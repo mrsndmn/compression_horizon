@@ -4,6 +4,8 @@ import torch
 import torch.nn.functional as F
 from transformers import PreTrainedModel, PreTrainedTokenizer, PreTrainedTokenizerFast
 
+from compression_horizon.inference.generation import mask_native_generation_logits
+
 
 def calculate_distances(compression_embeddings: torch.Tensor, sequence_embeddings: torch.Tensor) -> tuple[float, float, float]:
     # Cosine
@@ -92,6 +94,7 @@ def calculate_perplexity(
         # Model result
         outputs = model(inputs_embeds=united_token_embeddings, attention_mask=united_attention_mask)
         logits = outputs.logits[:, -1, :]  # [1, vocabulary]
+        logits = mask_native_generation_logits(model, tokenizer, logits)
         next_token_id = torch.argmax(logits, dim=-1)  # [1]
 
         # Stop if a sequence has reached EOS token

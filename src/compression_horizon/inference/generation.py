@@ -5,6 +5,25 @@ from transformers import PreTrainedModel, PreTrainedTokenizer, PreTrainedTokeniz
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
 
+def mask_native_generation_logits(model, tokenizer, logits: torch.Tensor) -> torch.Tensor:
+    """Exclude native checkpoint control/padded IDs from generated text only.
+
+    Native Standard/SPS adapters expose config.sps (False/True respectively).
+    Their padded model vocabulary exceeds the ordinary GPT-2 tokenizer vocabulary.
+    Teacher-forced logits and losses retain the original model distribution.
+    """
+    config = getattr(model, "config", None)
+    if not hasattr(config, "sps"):
+        return logits
+    filtered = logits.clone()
+    filtered[..., len(tokenizer) :] = -torch.inf
+    for field in ("predict_token_id", "pad_token_id"):
+        token_id = getattr(config, field, None)
+        if token_id is not None and token_id != tokenizer.eos_token_id and 0 <= token_id < logits.shape[-1]:
+            filtered[..., token_id] = -torch.inf
+    return filtered
+
+
 @torch.no_grad()
 def generate_from_compression(
     model: PreTrainedModel,
@@ -83,6 +102,7 @@ def generate_from_compression(
                 attention_mask=united_attention_mask,
             )
         logits = outputs.logits[:, -1, :]  # [batch, vocabulary]
+        logits = mask_native_generation_logits(model, tokenizer, logits)
         next_token_ids = torch.argmax(logits, dim=-1)  # [batch]
 
         # If a sequence already reached EOS token leave EOS to the end

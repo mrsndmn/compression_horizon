@@ -116,3 +116,14 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   restarts at each sample's **first failed stage**, excluding later frozen rows.
 - `tests/test_sps_diagnostics.py` checks first-failure selection, the exact loss
   offset/masking against the native trainer, and freezing of converged samples.
+- `tests/test_sps_generation_semantics.py` compares interleaved SPS training
+  logits and memory gradients with an independent ordinary-history forward
+  containing one current prediction slot, and corrupts historical predict
+  slots to verify isolation. Both greedy generation paths filter native
+  predict/pad/unused vocabulary IDs before feeding generated text back as
+  ordinary input embeddings. EOS and existing HF decoding behavior are covered.
+- `scripts/validation/validate_sps_generation.py` checks reserved-ID errors at
+  the saved first-failure stages, compares real SPS greedy decoding with the
+  ordinary-history reference, and holds quantized weights/inputs fixed to
+  distinguish BF16 arithmetic changes across batch/context shapes from mask
+  semantics. Results go to `diagnostics_20261021/generation_audit.json`.
