@@ -178,7 +178,9 @@ def refine(model, memory_init, ids, mask, *, lr, max_steps):
     import torch
 
     memory = torch.nn.Parameter(memory_init.clone().float())
-    optimizer = torch.optim.AdamW([memory], lr=lr, betas=(0.9, 0.999), weight_decay=0.0)
+    # Match MyTrainingArguments Adam defaults used by the original runs.
+    # Restarted moments and constant LR are explicit parts of this diagnostic.
+    optimizer = torch.optim.AdamW([memory], lr=lr, betas=(0.9, 0.9), weight_decay=0.01)
     used = torch.zeros(ids.shape[0], dtype=torch.long, device=ids.device)
     best = torch.zeros(ids.shape[0], device=ids.device)
     trace = []
@@ -197,9 +199,6 @@ def refine(model, memory_init, ids, mask, *, lr, max_steps):
         optimizer.zero_grad(set_to_none=True)
         losses[active].sum().backward()
         memory.grad[~active] = 0
-        # Match per-sample clipping of the original trainer, rather than clipping the batch jointly.
-        norms = memory.grad.flatten(1).norm(dim=1).clamp_min(1e-12)
-        memory.grad.mul_((1.0 / norms).clamp_max(1)[:, None, None])
         snapshot = memory.detach().clone()
         optimizer.step()
         with torch.no_grad():

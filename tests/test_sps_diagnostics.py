@@ -60,3 +60,27 @@ def test_refinement_freezes_already_exact_memory(monkeypatch):
     assert result["steps"][0] == 0
     assert result["best_accuracy"] == [1.0, 1.0]
     assert all(x[0, 0, 0] == 2.0 for x in seen)
+
+
+def test_refinement_updates_match_original_adam_defaults(monkeypatch):
+    from compression_horizon.train.arguments import MyTrainingArguments
+    from compression_horizon.train.optimization import build_optimizer_and_scheduler
+
+    seen = []
+    target = torch.tensor([[[1.0, -1.0]]])
+
+    def score(model, memory, ids, mask):
+        seen.append(memory.detach().clone())
+        return (memory - target).square().sum((1, 2)), torch.zeros(memory.shape[0])
+
+    monkeypatch.setattr(diag, "score_memory", score)
+    initial = torch.tensor([[[4.0, -9.0]]])
+    reference = torch.nn.Parameter(initial.clone())
+    args = MyTrainingArguments(learning_rate=0.1)
+    optimizer, _ = build_optimizer_and_scheduler(args, [reference])
+    for _ in range(5):
+        optimizer.zero_grad(set_to_none=True)
+        (reference - target).square().sum().backward()
+        optimizer.step()
+    diag.refine(None, initial, torch.zeros(1, 1, dtype=torch.long), torch.ones(1, 1), lr=0.1, max_steps=5)
+    torch.testing.assert_close(seen[-1], reference.detach(), atol=1e-7, rtol=1e-7)
