@@ -122,3 +122,23 @@ def test_pinned_tokenized_dataset_reuses_exact_ids_without_remote_load(tmp_path,
     assert len(actual) == 1
     with pytest.raises(ValueError, match="max_sequence_length"):
         training.load_or_create_tokenized_dataset(**dict(kwargs, max_sequence_length=3))
+
+
+@pytest.mark.parametrize("wrong", [False, True])
+def test_teacher_replay_reports_integer_correct_count(wrong):
+    import torch
+    from scripts.validation.validate_sps_batch1_run import check_sample
+    from tests.test_sps_generation_semantics import FixedLogitLM, SmallTokenizer
+
+    class TextLogitLM(FixedLogitLM):
+        def forward(self, inputs_embeds, attention_mask):
+            result = super().forward(inputs_embeds, attention_mask)
+            result.logits[..., 30:] = 0
+            return result
+
+    ids = torch.full((1, 47), 2)
+    if wrong:
+        ids[0, -1] = 3
+    result = check_sample(TextLogitLM(), SmallTokenizer(), ids, torch.zeros(1, 1, 4))
+    assert result["teacher_replay_correct_tokens"] == (46 if wrong else 47)
+    assert result["teacher_replay_accuracy"] == ((46 / 47) if wrong else 1.0)

@@ -35,13 +35,15 @@ def check_sample(model, tokenizer, ids, memory):
         .logits[:, offset - 1 : -1]
         .argmax(-1)
     )
-    replay = float((predicted == ids).float().mean())
+    replay_correct = int((predicted == ids).sum())
+    replay = replay_correct / ids.numel()
     _, generated = generate_from_compression(model, tokenizer, memory, max_new_tokens=ids.shape[1], return_generated_ids=True)
     n = min(ids.shape[1], generated.shape[1])
     correct = int((generated[:, :n] == ids[:, :n]).sum())
     # Missing tokens after early EOS remain errors; never score just the short prefix.
     return dict(
         teacher_replay_accuracy=replay,
+        teacher_replay_correct_tokens=replay_correct,
         greedy_accuracy=correct / ids.shape[1],
         greedy_exact=generated.shape[1] == ids.shape[1] and correct == ids.shape[1],
         target_ids=ids[0].tolist(),
@@ -100,7 +102,7 @@ def main():
         median_horizon=float(np.median([r["horizon"] for r in samples])),
         greedy_exact_samples=sum(r["greedy_exact"] for r in samples),
         mean_greedy_accuracy=float(np.mean([r["greedy_accuracy"] for r in samples])),
-        teacher_replay_exact_samples=sum(r["teacher_replay_accuracy"] == 1 for r in samples),
+        teacher_replay_exact_samples=sum(r["teacher_replay_correct_tokens"] == len(r["target_ids"]) for r in samples),
         samples=samples,
     )
     target = args.run_dir / "single_sample_validation.json"

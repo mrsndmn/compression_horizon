@@ -151,4 +151,6 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   verifies the complete expected sample set, reuses exact original cached token
   IDs, and records teacher-forcing replay and greedy reconstruction separately
   in `single_sample_validation.json`, always one sample per forward. Early-EOS
-  missing tokens count as errors. The audit can also be rerun with `--run-dir`.
+  missing tokens count as errors. Teacher replay uses integer correct-token
+  counts so floating-point mean reduction cannot misclassify an exact match.
+  The audit can also be rerun with `--run-dir`.
