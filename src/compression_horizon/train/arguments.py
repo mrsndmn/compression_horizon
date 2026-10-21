@@ -67,6 +67,9 @@ class MyTrainingArguments(TrainingArguments):
         default=128,
         metadata={"help": "Max sequence length for compressing in training."},
     )
+    tokenized_dataset_path: str | None = field(
+        default=None, metadata={"help": "Optional saved tokenized training dataset; bypasses remote loading."}
+    )
     limit_dataset_items: int | None = field(default=1)
     offset_dataset_items: int | None = field(
         default=None,

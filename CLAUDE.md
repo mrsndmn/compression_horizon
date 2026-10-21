@@ -143,6 +143,9 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   single-sample setting. `tests/test_cramming_batch_policy.py` checks the CLI
   boundary and rendered jobs. The current SPS registry reuses the original
   matched text subset and writes new run identities, preserving earlier results.
+  Its explicit `tokenized_dataset_path` pins the old saved token IDs for both
+  training and audit; offset/limit selection applies to that saved dataset.
+  Stage root and src are both on PYTHONPATH for executable audit imports.
 - The current SPS launcher runs `scripts/validation/validate_sps_batch1_run.py`
   after training and writes `completed` only after that audit exits zero. It
   verifies the complete expected sample set, reuses exact original cached token

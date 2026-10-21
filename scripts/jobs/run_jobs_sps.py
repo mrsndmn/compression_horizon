@@ -50,6 +50,12 @@ TRAINING_ARGS = {
     "number_of_mem_tokens": 1,
     "no_bos_token": True,
     "report_to": "none",
+    "tokenized_dataset_path": str(
+        ARTIFACTS
+        / "code"
+        / "2683216db54e0ae8f51a69fa467c2dc07f5509f9"
+        / "artifacts/cache/tokenized_datasets/dataset_fa91d5c47dbf1180"
+    ),
 }
 
 
@@ -68,6 +74,7 @@ def build_config(exp, commit):
     output = ARTIFACTS / f"{exp['name']}_{signature}"
     stage = ARTIFACTS / "code" / commit
     args = dict(TRAINING_ARGS, model_checkpoint=cluster_path(exp["checkpoint"]), output_dir=cluster_path(output))
+    args["tokenized_dataset_path"] = cluster_path(args["tokenized_dataset_path"])
     command = [PYTHON, "scripts/activation_distillation.py"]
     for key, value in args.items():
         command.extend([f"--{key}", str(value)])
@@ -87,6 +94,10 @@ def build_config(exp, commit):
         script=script,
         job_desc=f"CH: sps_cramming {exp['name']} {signature} #d.tarasov",
     )
+
+
+def staged_pythonpath(stage):
+    return f"{cluster_path(stage)}:{cluster_path(stage / 'src')}"
 
 
 def main():
@@ -128,7 +139,7 @@ def main():
                 "script": cfg["script"],
                 "job_desc": cfg["job_desc"],
                 "env_variables": {
-                    "PYTHONPATH": cluster_path(stage / "src"),
+                    "PYTHONPATH": staged_pythonpath(stage),
                     "PYTHONUNBUFFERED": "1",
                     "OMP_NUM_THREADS": "8",
                     "HF_HOME": "/workspace-SR004.nfs2/.cache/huggingface",

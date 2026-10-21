@@ -41,6 +41,7 @@ def load_or_create_tokenized_dataset(
     cache_prefix: str = "dataset",
     num_proc: int = 4,
     fallback_length: int | None = None,
+    tokenized_dataset_path: str | None = None,
 ) -> Dataset:
     """
     Load a tokenized dataset from cache or create and cache it.
@@ -57,11 +58,22 @@ def load_or_create_tokenized_dataset(
         offset_dataset_items: Optional offset for dataset items selection (applied before limit)
         cache_prefix: Prefix for cache file name (default: "dataset")
         num_proc: Number of processes for dataset loading
+        tokenized_dataset_path: Saved token IDs for exact training-data replay
         fallback_length: If provided and limit_dataset_items is None, use this length
 
     Returns:
         Tokenized Dataset
     """
+    if tokenized_dataset_path is not None:
+        ds = Dataset.load_from_disk(tokenized_dataset_path)
+        start = offset_dataset_items or 0
+        count = limit_dataset_items if limit_dataset_items is not None else fallback_length
+        end = start + count if count is not None else len(ds)
+        ds = ds.select(range(start, end))
+        if any(len(ids) != max_sequence_length for ids in ds["input_ids"]):
+            raise ValueError("Pinned tokenized dataset must match max_sequence_length")
+        return ds.with_format("torch")
+
     # Generate cache key based on dataset parameters
     cache_params = {
         "dataset": dataset_name,
@@ -382,6 +394,7 @@ if __name__ == "__main__":
             limit_dataset_items=getattr(training_args, "limit_dataset_items", None),
             offset_dataset_items=getattr(training_args, "offset_dataset_items", None),
             cache_prefix="dataset",
+            tokenized_dataset_path=training_args.tokenized_dataset_path,
         )
 
     print("train_dataset", len(train_dataset))

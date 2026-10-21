@@ -64,6 +64,9 @@ def main():
     checkpoint = rows[0]["model_checkpoint"]
     tokenizer = load_sps_tokenizer()
     model = load_sps_checkpoint(checkpoint, torch_dtype=resolve_torch_dtype(settings["dtype"])).cuda()
+    pinned = settings.get("tokenized_dataset_path")
+    if pinned and not Path(pinned).exists():
+        pinned = pinned.replace("/mnt/virtual_ai0001053-00054_SR004-nfs2", "/workspace-SR004.nfs2")
     dataset = load_or_create_tokenized_dataset(
         cache_dir="artifacts/cache/tokenized_datasets",
         dataset_name=settings["dataset_name"],
@@ -73,6 +76,7 @@ def main():
         model_checkpoint=checkpoint,
         no_bos_token=settings["no_bos_token"],
         limit_dataset_items=expected,
+        tokenized_dataset_path=pinned,
     )
     samples = []
     for row in rows:

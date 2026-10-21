@@ -50,3 +50,22 @@ def test_post_training_audit_failure_prevents_completion(tmp_path, monkeypatch):
     cfg["output"].mkdir()
     assert subprocess.run(["bash", "-c", cfg["script"]]).returncode == 7
     assert not (cfg["output"] / "completed").exists()
+
+
+def test_actual_validator_imports_with_staged_environment(monkeypatch):
+    import os
+    import sys
+
+    repo = Path(__file__).resolve().parents[1]
+    monkeypatch.setattr(launcher, "cluster_path", str)
+    env = dict(os.environ, PYTHONPATH=launcher.staged_pythonpath(repo), OMP_NUM_THREADS="2")
+    result = subprocess.run(
+        [sys.executable, "scripts/validation/validate_sps_batch1_run.py", "--help"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--run-dir" in result.stdout

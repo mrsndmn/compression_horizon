@@ -93,3 +93,32 @@ def test_single_sample_audit_uses_full_target_length(early_eos):
     result = check_sample(model, tokenizer, torch.tensor([[2, 2, 2]]), torch.zeros(1, 1, 4))
     assert result["greedy_accuracy"] == (1 / 3 if early_eos else 1.0)
     assert result["greedy_exact"] is (not early_eos)
+
+
+def test_pinned_tokenized_dataset_reuses_exact_ids_without_remote_load(tmp_path, monkeypatch):
+    import scripts.activation_distillation as training
+    from datasets import Dataset
+
+    saved = tmp_path / "tokens"
+    Dataset.from_dict({"input_ids": [[7, 8], [9, 10], [11, 12]], "attention_mask": [[1, 1]] * 3}).save_to_disk(saved)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Pinned dataset must not load remote text")
+
+    monkeypatch.setattr(training, "load_dataset", forbidden)
+    kwargs = dict(
+        cache_dir=str(tmp_path),
+        dataset_name="unused",
+        split="test",
+        tokenizer=None,
+        max_sequence_length=2,
+        model_checkpoint="unused",
+        tokenized_dataset_path=str(saved),
+        offset_dataset_items=1,
+        limit_dataset_items=1,
+    )
+    actual = training.load_or_create_tokenized_dataset(**kwargs)
+    assert actual[0]["input_ids"].tolist() == [9, 10]
+    assert len(actual) == 1
+    with pytest.raises(ValueError, match="max_sequence_length"):
+        training.load_or_create_tokenized_dataset(**dict(kwargs, max_sequence_length=3))
