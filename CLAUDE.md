@@ -171,3 +171,26 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   mask locality, cleanup, full-block gradient isolation, and plotting. The shared
   `analyze_sps_cramming.submit` accepts entrypoint/job-kind overrides and stages
   both root/src on PYTHONPATH; its original defaults remain unchanged.
+
+- Mechanism research uses `scripts/sps_mechanism_common.py` with the matched
+  source-run registry and exact saved stages/token IDs. It does not crop memories
+  trained at unequal horizons for the route comparison. All forwards are batch1;
+  arithmetic is FP32 on BF16-quantized checkpoint weights and saved memories.
+- `scripts/analyze_sps_memory_routes.py --phase dry|submit|probe|plot` separates
+  memory-to-context and memory-to-predict edges in SPS, tests fixed-query versus
+  context-sensitive queries, and patches projected memory K/V from norm-matched
+  donor memories. `analysis.native_memory_interventions` keeps q0's original V
+  before c_proj, preserving memory residual evolution while modifying outgoing
+  key/value reads. Self-patches and hook cleanup are regression-tested in
+  `tests/test_native_memory_interventions.py`. Controls retain complete causal
+  and SPS temporary-key masks; replacing a memory is an intervention, not a
+  clean attribution of capacity to a specific parameter family.
+- `scripts/analyze_sps_margin_geometry.py --phase dry|submit|probe|plot` evaluates
+  warm-start and optimized memories at the same first-failed SPS target length
+  in both models. Target-vs-best-competitor margin Jacobians measure local
+  controllability, old/new gradient conflicts, and minimum-norm projected steps.
+  Finite perturbations check the local approximation. These are diagnostics,
+  not a new optimizer or a global rank/capacity bound. Their math and actual
+  native forward/backward path are checked in `tests/test_sps_margin_geometry.py`.
+  Both new entrypoints reuse snapshot submission and output guards from
+  `scripts.analyze_sps_cramming.submit`; plots can be redrawn without GPUs.
