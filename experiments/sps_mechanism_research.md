@@ -97,8 +97,9 @@ vectors. Their source registries define every setting. The gradient audit comple
 every exact hinge vector has higher CE than its corresponding erroneous CE
 vector, and at all four selected CE vectors plain CE descent locally worsens
 the worst-token margin. Correct- and wrong-token gradient cosines are negative.
-These are local SPS findings; the full Standard/SPS progressive comparison is
-still required. See `sps_objective_factorial.md` for measurements and controls.
+These are local SPS findings. The complete progressive comparison is now
+available: hinge increases reconstruction lengths in both models, but preserves
+the SPS disadvantage. See `sps_objective_factorial.md` for measurements and controls.
 
 ## Conclusions
 Use the paper's attention-causality distinction and its warning that trajectory
@@ -111,10 +112,33 @@ of the memory. The fixed-query hypothesis is not enough to explain the measured
 early dependence, and the local first-order rank hypothesis is weakened.
 The rescue establishes that several observed stopping points are failures of the
 optimization protocol rather than infeasibility at the same memory dimension.
-Its extent over the full cohort and the remaining Standard/SPS difference are
-unresolved; the complete progressive comparison is required. Checkpoints differ in
+The complete matched-cohort factorial confirms a substantial optimization
+bottleneck in both models: strict-hinge mean lengths are 54.83 (Standard) and
+31.52 (SPS), versus raw-CE lengths 32.31 and 19.42. The gap remains; changing
+the loss alone does not explain why the SPS checkpoint reconstructs less. Checkpoints differ in
 learned weights as well as prediction layout, so architecture-only attribution
 requires additional intervention controls.
+
+The supported mechanistic picture is a frozen conditional reconstructor
+controlled by a memory-generated sequence of layerwise K/V vectors. The memory
+position is causally autonomous; other positions read its outgoing K/V and can
+relay the effect through ordinary context states. For Standard, the first
+prediction also has a direct memory-residual readout, which is excluded from
+scored routing/KV comparisons. In SPS, input/predict separation and hidden-state
+independence are distinct: ordinary tokens have ordinary input embeddings but
+their hidden states remain memory-dependent, while all token constraints still
+share the same optimized memory vector. Decoupling does not imply independently
+adjustable reconstruction constraints.
+
+The remaining distinction between learned checkpoint quality and architecture
+is unresolved. Short-prefix causal routing does not by itself locate the
+long-prefix feasibility boundary. A local full-row-rank Jacobian excludes one
+simple local explanation, not a nonlinear global capacity limit. Exact generation
+also depends on numerical margin: even strict stopping leaves a few BF16 failures.
+The paper's uncertainty-reduction perspective suggests why a reconstruction
+length is model/text/optimizer dependent rather than a direct stored-bit count.
+These limits bound the findings; they are not evidence for a specific remaining
+architecture-only cause.
 
 ## Changelog
 - 2026-10-22: Started mechanism-directed routing, payload and controllability probes.
@@ -135,3 +159,5 @@ reduction as well as raw token counts; our local hypotheses remain unproven.
 - 2026-10-22: Recorded successful unchanged-dimension rescues; prepared full objective/convergence factorial and a read-only objective-gradient audit.
 
 - 2026-10-22: Added completed read-only evidence that mean-CE optimization and exact token constraints conflict at the selected SPS boundaries.
+
+- 2026-10-22: Integrated completed factorial, generation robustness and bounded mechanism conclusions.

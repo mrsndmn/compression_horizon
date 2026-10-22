@@ -16,8 +16,8 @@ rescue solutions and correct/wrong-token gradient contributions.
 
 ## Results
 Submitted from snapshot `4e5726aa444e07b49512cb2af6416a7136b78f3c`.
-The gradient audit completed successfully; the full progressive comparison is
-still in progress under its independent durable Arkhip wait. Source and full job metadata live
+The gradient audit and all six progressive jobs completed successfully; both
+durable Arkhip groups resolved with completed status for every member. Source and full job metadata live
 beside each output in `job.json`. Independent adversarial review passed and
 36 focused tests passed. Executable dry launchers and synthetic audit rendering
 also passed.
@@ -57,14 +57,45 @@ Submitted progressive jobs:
 - `sps_w0_pilot_1b_batch1_hinge_raw_bed545d16418`: `lm-mpi-job-8252518d-0cb4-4f22-8130-84ac307079d5`.
 - `sps_w0_pilot_1b_batch1_hinge_strict_893c490bf406`: `lm-mpi-job-4f0d0369-cb5e-45af-afff-db2ac4c14bba`.
 
+The complete factorial was analyzed by
+`scripts.analyze_sps_objective_factorial.analyze`. It checks completion markers,
+training commits, the exact launch-registry settings, cohort membership, saved
+per-text metrics and original pinned token IDs before aggregation. Output:
+`artifacts/sps_cramming/objective_factorial_analysis_20261022/`.
+
+| Model | CE/raw TF length | CE/strict TF length | Hinge/raw TF length | Hinge/strict TF length | Hinge/strict exact greedy |
+|---|---:|---:|---:|---:|---:|
+| Standard | 32.31 | 32.46 | 57.46 | 54.83 | 44/48 |
+| SPS w=0 | 19.42 | 19.44 | 35.19 | 31.52 | 45/48 |
+
+The strict-hinge gain over raw CE is 22.52 tokens for Standard (paired text
+bootstrap 95% CI 19.79–25.31) and 12.10 for SPS (10.46–13.79). The absolute
+Standard-minus-SPS gap grows from 12.90 to 23.31 tokens; its paired change is
+10.42 (7.04–13.79). Under raw stopping, proportional gains are similar in scale:
+Standard 77.8%, SPS 81.2%, and the ratio of means changes from 1.664 to 1.633.
+Therefore loss choice is a substantial shared bottleneck, not an explanation
+that removes the SPS disadvantage. Intervals describe text variability with
+fixed weights and training seed, not architecture or optimization-seed variance.
+
+All selected saved prefixes replay exactly under teacher forcing. Free decoding
+is different: raw hinge gives only 37/48 exact Standard reconstructions and
+29/48 for SPS. Strict hinge improves this to 44/48 and 45/48, at somewhat shorter
+prefixes; CE controls give 48/48 and 46/48. Mean initial correct greedy prefixes
+for the saved final memories are 32.31→52.50 (Standard) and 19.06→30.56 (SPS),
+raw CE→strict hinge. These are actual generated prefixes, not maximal greedy
+horizons or the best results among earlier stages. Positive training margins
+improve observed robustness but do not guarantee exact BF16 free generation.
+The rendered plot separates these quantities explicitly.
+
 ## Conclusions
 A single failed progressive stage is not a capacity certificate. The comparison
 must report full horizons and original-precision free generation, and distinguish
 loss effects from stopping-criterion effects. The audit supports an objective mismatch at these selected SPS boundaries:
 reducing mean CE and making every token rank first can favor different memory
 vectors, and CE gradients from already correct tokens can oppose error repair.
-It does not yet establish that SPS has more such conflict than Standard or
-quantify how much of the complete horizon gap this explains. Neither comparison
+The completed factorial establishes that the loss change helps both models
+substantially but leaves the SPS disadvantage. It does not establish that SPS
+has more gradient conflict than Standard or identify the remaining gap causally. Neither comparison
 isolates learned weights from architectural differences between checkpoints.
 
 ## Changelog
@@ -73,3 +104,5 @@ isolates learned weights from architectural differences between checkpoints.
 - 2026-10-22: Submitted six progressive jobs and read-only audit `lm-mpi-job-02e4ebd3-839f-4943-aff8-55d865b91988`; registered separate durable watches.
 
 - 2026-10-22: Validated completed objective audit against all saved rescue points; documented per-sample objective mismatch and local gradient conflict. Full progressive comparison remains live.
+
+- 2026-10-22: All six jobs completed; validated all eight factorial cells, paired text effects and free-generation outcomes; retained the unresolved architecture/weights attribution explicitly.

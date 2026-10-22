@@ -226,3 +226,12 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   gradient cancellation and alignment with the worst-margin gradient; these local
   quantities do not establish a global optimizer or architecture limitation.
   `tests/test_objective_gradient_audit.py` checks a known opposing-gradient case.
+
+- `scripts/analyze_sps_objective_factorial.py` validates the completed objective
+  suite against the launch registry and pinned exact target IDs; it reads saved
+  validation outputs without new inference/submission. It exports per-text CSV,
+  paired-text bootstrap contrasts and a plot. Teacher horizons, exact greedy
+  success and the initial correct prefix for the final memory are distinct:
+  the latter is not a maximal greedy horizon. Intervals exclude seed variance.
+  `tests/test_objective_factorial_analysis.py` checks first-error/short-generation
+  scoring, a known constant paired contrast and rejection of inconsistent IDs.
