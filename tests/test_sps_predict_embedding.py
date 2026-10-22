@@ -68,7 +68,8 @@ def test_invalid_predict_override_rejected(sps, shape):
         model(input_ids=torch.tensor([[1, 2]]), predict_embeddings=torch.randn(shape))
 
 
-def test_progressive_predict_trainer_saves_predict_role_and_keeps_weights_fixed(tmp_path, monkeypatch):
+@pytest.mark.parametrize("offset", [0, 6])
+def test_progressive_predict_trainer_saves_predict_role_and_keeps_weights_fixed(tmp_path, monkeypatch, offset):
     from datasets import load_from_disk
     from scripts.analyze_sps_predict_embedding import PredictEmbeddingTrainer
     from tests.trainer_helpers import _collate_batch, _make_args
@@ -85,6 +86,7 @@ def test_progressive_predict_trainer_saves_predict_role_and_keeps_weights_fixed(
         progressive_max_stages=1,
         max_optimization_steps_per_sample=2,
         max_optimization_steps_per_token=2,
+        offset_dataset_items=offset,
     )
     trainer = PredictEmbeddingTrainer(
         model=model,
@@ -99,6 +101,7 @@ def test_progressive_predict_trainer_saves_predict_role_and_keeps_weights_fixed(
     assert path == str(tmp_path / "predict_prefixes")
     row = load_from_disk(path)[0]
     assert row["embedding_role"] == "shared_predict" and row["fixed_bos_token_id"] == 29
+    assert row["sample_id"] == offset
     assert row["num_input_tokens"] == 2 and row["information_gain_reference"] == "fixed_bos_native_predict"
     torch.testing.assert_close(torch.tensor(row["initialization_embedding"]), original["transformer.wte.weight"][30][None])
     assert not torch.allclose(torch.tensor(row["embedding"]), torch.tensor(row["initialization_embedding"]))

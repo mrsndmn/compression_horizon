@@ -22,11 +22,16 @@ Both new jobs were submitted from reviewed snapshot
 - Native initialization: `lm-mpi-job-742ad753-3f98-4ba1-9a0d-5b647d3540b7`.
 - Random initialization: `lm-mpi-job-04a21972-ffc6-47a7-a479-8b9fb8978a9d`.
 
+Both jobs were still pending when the user selected native-only sharding. They
+were cancelled successfully, and observation of their group was cancelled.
+They are superseded by the registry in `scripts.analyze_sps_predict_shards`;
+see `sps_predict_native_shards.md`. Do not restart these monolithic runs.
+
 Artifacts are under `artifacts/sps_cramming/predict_embedding_20261022/`,
-with one new registry-named directory per run. Durable Arkhip group
-`fefb740d3daa4fd0ba1c98a932411f01` observes both jobs, with idempotency key
-`sps-predict-budget30000-db75f0f-20261022`. Results remain pending; after both
-complete, run `scripts/analyze_sps_predict_embedding.py --phase summary --suite budget`.
+with one new registry-named directory per run. Their cancelled Arkhip group was
+`fefb740d3daa4fd0ba1c98a932411f01`, with idempotency key
+`sps-predict-budget30000-db75f0f-20261022`. These cancelled jobs have no measured
+results; the sharded successor will provide the requested comparison.
 
 Implementation passed 22 focused tests and independent adversarial review
 (APPROVE). Real executable dry CLIs emitted the expected baseline and new job
@@ -52,3 +57,5 @@ optimizer step more expensive, so runtime need not scale linearly with budget.
 - 2026-10-22: Added fresh larger-budget margin comparisons and recorded actual previous-job runtimes from MLSpace status timestamps.
 
 - 2026-10-22: Verified both suite CLI paths and report compatibility, obtained independent APPROVE, submitted both jobs and registered a new durable wait group.
+
+- 2026-10-22: User selected native-only sharding; cancelled both still-pending monolithic jobs and their observation, preserving submission provenance.

@@ -7,6 +7,11 @@ this across sessions and models. Shared compression-head/model-weight training
 is a separate task. Historical snapshots and already-submitted jobs retain
 their original settings.
 
+User instruction (2026-10-22): future SPS shared-predict cramming uses hinge
+and native initialization only. Run the matched cohort as independent single-GPU
+shards with batch one, then merge the complete cohort; legacy CE/random registries
+remain for provenance and reproduction, not the current launch plan.
+
 # Project conventions
 
 ## Building the paper
@@ -264,3 +269,17 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   an experiment from the selected suite; dry/submit propagate both CLI arguments.
   Budget summaries/plots have a `budget_` filename prefix and preserve baseline
   analysis outputs. Validation records the resolved training settings and run name.
+- `scripts/analyze_sps_predict_shards.py --phase dry|submit|probe|merge` is the
+  current native-hinge launch plan. Its `experiment_configs` partitions the exact
+  original cached cohort into disjoint single-GPU shards. It reuses the existing
+  staged diagnostic launcher and predict trainer; each job validates its own data.
+  `analyze_sps_predict_embedding.resolved_training_args` pins the absolute cache;
+  probe honors dataset offsets, saves global sample IDs and validates them against
+  local sliced-cache indices. Default zero-offset callers retain their behavior.
+  After the durable Arkhip outcome, run `--phase merge`: all completion markers,
+  resolved settings, training snapshots, exact IDs, raw stages and report metrics
+  must agree. The merger atomically writes combined `predict_prefixes`, validation,
+  per-text CSV, provenance manifest and comparison plot under `merged/`; it keeps
+  earlier outputs intact and repeated successful merges return the saved result.
+  `tests/test_sps_predict_shards.py` covers the real dry payloads, cohort partition,
+  complete/idempotent merge and rejection of incomplete or inconsistent inputs.

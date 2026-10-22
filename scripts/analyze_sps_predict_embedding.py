@@ -134,7 +134,7 @@ class PredictEmbeddingTrainer(ProgressiveCrammingTrainer):
         ).sum(-1) / math.log(2)
         row = self._build_sample_row(
             sample_index=0,
-            sample_id=sample_id_counter,
+            sample_id=sample_id_counter + (self.args.offset_dataset_items or 0),
             batch_ctx=batch_ctx,
             stage_ctx=stage_ctx,
             ctx=ctx,
@@ -162,13 +162,18 @@ class PredictEmbeddingTrainer(ProgressiveCrammingTrainer):
         )
 
 
-def probe(exp):
-    torch.set_num_threads(8)
-    output = ROOT / exp["name"]
+def resolved_training_args(exp):
     settings = dict(TRAINING_ARGS, **exp["training_args"])
     # Importing the launcher inside a staged snapshot changes its REPO-derived
     # cache path; keep the established absolute shared cache instead.
     settings["tokenized_dataset_path"] = str(jobs.CACHE_ROOT / Path(TRAINING_ARGS["tokenized_dataset_path"]).name)
+    return settings
+
+
+def probe(exp, *, output_root=None):
+    torch.set_num_threads(8)
+    output = (ROOT if output_root is None else Path(output_root)) / exp["name"]
+    settings = resolved_training_args(exp)
     args = MyTrainingArguments(
         **settings, model_checkpoint=jobs.cluster_path(CHECKPOINT), output_dir=str(output), logging_dir=str(output / "logs")
     )
@@ -186,6 +191,7 @@ def probe(exp):
         model_checkpoint=args.model_checkpoint,
         no_bos_token=args.no_bos_token,
         limit_dataset_items=args.limit_dataset_items,
+        offset_dataset_items=args.offset_dataset_items,
         tokenized_dataset_path=jobs.cluster_path(args.tokenized_dataset_path),
     )
     trainer = PredictEmbeddingTrainer(
@@ -199,7 +205,9 @@ def probe(exp):
     )
     path = trainer.train()
     rows = select_rows(load_from_disk(path), "progr")
-    if len(rows) != args.limit_dataset_items or {r["sample_id"] for r in rows} != set(range(args.limit_dataset_items)):
+    offset = args.offset_dataset_items or 0
+    expected_ids = set(range(offset, offset + args.limit_dataset_items))
+    if len(rows) != args.limit_dataset_items or {r["sample_id"] for r in rows} != expected_ids:
         raise ValueError("Incomplete predict sample set")
     samples = []
     for row in rows:
@@ -207,7 +215,7 @@ def probe(exp):
             raise ValueError("Predict artifact role mismatch")
         sid = row["sample_id"]
         length = row["num_input_tokens"]
-        ids = dataset[sid]["input_ids"][:length][None].to(model.device)
+        ids = dataset[sid - offset]["input_ids"][:length][None].to(model.device)
         predict = torch.tensor([row["embedding"]], device=model.device, dtype=model.dtype)
         result = check_sample(model, tokenizer, ids, fixed_bos(model, 1, bos), predict_embeddings=predict)
         result.update(
