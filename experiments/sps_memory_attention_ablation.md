@@ -16,8 +16,13 @@ Primary curves exclude the first token because Standard reads that token from
 the memory residual directly. Position heatmaps retain it for transparency.
 
 ## Results
-Pending submission. Planned artifacts: layer NLL and accuracy curves and
-single-layer position heatmaps under the script-defined output directory.
+Submitted as `lm-mpi-job-633c13df-b713-4841-9306-76a6bd94175d`
+(initial status Pending), code snapshot
+`07a74820de6b4a33a3828165bfb097de7d16e040`.
+Independent adversarial review approved; ten focused tests passed and real saved
+inputs were validated. Durable Arkhip observation is registered.
+Artifacts will include layer NLL and accuracy curves and single-layer position
+heatmaps under the script-defined output directory. Results pending completion.
 
 ## Conclusions
 Interpret results as effects of removing direct memory-key access at selected
@@ -27,3 +32,5 @@ entire difference in optimized horizon.
 
 ## Changelog
 - 2026-10-22: Added matched-prefix causal memory-attention probe and plots.
+
+- 2026-10-22: Submitted causal evaluation and registered its completion watch.
