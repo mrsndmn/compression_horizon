@@ -194,3 +194,16 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   native forward/backward path are checked in `tests/test_sps_margin_geometry.py`.
   Both new entrypoints reuse snapshot submission and output guards from
   `scripts.analyze_sps_cramming.submit`; plots can be redrawn without GPUs.
+
+- `scripts/analyze_sps_margin_rescue.py --phase dry|submit|probe|plot` restarts
+  the first failed SPS memories with CE-Adam, squared-margin-hinge Adam and a
+  trust-region linearized-margin controller, without adding memory dimensions.
+  Source experiment configs define the arms and VJP budget. Scalar-loss backward
+  counts one VJP; full margin Jacobians count one per target. Forward counts and
+  wall times are separate. The controller solves a row-normalized nonnegative
+  dual QP, checks actual primal feasibility, backtracks on real merit and keeps
+  the best measured minimum-margin memory. Initial BF16 accuracy must replay the
+  saved failure; solutions are checked by FP32/BF16 teacher forcing and greedy
+  generation. This is extra diagnostic optimization, not the original schedule
+  or a continuation of missing Adam moments. `tests/test_sps_margin_rescue.py`
+  verifies known feasible/infeasible systems and complete autograd/budget loops.
