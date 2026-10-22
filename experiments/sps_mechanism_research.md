@@ -101,6 +101,17 @@ These are local SPS findings. The complete progressive comparison is now
 available: hinge increases reconstruction lengths in both models, but preserves
 the SPS disadvantage. See `sps_objective_factorial.md` for measurements and controls.
 
+The subsequent user-proposed intervention changes the conditioning site:
+`scripts.analyze_sps_predict_embedding.probe` optimizes one shared prediction
+input and holds an existing ordinary BOS fixed. All three runs completed;
+`sps_predict_embedding.md` records the matched comparisons and independent
+saved-stage audit. CE mean teacher-forced length increases from 19.42 to 64.17;
+strict hinge increases from 31.52 to 132.10 with native initialization and
+130.23 with random initialization. Every text improves in teacher-forced length.
+Mean initial correct free-generation prefixes increase from 30.56 to 110.23
+and 118.65 in the hinge comparison, with 38/48 and 43/48 exact reconstructions
+of the selected longer prefixes. Most hinge texts reach the total step budget.
+
 ## Conclusions
 Use the paper's attention-causality distinction and its warning that trajectory
 PCA measures a path rather than the solution set. Existing knockout results
@@ -129,6 +140,18 @@ independence are distinct: ordinary tokens have ordinary input embeddings but
 their hidden states remain memory-dependent, while all token constraints still
 share the same optimized memory vector. Decoupling does not imply independently
 adjustable reconstruction constraints.
+
+The shared-predict intervention materially changes this picture: substantial
+reconstruction gains are possible while ordinary context states are independent
+of the learned vector. Reusing a text-specific vector in every prediction slot
+provides direct control of the prediction residual stream and queries, rather
+than conditioning exclusively through a memory position's outgoing K/V. The
+earlier ordinary-memory horizons therefore do not bound this checkpoint's
+one-vector reconstruction ability under other conditioning protocols. This
+supports prediction-stream conditioning as a useful mechanism, but does not
+attribute the gain uniquely to residuals, queries, or the absence of context
+interference. The vector has the same parameter count but is injected at
+different computational locations.
 
 The remaining distinction between learned checkpoint quality and architecture
 is unresolved. Short-prefix causal routing does not by itself locate the
@@ -161,3 +184,5 @@ reduction as well as raw token counts; our local hypotheses remain unproven.
 - 2026-10-22: Added completed read-only evidence that mean-CE optimization and exact token constraints conflict at the selected SPS boundaries.
 
 - 2026-10-22: Integrated completed factorial, generation robustness and bounded mechanism conclusions.
+
+- 2026-10-22: Integrated completed fixed-BOS/shared-predict intervention: large same-checkpoint gains, free-generation checks, initialization control and optimization-budget limits.
