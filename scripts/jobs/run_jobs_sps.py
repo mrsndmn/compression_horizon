@@ -76,6 +76,30 @@ lr_sweep_experiment_configs = [
 ]
 
 
+OBJECTIVE_BASELINES = {
+    "standard_pilot_1b_batch1": ARTIFACTS / "standard_pilot_1b_batch1_lr0.3_0f4b7f53eb25",
+    "sps_w0_pilot_1b_batch1": ARTIFACTS / "sps_w0_pilot_1b_batch1_lr0.3_f59ca78c7aa7",
+}
+# Factorial reconstruction-objective / convergence-criterion comparison.
+# Raw CE controls are completed and reused; only the other three cells launch.
+objective_experiment_configs = [
+    dict(
+        name=f"{exp['name']}_{label}",
+        checkpoint=exp["checkpoint"],
+        baseline_run=str(OBJECTIVE_BASELINES[exp["name"]]),
+        training_args=dict(
+            learning_rate=0.3, token_objective=objective, loss_margin=loss_margin, convergence_margin=convergence_margin
+        ),
+    )
+    for exp in experiment_configs
+    for label, objective, loss_margin, convergence_margin in (
+        ("ce_strict", "cross_entropy", 0.0, 0.05),
+        ("hinge_raw", "squared_margin", 0.05, 0.0),
+        ("hinge_strict", "squared_margin", 0.05, 0.05),
+    )
+]
+
+
 def cluster_path(path):
     """Translate the notebook mount to the established MLS compute-node mount."""
     path = Path(path)
@@ -121,10 +145,14 @@ def staged_pythonpath(stage):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry", action="store_true")
-    parser.add_argument("--suite", choices=("batch1", "lr_sweep"), default="batch1")
+    parser.add_argument("--suite", choices=("batch1", "lr_sweep", "objectives"), default="batch1")
     args = parser.parse_args()
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
-    experiments = lr_sweep_experiment_configs if args.suite == "lr_sweep" else experiment_configs
+    experiments = {
+        "batch1": experiment_configs,
+        "lr_sweep": lr_sweep_experiment_configs,
+        "objectives": objective_experiment_configs,
+    }[args.suite]
     configs = [build_config(exp, commit) for exp in experiments]
     if args.dry:
         for cfg in configs:

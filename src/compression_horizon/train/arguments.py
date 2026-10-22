@@ -144,6 +144,10 @@ class MyTrainingArguments(TrainingArguments):
         default="l2",
         metadata={"help": "Loss type for activation alignment: l2, l1, or cosine."},
     )
+    token_objective: str = field(
+        default="cross_entropy",
+        metadata={"help": "Token reconstruction objective: cross_entropy or squared_margin (decoder-only)."},
+    )
     hybrid_alpha: float | None = field(
         default=None,
         metadata={"help": "Multiplier for the alignment loss; hybrid loss is enabled when specified."},
@@ -393,7 +397,7 @@ class MyTrainingArguments(TrainingArguments):
         default=0.0,
         metadata={
             "help": (
-                "Per-token margin-aware CE reweighting (cross_entropy only). >0 weights each token's "
+                "For squared_margin, the positive target gap; otherwise per-token CE reweighting. >0 weights each token's "
                 "cross-entropy by its margin deficit, clamp_min(0, loss_margin - (logit[true] - "
                 "runner_up)) (weights detached): a token already past the margin gets ~0 loss, a "
                 "deficient one gets up-weighted. Focuses optimization on the hard tokens instead of "
@@ -488,4 +492,13 @@ class MyTrainingArguments(TrainingArguments):
     def __post_init__(self):
         # Convert CLI-friendly forms into a real dict early, before base TrainingArguments validation.
         self.lr_scheduler_kwargs = _parse_cli_dict(getattr(self, "lr_scheduler_kwargs", None))  # type: ignore[assignment]
+        if self.token_objective not in ("cross_entropy", "squared_margin"):
+            raise ValueError("Unknown token_objective")
+        if self.token_objective == "squared_margin":
+            if self.loss_type != "cross_entropy" or self.hybrid_alpha is not None or self.loss_margin <= 0:
+                raise ValueError("squared_margin requires loss_type=cross_entropy, positive loss_margin, no alignment")
+            if self.train_prefix_tuning or self.noop_train:
+                raise ValueError("squared_margin is not implemented for prefix tuning or noop training")
+            if self.ce_temperature != 1 or self.ce_temperature_compensation != "none" or self.leading_token_loss_count > 0:
+                raise ValueError("squared_margin cannot combine with CE temperature or leading-token weights")
         super().__post_init__()

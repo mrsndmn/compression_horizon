@@ -207,3 +207,22 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   generation. This is extra diagnostic optimization, not the original schedule
   or a continuation of missing Adam moments. `tests/test_sps_margin_rescue.py`
   verifies known feasible/infeasible systems and complete autograd/budget loops.
+
+- `scripts/jobs/run_jobs_sps.py --suite objectives --dry` describes the matched
+  objective/convergence factorial; omit `--dry` to submit. Its registry reuses
+  completed CE/raw baselines and defines the six additional native-checkpoint
+  runs. All cramming remains batch one. Defaults and the LR sweep are unchanged.
+- `token_objective=squared_margin` selects a differentiable target-versus-largest-
+  rival squared hinge in `BaseTrainer.compute_loss`, shared by full/progressive,
+  low-dimensional and shared-head decoder-only paths. `loss_margin` is its positive
+  target gap; the default CE path retains existing weighted/hybrid behavior.
+  Encoder-decoder, prefix-tuning, no-op and incompatible CE-only options reject
+  this objective. Full/progressive result rows persist objective and margin fields.
+  `tests/test_squared_margin_objective.py` checks real native forwards/backwards,
+  offsets, masks, default CE compatibility, invalid arguments and suite coverage.
+- `scripts/audit_sps_objective_gradients.py --phase dry|submit|probe|plot` reads
+  completed rescue vectors without optimization, compares CE preferences and
+  decomposes correct/wrong-token gradients at the same SPS checkpoint. It records
+  gradient cancellation and alignment with the worst-margin gradient; these local
+  quantities do not establish a global optimizer or architecture limitation.
+  `tests/test_objective_gradient_audit.py` checks a known opposing-gradient case.

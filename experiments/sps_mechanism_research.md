@@ -78,8 +78,22 @@ independent adversarial review. Submitted as
 `lm-mpi-job-4ba5786a-dd90-4cfc-96ac-b48ba81c4340` from snapshot
 `157a04b98608905364dda5cd311a6c90ab7a3b21`; output
 `artifacts/sps_cramming/mechanism_margin_rescue_20261022/`.
-Initial status Pending; a separate durable Arkhip wait is registered.
-Rescue results pending completion.
+The job completed successfully. CE restarts at either tested learning rate
+recover none of the four prefixes within the diagnostic budget. Squared-margin
+Adam recovers all four in FP32 using 20–55 gradients; three also pass both
+teacher forcing and free generation in the original BF16 regime. The constrained
+controller recovers all four in FP32, but only one survives BF16 validation.
+The unchanged checkpoint and memory dimension therefore admit solutions beyond
+three original BF16 stopping points. These selected prefix rescues do not measure
+full progressive horizons or show that the overall Standard/SPS gap disappears.
+The figure is `mechanism_margin_rescue_20261022/margin_rescue.png`.
+
+The follow-up functions are the objective suite in
+`scripts.jobs.run_jobs_sps.main` and
+`scripts.audit_sps_objective_gradients.probe`. The former separates reconstruction
+loss from the stopping margin in full progressive runs of both checkpoints; the
+latter measures objective preferences and gradient cancellation on saved rescue
+vectors. Their source registries define every setting.
 
 ## Conclusions
 Use the paper's attention-causality distinction and its warning that trajectory
@@ -90,8 +104,10 @@ an early context-mediated route and later direct prediction reads in SPS.
 Decoupling readout positions does not make ordinary hidden states independent
 of the memory. The fixed-query hypothesis is not enough to explain the measured
 early dependence, and the local first-order rank hypothesis is weakened.
-What remains unresolved is how much of the boundary comes from the optimization
-protocol versus global feasibility of the constraints. Checkpoints differ in
+The rescue establishes that several observed stopping points are failures of the
+optimization protocol rather than infeasibility at the same memory dimension.
+Its extent over the full cohort and the remaining Standard/SPS difference are
+unresolved; the complete progressive comparison is required. Checkpoints differ in
 learned weights as well as prediction layout, so architecture-only attribution
 requires additional intervention controls.
 
@@ -110,3 +126,5 @@ reduction as well as raw token counts; our local hypotheses remain unproven.
 - 2026-10-22: Recorded completed routing and margin findings; started a direct optimization-versus-feasibility rescue control.
 
 - 2026-10-22: Submitted matched-gradient-budget rescue controls; independently checked geometry projections from raw Gram matrices and inspected all completed figures.
+
+- 2026-10-22: Recorded successful unchanged-dimension rescues; prepared full objective/convergence factorial and a read-only objective-gradient audit.

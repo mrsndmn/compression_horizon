@@ -121,6 +121,34 @@ def next_token_cross_entropy_loss_with_prefix(
     return loss
 
 
+def next_token_squared_margin_loss_with_prefix(
+    logits: torch.Tensor,
+    input_ids: torch.Tensor,
+    attention_mask: torch.Tensor,
+    num_compression_tokens: int,
+    *,
+    prefix_len: int = 0,
+    margin: float,
+) -> torch.Tensor:
+    """Mean squared deficit of target-vs-best-competitor logits over valid tokens.
+
+    Unlike CE, positions past the requested margin have zero gradient. Work in
+    FP32 even for BF16 model outputs. Convergence is checked independently.
+    """
+    if num_compression_tokens < 1 or prefix_len < 0 or margin <= 0:
+        raise ValueError("squared_margin requires memory positions and a positive margin")
+    offset = num_compression_tokens + prefix_len
+    pred = logits[:, offset - 1 : -1].float()
+    if pred.shape[:2] != input_ids.shape:
+        raise ValueError("Misaligned target logits for squared_margin")
+    target = pred.gather(-1, input_ids[..., None]).squeeze(-1)
+    top2, indices = pred.topk(2, dim=-1)
+    rival = torch.where(indices[..., 0] == input_ids, top2[..., 1], top2[..., 0])
+    deficits = (margin - (target - rival)).clamp_min(0).square()
+    valid = attention_mask.to(deficits.dtype)
+    return (deficits * valid).sum() / valid.sum().clamp_min(1)
+
+
 def next_token_cross_entropy_loss(
     logits: torch.Tensor,
     input_ids: torch.Tensor,

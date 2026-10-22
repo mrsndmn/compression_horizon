@@ -19,6 +19,7 @@ from compression_horizon.train.encoder_decoder import (
 )
 from compression_horizon.train.loss import (
     compute_hybrid_cross_entropy_and_alignment_loss,
+    next_token_squared_margin_loss_with_prefix,
     token_argmax_match_rate_with_prefix,
 )
 from compression_horizon.train.optimization import build_optimizer_and_scheduler
@@ -88,6 +89,8 @@ class BaseTrainer:
         arithmetic they rely on counts a memory position that does not exist on the decoder side.
         """
         args = self.args
+        if getattr(args, "token_objective", "cross_entropy") != "cross_entropy":
+            raise NotImplementedError("token_objective squared_margin is not supported for encoder-decoder cramming")
         if int(getattr(args, "progressive_prefix_len", 0) or 0) > 0:
             raise NotImplementedError(
                 "progressive_prefix_len > 0 is not supported for encoder-decoder cramming: the "
@@ -135,6 +138,18 @@ class BaseTrainer:
         ``prefix_len`` skips the uncompressed prefix positions so loss is computed only over the
         continuation (the tokens that follow the prefix); 0 leaves behaviour unchanged.
         """
+        if getattr(self.args, "token_objective", "cross_entropy") == "squared_margin":
+            return (
+                next_token_squared_margin_loss_with_prefix(
+                    logits,
+                    input_ids,
+                    attention_mask,
+                    num_compression_tokens,
+                    prefix_len=prefix_len,
+                    margin=self.args.loss_margin,
+                ),
+                None,
+            )
         loss, alignment_loss = compute_hybrid_cross_entropy_and_alignment_loss(
             logits=logits,
             input_ids=input_ids,
