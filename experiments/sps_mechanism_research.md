@@ -30,7 +30,18 @@ where that linear approximation breaks. Local rank or conditioning cannot
 establish a global representational limit.
 
 ## Results
-Pending implementation verification and submission.
+Both diagnostics were submitted from code snapshot
+`c155f7c67bda8fbd63d13319322d6f7e4cb2a2e9` (see each output's job.json for
+the authoritative full commit). Initial status Pending:
+
+- Routing/KV: `lm-mpi-job-4e14b8cd-b4d7-4ba5-afb8-4d49196cf7d7`;
+  output `artifacts/sps_cramming/mechanism_routes_20261022/`.
+- Margin geometry: `lm-mpi-job-c0489873-6780-4a56-861d-8305032b4ebd`;
+  output `artifacts/sps_cramming/mechanism_margin_geometry_20261022/`.
+
+Implementation passed 23 focused tests, independent adversarial review, both
+executable dry launchers, synthetic plot rendering and saved-data checks.
+A durable Arkhip group observes both jobs. Results pending completion.
 
 ## Conclusions
 Use the paper's attention-causality distinction and its warning that trajectory
@@ -41,3 +52,12 @@ architecture-only attribution requires additional intervention controls.
 
 ## Changelog
 - 2026-10-22: Started mechanism-directed routing, payload and controllability probes.
+
+The distinction between QK addressing and OV information transmission follows
+[A Mathematical Framework for Transformer Circuits](https://transformer-circuits.pub/2021/framework/index.html).
+Its attention-only examples motivate interventions here; they do not establish
+a mechanism in our deeper models with MLPs. The original
+[Cramming paper](https://arxiv.org/abs/2502.13063) motivates measuring uncertainty
+reduction as well as raw token counts; our local hypotheses remain unproven.
+
+- 2026-10-22: Submitted both diagnostic jobs and registered durable observation.
