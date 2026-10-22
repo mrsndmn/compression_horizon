@@ -65,6 +65,37 @@ none of the CE texts. These are achieved lengths under the registered protocol,
 not estimates of a global capacity ceiling. Greedy prefix lengths refer to the
 single selected final vector per text, not a search over earlier saved stages.
 
+The follow-up saved-stage cost analysis is in `optimization_steps/` under the
+same output directory: executable read-only `analysis.py`, `per_stage.csv`,
+`summary.json` and `steps_by_token_position.png`. Run selection is derived from
+the existing objective and predict registries. It reads cumulative optimizer
+update counters and differences adjacent stages, including zero-update stages.
+Successful-stage costs and unsuccessful attempts are kept distinct; failures
+remain in the CSV. The first stage starts at a zero counter. An independent
+pandas calculation verified all 22,636 stages across the seven compared runs,
+their convergence flags, cumulative telescoping and every per-position median
+and sample count. The rendered comparison plot was visually inspected.
+
+For native-initialized predict/hinge, median incremental costs at token positions
+10, 25, 50, 75, 100 and 125 are 17, 33.5, 40, 70, 52 and 71 optimizer updates.
+Median cumulative costs at those positions are 179, 529.5, 1269, 3316.5, 6344
+and 8476 updates. Cohort sizes are 48, 48, 48, 48, 47 and 38 respectively.
+The increase is noisy rather than monotonic: at position 75, mean incremental
+cost is 162.5 and the 90th percentile is 425.6, versus median 70. All 48 texts
+have positive within-text position/cost Spearman correlation (median 0.557);
+random initialization gives a similar pattern (median 0.552).
+
+Holding the full native-predict cohort through position 75 avoids survivor
+selection over that range. Pooled successful-stage median costs grow from 18
+updates in positions 1–10, to 24 in 11–25, 32 in 26–50 and 46 in 51–75.
+Zero-cost stages mean the extended prefix already satisfies the convergence
+criterion; they are not dropped. Late cost curves condition on surviving texts,
+and the plot suppresses cost estimates with fewer than eight texts while
+showing the full survival counts separately. These are costs of reoptimizing
+the entire prefix with inherited optimizer state and the running LR schedule,
+not isolated-token difficulty or wall-clock costs, and they do not identify
+length as the sole causal driver.
+
 Submitted jobs:
 
 - `predict_ce_native`: `lm-mpi-job-f933dc8a-58dd-49e3-a511-48b1c7875b07`.
@@ -96,3 +127,5 @@ lossless greedy horizon has been measured here.
 - 2026-10-22: Submitted all three comparisons from a reviewed snapshot; registered durable observation.
 
 - 2026-10-22: All three jobs completed; audited raw stages and exact token IDs, measured paired gains and greedy prefixes, inspected the plot and documented budget censoring.
+
+- 2026-10-22: Measured optimizer cost versus token position from saved stages; independently verified all counter differences and aggregates, retained zero-cost and failed stages, and plotted marginal/cumulative cost with surviving-cohort counts.
