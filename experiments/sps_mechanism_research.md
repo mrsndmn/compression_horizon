@@ -73,7 +73,13 @@ A follow-up diagnostic is `scripts.analyze_sps_margin_rescue.probe`: restart
 failed SPS memories without adding parameters, compare margin-aware constrained
 steps with Adam controls, account for VJPs and forwards, and validate selected
 solutions in the original numerical regime and free generation. Its source
-registry defines all settings. Results pending verification and submission.
+registry defines all settings. Implementation passed 18 focused tests and
+independent adversarial review. Submitted as
+`lm-mpi-job-4ba5786a-dd90-4cfc-96ac-b48ba81c4340` from snapshot
+`157a04b98608905364dda5cd311a6c90ab7a3b21`; output
+`artifacts/sps_cramming/mechanism_margin_rescue_20261022/`.
+Initial status Pending; a separate durable Arkhip wait is registered.
+Rescue results pending completion.
 
 ## Conclusions
 Use the paper's attention-causality distinction and its warning that trajectory
@@ -102,3 +108,5 @@ reduction as well as raw token counts; our local hypotheses remain unproven.
 - 2026-10-22: Submitted both diagnostic jobs and registered durable observation.
 
 - 2026-10-22: Recorded completed routing and margin findings; started a direct optimization-versus-feasibility rescue control.
+
+- 2026-10-22: Submitted matched-gradient-budget rescue controls; independently checked geometry projections from raw Gram matrices and inspected all completed figures.
