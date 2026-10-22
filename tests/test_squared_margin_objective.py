@@ -49,6 +49,7 @@ def test_native_base_dispatch_matches_rescue_hinge_and_backpropagates(sps):
         dict(token_objective="squared_margin", loss_type="cross_entropy"),
         dict(token_objective="squared_margin", loss_type="l2", loss_margin=0.05),
         dict(token_objective="squared_margin", loss_type="cross_entropy", loss_margin=0.05, train_prefix_tuning=True),
+        dict(token_objective="squared_margin", loss_type="cross_entropy", loss_margin=0.05, train_compression_head=True),
     ],
 )
 def test_invalid_or_unsupported_combinations_fail_early(kwargs):

@@ -497,8 +497,10 @@ class MyTrainingArguments(TrainingArguments):
         if self.token_objective == "squared_margin":
             if self.loss_type != "cross_entropy" or self.hybrid_alpha is not None or self.loss_margin <= 0:
                 raise ValueError("squared_margin requires loss_type=cross_entropy, positive loss_margin, no alignment")
-            if self.train_prefix_tuning or self.noop_train:
-                raise ValueError("squared_margin is not implemented for prefix tuning or noop training")
+            if self.train_prefix_tuning or self.noop_train or self.train_compression_head:
+                raise ValueError(
+                    "squared_margin is not implemented for prefix tuning, noop training or compression-head training"
+                )
             if self.ce_temperature != 1 or self.ce_temperature_compensation != "none" or self.leading_token_loss_count > 0:
                 raise ValueError("squared_margin cannot combine with CE temperature or leading-token weights")
         super().__post_init__()

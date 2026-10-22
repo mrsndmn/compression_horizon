@@ -213,10 +213,10 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   completed CE/raw baselines and defines the six additional native-checkpoint
   runs. All cramming remains batch one. Defaults and the LR sweep are unchanged.
 - `token_objective=squared_margin` selects a differentiable target-versus-largest-
-  rival squared hinge in `BaseTrainer.compute_loss`, shared by full/progressive,
-  low-dimensional and shared-head decoder-only paths. `loss_margin` is its positive
+  rival squared hinge in `BaseTrainer.compute_loss`, shared by full/progressive
+  and low-dimensional decoder-only paths. `loss_margin` is its positive
   target gap; the default CE path retains existing weighted/hybrid behavior.
-  Encoder-decoder, prefix-tuning, no-op and incompatible CE-only options reject
+  Encoder-decoder, prefix-tuning, no-op, compression-head training and incompatible CE-only options reject
   this objective. Full/progressive result rows persist objective and margin fields.
   `tests/test_squared_margin_objective.py` checks real native forwards/backwards,
   offsets, masks, default CE compatibility, invalid arguments and suite coverage.
