@@ -349,8 +349,17 @@ def cluster_path(path):
     return str(Path("/workspace-SR004.nfs2") / path.relative_to(root)) if path.is_relative_to(root) else str(path)
 
 
-def submit(dry=False, *, entrypoint="scripts/analyze_sps_cramming.py", job_kind="sps_diagnostics", probe_args=()):
-    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
+def submit(
+    dry=False, *, entrypoint="scripts/analyze_sps_cramming.py", job_kind="sps_diagnostics", probe_args=(), snapshot_commit=None
+):
+    if snapshot_commit is not None and (
+        len(snapshot_commit) != 40 or any(character not in "0123456789abcdef" for character in snapshot_commit)
+    ):
+        raise ValueError("snapshot_commit must be a full immutable commit SHA")
+    reference = ["HEAD"] if snapshot_commit is None else ["--verify", snapshot_commit + "^{commit}"]
+    commit = subprocess.check_output(["git", "rev-parse", *reference], cwd=REPO, text=True).strip()
+    if snapshot_commit is not None and commit != snapshot_commit:
+        raise ValueError("Resolved snapshot differs from the requested commit")
     if subprocess.check_output(["git", "diff", "HEAD", "--"], cwd=REPO):
         raise RuntimeError("Commit tracked changes first")
     stage = ROOT / "code" / commit

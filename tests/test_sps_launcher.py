@@ -38,6 +38,41 @@ def test_generated_job_paths_use_cluster_mount():
     assert shlex.split(cfg["script"])[0] == "cd"
 
 
+def test_diagnostic_submission_stages_requested_commit_instead_of_current_head(tmp_path, monkeypatch):
+    import json
+    from types import SimpleNamespace
+
+    import mls.manager.job.utils as remote
+    from scripts import analyze_sps_cramming as diagnostics
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.org"], check=True)
+    entrypoint = repo / "probe.py"
+    entrypoint.write_text("old snapshot")
+    subprocess.run(["git", "-C", str(repo), "add", "probe.py"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "old"], check=True)
+    original = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+    entrypoint.write_text("new HEAD")
+    subprocess.run(["git", "-C", str(repo), "commit", "-qam", "new"], check=True)
+    monkeypatch.setattr(diagnostics, "REPO", repo)
+    monkeypatch.setattr(diagnostics, "ROOT", tmp_path / "artifacts")
+    monkeypatch.setattr(diagnostics, "OUTPUT", tmp_path / "output")
+    monkeypatch.setattr(remote, "get_in_progress_jobs", lambda: [])
+    response = dict(job_name="lm-mpi-job-00000000-0000-0000-0000-000000000001", status="Pending")
+    client = SimpleNamespace(run_job=lambda payload: response)
+    monkeypatch.setattr(remote, "training_job_api_from_profile", lambda profile: (client, dict(region="SR004")))
+    diagnostics.submit(entrypoint="probe.py", snapshot_commit=original)
+    staged = diagnostics.ROOT / "code" / original
+    assert (staged / "probe.py").read_text() == "old snapshot"
+    record = json.loads((diagnostics.OUTPUT / "job.json").read_text())
+    intent = json.loads((diagnostics.OUTPUT / "submission-intent.json").read_text())
+    assert record["commit"] == original
+    assert str(staged) in intent["payload"]["script"]
+
+
 def test_post_training_audit_failure_prevents_completion(tmp_path, monkeypatch):
     monkeypatch.setattr(launcher, "ARTIFACTS", tmp_path)
     monkeypatch.setattr(launcher, "cluster_path", str)

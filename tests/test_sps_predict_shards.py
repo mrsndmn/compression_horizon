@@ -1,5 +1,6 @@
 import json
 import shlex
+import shutil
 from pathlib import Path
 
 import pytest
@@ -177,7 +178,30 @@ def test_existing_submissions_remain_idempotent_after_documentation_commit(saved
     assert len(manifest["shards"]) == 8
 
 
-@pytest.mark.parametrize("corruption", ["incomplete", "duplicate_id", "wrong_target", "settings", "source_commit"])
+def test_archived_shard_submission_uses_its_snapshot_even_after_head_changes(monkeypatch, capsys):
+    from scripts import analyze_sps_cramming as jobs
+    from scripts import analyze_sps_predict_shards as shards
+
+    monkeypatch.setattr(shards, "source_commit", lambda: "a" * 40)
+
+    def git_output(argv, **kwargs):
+        if "rev-parse" in argv:
+            return "b" * 40 if "HEAD" in argv else "a" * 40
+        return b""
+
+    monkeypatch.setattr(jobs.subprocess, "check_output", git_output)
+    shards.submit(dry=True)
+    remaining = capsys.readouterr().out.strip()
+    while remaining:
+        payload, end = json.JSONDecoder().raw_decode(remaining)
+        remaining = remaining[end:].lstrip()
+        assert "/code/" + "a" * 40 in payload["script"]
+        assert "/code/" + "b" * 40 not in payload["script"]
+
+
+@pytest.mark.parametrize(
+    "corruption", ["incomplete", "duplicate_id", "wrong_target", "settings", "source_commit", "missing_stage", "shifted_stages"]
+)
 def test_merge_rejects_incomplete_or_inconsistent_shards(saved_shards, corruption):
     shards = saved_shards
     path = shards.ROOT / shards.experiment_configs[1]["name"]
@@ -193,6 +217,17 @@ def test_merge_rejects_incomplete_or_inconsistent_shards(saved_shards, corruptio
         report["training_args"]["learning_rate"] = 0.1
     elif corruption == "source_commit":
         report["source_commit"] = "c" * 40
+    elif corruption in ("missing_stage", "shifted_stages"):
+        raw_path = path / "predict_prefixes"
+        rows = load_from_disk(raw_path).to_list()
+        if corruption == "missing_stage":
+            rows = rows[1:]
+        else:
+            for row in rows:
+                row["stage_index"] += 200
+                row["stage_seq_len"] += 200
+        shutil.rmtree(raw_path)
+        Dataset.from_list(rows).save_to_disk(raw_path)
     report_path.write_text(json.dumps(report))
     with pytest.raises(ValueError):
         shards.merge()

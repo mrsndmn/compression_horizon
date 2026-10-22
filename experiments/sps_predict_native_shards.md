@@ -23,6 +23,10 @@ reports, per-text metrics and provenance, then plots the completed comparison.
 Preparation in progress. The two superseded monolithic budget jobs were
 cancelled while still pending. Their original submission records remain intact.
 The previous completed native-hinge predict run is the comparison control.
+Initial independent review identified missing-stage detection and archived
+partial-retry snapshot propagation as edge cases. Regression tests reproduced
+both; fixes enforce the original SHA through submission and complete registered
+stage progression before merging.
 
 ## Conclusions
 Use a new durable Arkhip group for the complete shard set. On successful
@@ -32,3 +36,5 @@ must be resolved before merging; cancelled jobs are not successful results.
 
 ## Changelog
 - 2026-10-22: Replaced the pending native/random monolithic pair with a native-hinge shard registry and audited complete-cohort merge.
+
+- 2026-10-23: Applied independent review findings: immutable archived-snapshot retries and strict raw-stage progression checks, with regression coverage.

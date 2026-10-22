@@ -61,6 +61,7 @@ def submit(dry=False):
                 entrypoint="scripts/analyze_sps_predict_shards.py",
                 job_kind="sps_" + exp["name"],
                 probe_args=("--experiment", exp["name"]),
+                snapshot_commit=commit,
             )
         if not dry:
             manifest.append(dict(experiment=exp["name"], **json.loads(path.read_text())))
@@ -102,8 +103,11 @@ def check_raw(raw, report, exp, samples):
     fields = [
         "sample_id",
         "stage_index",
+        "stage_seq_len",
+        "num_input_tokens",
         "steps_taken",
         "final_convergence",
+        "convergence_threshold",
         "embedding_role",
         "fixed_bos_token_id",
         "predict_init",
@@ -117,12 +121,22 @@ def check_raw(raw, report, exp, samples):
         "dtype",
         "model_checkpoint",
     ]
-    seen, counters = set(), defaultdict(int)
+    seen, counters, next_stages = set(), defaultdict(int), defaultdict(int)
     for row in raw.select_columns(fields):
         key = (row["sample_id"], row["stage_index"])
         if row["sample_id"] not in expected or key in seen:
             raise ValueError("Raw stage IDs overlap or leave the assigned shard")
         seen.add(key)
+        expected_stage = next_stages[row["sample_id"]]
+        expected_length = min(args.progressive_min_seq_len + expected_stage * args.progressive_step, args.max_sequence_length)
+        if (
+            row["stage_index"] != expected_stage
+            or row["stage_seq_len"] != expected_length
+            or row["num_input_tokens"] != expected_length
+            or row["convergence_threshold"] != args.progressive_convergence_threshold
+        ):
+            raise ValueError("Raw stages must be contiguous and follow the registered prefix progression")
+        next_stages[row["sample_id"]] += 1
         delta = row["steps_taken"] - counters[row["sample_id"]]
         if (
             not 0 <= delta <= args.max_optimization_steps_per_token

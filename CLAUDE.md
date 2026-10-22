@@ -281,5 +281,10 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   must agree. The merger atomically writes combined `predict_prefixes`, validation,
   per-text CSV, provenance manifest and comparison plot under `merged/`; it keeps
   earlier outputs intact and repeated successful merges return the saved result.
+  Shard submissions pass their validated immutable SHA through
+  `analyze_sps_cramming.submit(snapshot_commit=...)`, including partial retries
+  from an archived snapshot after the enclosing repository HEAD changes. Other
+  callers retain the default HEAD behavior. Raw stages must start at zero without
+  gaps and match the registered prefix lengths, token counts and convergence threshold.
   `tests/test_sps_predict_shards.py` covers the real dry payloads, cohort partition,
   complete/idempotent merge and rejection of incomplete or inconsistent inputs.
