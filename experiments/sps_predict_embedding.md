@@ -117,9 +117,12 @@ place to condition reconstruction; it does not isolate a single causal route
 within that stream or establish an architecture-only comparison with Standard.
 
 Exact free generation is still less reliable than teacher replay at the longer
-selected lengths. Increasing optimization budget and testing numerical margin
-robustness are natural follow-ups; neither a capacity ceiling nor a guaranteed
-lossless greedy horizon has been measured here.
+selected lengths. The completed larger-budget native-hinge follow-up is in
+`sps_predict_native_shards.md`: its coupled budget/schedule change gives shorter
+horizons and stops at per-stage failures before using the extra total budget.
+Retaining the original LR trajectory while extending available updates is a
+cleaner next control. Neither a capacity ceiling nor a guaranteed lossless
+greedy horizon has been measured here.
 
 ## Changelog
 - 2026-10-22: Designed the fixed-BOS/shared-predict comparison with matched per-text parameter count.
@@ -129,3 +132,5 @@ lossless greedy horizon has been measured here.
 - 2026-10-22: All three jobs completed; audited raw stages and exact token IDs, measured paired gains and greedy prefixes, inspected the plot and documented budget censoring.
 
 - 2026-10-22: Measured optimizer cost versus token position from saved stages; independently verified all counter differences and aggregates, retained zero-cost and failed stages, and plotted marginal/cumulative cost with surviving-cohort counts.
+
+- 2026-10-23: Linked completed native-hinge larger-budget shard results and retained the LR-schedule confound explicitly.
