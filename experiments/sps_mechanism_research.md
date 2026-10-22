@@ -93,7 +93,12 @@ The follow-up functions are the objective suite in
 `scripts.audit_sps_objective_gradients.probe`. The former separates reconstruction
 loss from the stopping margin in full progressive runs of both checkpoints; the
 latter measures objective preferences and gradient cancellation on saved rescue
-vectors. Their source registries define every setting.
+vectors. Their source registries define every setting. The gradient audit completed:
+every exact hinge vector has higher CE than its corresponding erroneous CE
+vector, and at all four selected CE vectors plain CE descent locally worsens
+the worst-token margin. Correct- and wrong-token gradient cosines are negative.
+These are local SPS findings; the full Standard/SPS progressive comparison is
+still required. See `sps_objective_factorial.md` for measurements and controls.
 
 ## Conclusions
 Use the paper's attention-causality distinction and its warning that trajectory
@@ -128,3 +133,5 @@ reduction as well as raw token counts; our local hypotheses remain unproven.
 - 2026-10-22: Submitted matched-gradient-budget rescue controls; independently checked geometry projections from raw Gram matrices and inspected all completed figures.
 
 - 2026-10-22: Recorded successful unchanged-dimension rescues; prepared full objective/convergence factorial and a read-only objective-gradient audit.
+
+- 2026-10-22: Added completed read-only evidence that mean-CE optimization and exact token constraints conflict at the selected SPS boundaries.
