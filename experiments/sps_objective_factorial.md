@@ -80,7 +80,7 @@ fixed weights and training seed, not architecture or optimization-seed variance.
 All selected saved prefixes replay exactly under teacher forcing. Free decoding
 is different: raw hinge gives only 37/48 exact Standard reconstructions and
 29/48 for SPS. Strict hinge improves this to 44/48 and 45/48, at somewhat shorter
-prefixes; CE controls give 48/48 and 46/48. Mean initial correct greedy prefixes
+prefixes; raw-CE controls give 48/48 and 46/48. Mean initial correct greedy prefixes
 for the saved final memories are 32.31→52.50 (Standard) and 19.06→30.56 (SPS),
 raw CE→strict hinge. These are actual generated prefixes, not maximal greedy
 horizons or the best results among earlier stages. Positive training margins
@@ -106,3 +106,5 @@ isolates learned weights from architectural differences between checkpoints.
 - 2026-10-22: Validated completed objective audit against all saved rescue points; documented per-sample objective mismatch and local gradient conflict. Full progressive comparison remains live.
 
 - 2026-10-22: All six jobs completed; validated all eight factorial cells, paired text effects and free-generation outcomes; retained the unresolved architecture/weights attribution explicitly.
+
+- 2026-10-22: Independent final analysis review APPROVE; 16 focused analysis/objective tests and 36 native masking/generation/intervention/rescue tests passed. All selected horizons independently matched raw saved stages.
