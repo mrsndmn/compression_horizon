@@ -158,3 +158,16 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   missing tokens count as errors. Teacher replay uses integer correct-token
   counts so floating-point mean reduction cannot misclassify an exact match.
   The audit can also be rerun with `--run-dir`.
+
+- `scripts/analyze_sps_memory_ablation.py --phase dry|submit|probe|plot`
+  extends the saved native checkpoint diagnostic flow. It evaluates the matched
+  single-sample baseline memories without optimization, using common per-text
+  target lengths and exact saved token IDs. Per-layer attention pre-hooks remove
+  only key-0 edges from queries >=1, clone shared masks, and restore on exit.
+  Single-layer, prefix, and suffix layer sets retain Standard's direct memory
+  residual and SPS's original predict mask. BF16 and FP32 arithmetic share
+  quantized weights/memories. Plots use equal per-text deltas on tokens 2..L;
+  position heatmaps include token 1. `tests/test_sps_memory_ablation.py` checks
+  mask locality, cleanup, full-block gradient isolation, and plotting. The shared
+  `analyze_sps_cramming.submit` accepts entrypoint/job-kind overrides and stages
+  both root/src on PYTHONPATH; its original defaults remain unchanged.

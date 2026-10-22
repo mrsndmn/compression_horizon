@@ -349,19 +349,21 @@ def cluster_path(path):
     return str(Path("/workspace-SR004.nfs2") / path.relative_to(root)) if path.is_relative_to(root) else str(path)
 
 
-def submit(dry=False):
+def submit(dry=False, *, entrypoint="scripts/analyze_sps_cramming.py", job_kind="sps_diagnostics"):
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
     if subprocess.check_output(["git", "diff", "HEAD", "--"], cwd=REPO):
         raise RuntimeError("Commit tracked changes first")
     stage = ROOT / "code" / commit
-    script = f"cd {shlex.quote(cluster_path(stage))} && " + shlex.join(
-        [PYTHON, "scripts/analyze_sps_cramming.py", "--phase", "probe"]
-    )
+    script = f"cd {shlex.quote(cluster_path(stage))} && " + shlex.join([PYTHON, entrypoint, "--phase", "probe"])
     payload = dict(
         JOB_CONFIG,
         script=script,
-        job_desc=f"CH: sps_diagnostics {commit[:12]} #d.tarasov",
-        env_variables={"PYTHONPATH": cluster_path(stage / "src"), "OMP_NUM_THREADS": "8", "PYTHONUNBUFFERED": "1"},
+        job_desc=f"CH: {job_kind} {commit[:12]} #d.tarasov",
+        env_variables={
+            "PYTHONPATH": f"{cluster_path(stage)}:{cluster_path(stage / 'src')}",
+            "OMP_NUM_THREADS": "8",
+            "PYTHONUNBUFFERED": "1",
+        },
     )
     if dry:
         print(json.dumps(payload, indent=2))
