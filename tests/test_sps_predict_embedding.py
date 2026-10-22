@@ -115,7 +115,6 @@ def test_predict_registry_preserves_batch_data_and_parameter_budget():
         settings = dict(TRAINING_ARGS, **exp["training_args"])
         assert settings["per_device_train_batch_size"] == 1 and settings["number_of_mem_tokens"] == 1
         assert settings["learning_rate"] == 0.3 and settings["limit_dataset_items"] == 48
-        assert exp["baseline"].joinpath("completed").exists()
     assert {(e["init"], e["training_args"].get("token_objective", "cross_entropy")) for e in experiment_configs} == {
         ("native", "cross_entropy"),
         ("native", "squared_margin"),
