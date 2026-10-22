@@ -133,3 +133,69 @@ def test_diagnostic_launcher_preserves_explicit_experiment_argument(monkeypatch,
     )
     payload = json.loads(capsys.readouterr().out)
     assert "--phase probe --experiment predict_ce_native" in payload["script"]
+
+
+def test_budget_suite_renders_only_new_jobs_and_changes_only_total_budget(monkeypatch, capsys):
+    import json
+    import shlex
+
+    from scripts import analyze_sps_cramming as jobs
+    from scripts import analyze_sps_predict_embedding as experiment
+    from scripts.jobs.run_jobs_sps import TRAINING_ARGS
+
+    monkeypatch.setattr(jobs.subprocess, "check_output", lambda args, **kwargs: "a" * 40 if "rev-parse" in args else b"")
+    experiment.submit(dry=True, suite="budget")
+    remaining = capsys.readouterr().out.strip()
+    payloads = []
+    while remaining:
+        payload, end = json.JSONDecoder().raw_decode(remaining)
+        payloads.append(payload)
+        remaining = remaining[end:].lstrip()
+    assert len(payloads) == 2
+    observed = []
+    for payload in payloads:
+        argv = shlex.split(payload["script"])
+        assert argv[argv.index("--suite") + 1] == "budget"
+        observed.append(argv[argv.index("--experiment") + 1])
+    assert set(observed) == {"predict_hinge_native_budget30000", "predict_hinge_random_budget30000"}
+    original = {e["name"]: e for e in experiment.experiment_configs}
+    for exp in experiment.budget_experiment_configs:
+        source = original[exp["baseline"].name]
+        before = dict(TRAINING_ARGS, **source["training_args"])
+        after = dict(TRAINING_ARGS, **exp["training_args"])
+        assert {k for k in after if after[k] != before[k]} == {"max_optimization_steps_per_sample"}
+        assert after["max_optimization_steps_per_sample"] == 30000
+        assert before["max_optimization_steps_per_sample"] == 10000
+        assert after["per_device_train_batch_size"] == 1 and after["max_optimization_steps_per_token"] == 1000
+        assert exp["init"] == source["init"]
+
+
+def test_budget_summary_compares_predict_controls_and_preserves_original_outputs(tmp_path, monkeypatch):
+    import json
+
+    from scripts import analyze_sps_predict_embedding as experiment
+
+    old = tmp_path / "predict_hinge_native"
+    new = tmp_path / "predict_hinge_native_budget30000"
+    for path, ids in [(old, [1, 2]), (new, [1, 2, 3, 4])]:
+        path.mkdir()
+        (path / "completed").touch()
+        (path / "single_sample_validation.json").write_text(
+            json.dumps(
+                dict(
+                    mean_horizon=len(ids),
+                    greedy_exact_samples=1,
+                    samples=[dict(sample_id=0, horizon=len(ids), target_ids=ids, generated_ids=ids)],
+                )
+            )
+        )
+    (tmp_path / "summary.json").write_text("original-results")
+    monkeypatch.setattr(experiment, "ROOT", tmp_path)
+    monkeypatch.setitem(experiment.EXPERIMENT_SUITES, "budget", [dict(name=new.name, baseline=old)])
+    experiment.summarize(suite="budget")
+    summary = json.loads((tmp_path / "budget_summary.json").read_text())
+    assert summary["rows"][0]["baseline_horizon"] == 2
+    assert summary["rows"][0]["mean_horizon"] == 4
+    assert summary["rows"][0]["paired_difference"]["mean"] == 2
+    assert (tmp_path / "summary.json").read_text() == "original-results"
+    assert (tmp_path / "budget_predict_embedding_comparison.png").is_file()

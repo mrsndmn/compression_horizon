@@ -47,6 +47,21 @@ experiment_configs = [
         baseline=jobs.ROOT / "sps_w0_pilot_1b_batch1_hinge_strict_893c490bf406",
     ),
 ]
+# Fresh runs: saved stage vectors do not include Adam/scheduler state, and a
+# larger total budget also stretches the existing cosine scheduler horizon.
+# Keep the per-stage limit and all other settings unchanged. The completed
+# same-initialization predict runs, rather than ordinary-memory runs, are controls.
+budget_experiment_configs = [
+    dict(
+        exp,
+        name=exp["name"] + "_budget30000",
+        training_args=dict(exp["training_args"], max_optimization_steps_per_sample=30000),
+        baseline=ROOT / exp["name"],
+    )
+    for exp in experiment_configs
+    if exp["training_args"].get("token_objective") == "squared_margin"
+]
+EXPERIMENT_SUITES = {"baseline": experiment_configs, "budget": budget_experiment_configs}
 
 
 def fixed_bos(model, batch_size, bos_token_id):
@@ -203,6 +218,8 @@ def probe(exp):
         samples.append(result)
     report = dict(
         source_commit=source_commit(),
+        experiment_name=exp["name"],
+        training_args=settings,
         embedding_role="shared_predict",
         fixed_bos_token_id=bos,
         predict_token_id=model.config.predict_token_id,
@@ -218,8 +235,8 @@ def probe(exp):
     print(json.dumps({k: v for k, v in report.items() if k != "samples"}), flush=True)
 
 
-def submit(dry=False):
-    for exp in experiment_configs:
+def submit(dry=False, *, suite="baseline"):
+    for exp in EXPERIMENT_SUITES[suite]:
         jobs.OUTPUT = ROOT / exp["name"]
         if not dry and (jobs.OUTPUT / "job.json").exists():
             print("Existing submission:", jobs.OUTPUT)
@@ -228,18 +245,18 @@ def submit(dry=False):
             dry=dry,
             entrypoint="scripts/analyze_sps_predict_embedding.py",
             job_kind="sps_" + exp["name"],
-            probe_args=("--experiment", exp["name"]),
+            probe_args=("--experiment", exp["name"], "--suite", suite),
         )
 
 
-def summarize():
+def summarize(*, suite="baseline"):
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     rows = []
-    for exp in experiment_configs:
+    for exp in EXPERIMENT_SUITES[suite]:
         output = ROOT / exp["name"]
         if not (output / "completed").exists():
             raise ValueError(f"Incomplete experiment: {output}")
@@ -266,11 +283,14 @@ def summarize():
                 mean_greedy_initial_prefix=float(np.mean([leading_correct(s["target_ids"], s["generated_ids"]) for s in a])),
             )
         )
-    jobs.write_json(ROOT / "summary.json", dict(analysis_commit=source_commit(), rows=rows))
+    prefix = "" if suite == "baseline" else suite + "_"
+    jobs.write_json(ROOT / (prefix + "summary.json"), dict(analysis_commit=source_commit(), suite=suite, rows=rows))
     fig, ax = plt.subplots(figsize=(9, 4.5))
     x = np.arange(len(rows))
-    ax.bar(x - 0.18, [r["baseline_horizon"] for r in rows], 0.36, label="Learned memory / fixed predict")
-    ax.bar(x + 0.18, [r["mean_horizon"] for r in rows], 0.36, label="Fixed BOS / learned shared predict")
+    baseline_label = "Learned memory / fixed predict" if suite == "baseline" else "Original budget / shared predict"
+    learned_label = "Fixed BOS / learned shared predict" if suite == "baseline" else "Larger budget / shared predict"
+    ax.bar(x - 0.18, [r["baseline_horizon"] for r in rows], 0.36, label=baseline_label)
+    ax.bar(x + 0.18, [r["mean_horizon"] for r in rows], 0.36, label=learned_label)
     ax.set_xticks(x, [r["name"] for r in rows], rotation=12)
     ax.set(
         ylabel="Mean teacher-forced reconstruction tokens",
@@ -278,7 +298,7 @@ def summarize():
     )
     ax.legend()
     fig.tight_layout()
-    fig.savefig(ROOT / "predict_embedding_comparison.png", dpi=180)
+    fig.savefig(ROOT / (prefix + "predict_embedding_comparison.png"), dpi=180)
     plt.close(fig)
     print(json.dumps(rows, indent=2))
 
@@ -286,11 +306,19 @@ def summarize():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--phase", choices=["probe", "dry", "submit", "summary"], default="dry")
-    parser.add_argument("--experiment", choices=[e["name"] for e in experiment_configs])
+    parser.add_argument("--suite", choices=EXPERIMENT_SUITES, default="baseline")
+    parser.add_argument("--experiment", choices=[e["name"] for suite in EXPERIMENT_SUITES.values() for e in suite])
     cli = parser.parse_args()
     if cli.phase == "probe":
         if cli.experiment is None:
             parser.error("--experiment is required for probe")
-        probe(next(e for e in experiment_configs if e["name"] == cli.experiment))
+        selected = next((e for e in EXPERIMENT_SUITES[cli.suite] if e["name"] == cli.experiment), None)
+        if selected is None:
+            parser.error("--experiment must belong to --suite")
+        probe(selected)
     else:
-        {"dry": lambda: submit(True), "submit": submit, "summary": summarize}[cli.phase]()
+        {
+            "dry": lambda: submit(True, suite=cli.suite),
+            "submit": lambda: submit(suite=cli.suite),
+            "summary": lambda: summarize(suite=cli.suite),
+        }[cli.phase]()

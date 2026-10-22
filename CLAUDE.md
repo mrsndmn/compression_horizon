@@ -256,3 +256,11 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   `tests/test_sps_predict_embedding.py` checks identity, gradients, ordinary-state
   invariance, independent ordinary-only decoding, invalid overrides, actual
   progressive training/artifact roles/frozen weights and registry/launch arguments.
+- The same predict entrypoint accepts `--suite budget` for the registered larger
+  total-budget margin runs. These start fresh with their original initializations;
+  saved stage vectors do not contain resumable optimizer/scheduler state. The
+  per-stage cap is unchanged; the cosine schedule spans the larger total budget.
+  Their controls are the completed same-initialization predict runs. Probe requires
+  an experiment from the selected suite; dry/submit propagate both CLI arguments.
+  Budget summaries/plots have a `budget_` filename prefix and preserve baseline
+  analysis outputs. Validation records the resolved training settings and run name.
