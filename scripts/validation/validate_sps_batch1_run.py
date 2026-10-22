@@ -22,7 +22,7 @@ from compression_horizon.utils.launch import resolve_torch_dtype
 
 
 @torch.no_grad()
-def check_sample(model, tokenizer, ids, memory):
+def check_sample(model, tokenizer, ids, memory, *, predict_embeddings=None):
     if ids.shape[0] != 1 or memory.shape[0] != 1:
         raise ValueError("Cramming validation requires batch_size=1")
     embeddings = model.get_input_embeddings()
@@ -30,14 +30,21 @@ def check_sample(model, tokenizer, ids, memory):
     ids = ids.to(model.device)
     inputs = torch.cat((memory, embeddings(ids)), dim=1)
     offset = memory.shape[1]
+    forward_kwargs = {} if predict_embeddings is None else {"predict_embeddings": predict_embeddings}
     predicted = (
-        model(inputs_embeds=inputs, attention_mask=torch.ones(inputs.shape[:2], dtype=torch.long, device=model.device))
+        model(
+            inputs_embeds=inputs,
+            attention_mask=torch.ones(inputs.shape[:2], dtype=torch.long, device=model.device),
+            **forward_kwargs,
+        )
         .logits[:, offset - 1 : -1]
         .argmax(-1)
     )
     replay_correct = int((predicted == ids).sum())
     replay = replay_correct / ids.numel()
-    _, generated = generate_from_compression(model, tokenizer, memory, max_new_tokens=ids.shape[1], return_generated_ids=True)
+    _, generated = generate_from_compression(
+        model, tokenizer, memory, max_new_tokens=ids.shape[1], return_generated_ids=True, **forward_kwargs
+    )
     n = min(ids.shape[1], generated.shape[1])
     correct = int((generated[:, :n] == ids[:, :n]).sum())
     # Missing tokens after early EOS remain errors; never score just the short prefix.

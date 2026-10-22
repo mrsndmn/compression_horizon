@@ -112,6 +112,7 @@ class SPSCausalLM(nn.Module):
         document_ids=None,
         use_cache=False,
         past_key_values=None,
+        predict_embeddings=None,
     ):
         if use_cache or past_key_values is not None:
             raise NotImplementedError("KV caching is not supported by the SPS cramming adapter")
@@ -125,6 +126,9 @@ class SPSCausalLM(nn.Module):
                 eos = input_ids.eq(self.config.eos_token_id) & attention_mask.bool()
                 document_ids = F.pad(eos[:, :-1].long().cumsum(1), (1, 0))
         b, t, _ = inputs_embeds.shape
+        if predict_embeddings is not None:
+            if not self.config.sps or predict_embeddings.shape != (b, 1, inputs_embeds.shape[-1]):
+                raise ValueError("predict_embeddings requires SPS and shape [batch, 1, hidden]")
         if attention_mask is None:
             attention_mask = torch.ones((b, t), device=inputs_embeds.device, dtype=torch.bool)
         if position_ids is None:
@@ -138,7 +142,11 @@ class SPSCausalLM(nn.Module):
             attention_mask, sps=self.config.sps, window_size=getattr(self.config, "window_size", 0), document_ids=document_ids
         )
         if self.config.sps:
-            predicts = self.get_input_embeddings().weight[self.config.predict_token_id].view(1, 1, -1).expand(b, t, -1)
+            predicts = (
+                self.get_input_embeddings().weight[self.config.predict_token_id].view(1, 1, -1)
+                if predict_embeddings is None
+                else predict_embeddings.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+            ).expand(b, t, -1)
             inputs_embeds = torch.stack((inputs_embeds, predicts), dim=2).flatten(1, 2)
             position_ids = position_ids.repeat_interleave(2, dim=1)
         freqs = self.freqs_cis[position_ids]

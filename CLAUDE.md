@@ -235,3 +235,24 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   the latter is not a maximal greedy horizon. Intervals exclude seed variance.
   `tests/test_objective_factorial_analysis.py` checks first-error/short-generation
   scoring, a known constant paired contrast and rejection of inconsistent IDs.
+
+- `SPSCausalLM.forward(predict_embeddings=[B,1,H])` optionally broadcasts a
+  differentiable per-text input predict vector to all SPS prediction slots.
+  The default vocabulary predict embedding, masks, duplicated logical RoPE,
+  ordinary embeddings and frozen tied output head are unchanged. Standard and
+  invalid shapes reject the override. `generate_from_compression` and validation
+  `check_sample` forward this optional vector only when explicitly supplied.
+- `scripts/analyze_sps_predict_embedding.py --phase dry|submit|probe|summary`
+  defines the fixed-BOS/shared-predict experiment registry and specialized
+  `PredictEmbeddingTrainer`. It reuses the progressive optimizer/state machine
+  but replaces the learned ordinary memory with a fixed existing vocabulary BOS,
+  and routes the one latent vector exclusively to prediction inputs. Native and
+  random initializations are compared with saved same-budget SPS memory controls.
+  Artifacts use `predict_prefixes`, explicit `embedding_role=shared_predict`, BOS
+  ID and an information-gain reference of fixed BOS/native predict. Summary
+  requires every registered job completed. Probe requires `--experiment`.
+  `scripts.analyze_sps_cramming.submit(probe_args=...)` stages the explicit
+  experiment argument; existing diagnostic callers retain their original CLI.
+  `tests/test_sps_predict_embedding.py` checks identity, gradients, ordinary-state
+  invariance, independent ordinary-only decoding, invalid overrides, actual
+  progressive training/artifact roles/frozen weights and registry/launch arguments.

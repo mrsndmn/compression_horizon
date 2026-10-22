@@ -34,6 +34,7 @@ def generate_from_compression(
     add_noise=False,
     random_position_ids: bool = False,
     return_generated_ids: bool = False,
+    predict_embeddings: torch.Tensor | None = None,
 ) -> list[str] | tuple[list[str], torch.Tensor]:
     """Generates a sequence starting from compressed embeddings."""
     # Cast to the same device
@@ -57,6 +58,9 @@ def generate_from_compression(
         noise = torch.randn_like(compression_token_embeddings) * 0.01
         compression_token_embeddings += noise
 
+    if predict_embeddings is not None and num_return_sequences > 1:
+        predict_embeddings = predict_embeddings.expand(num_return_sequences, -1, -1)
+    forward_kwargs = {} if predict_embeddings is None else {"predict_embeddings": predict_embeddings}
     batch_size, num_compression_tokens, hidden_size = compression_token_embeddings.shape
 
     # Container for generated token ids
@@ -95,11 +99,13 @@ def generate_from_compression(
                 inputs_embeds=united_token_embeddings,
                 attention_mask=united_attention_mask,
                 position_ids=position_ids,
+                **forward_kwargs,
             )
         else:
             outputs = model(
                 inputs_embeds=united_token_embeddings,
                 attention_mask=united_attention_mask,
+                **forward_kwargs,
             )
         logits = outputs.logits[:, -1, :]  # [batch, vocabulary]
         logits = mask_native_generation_logits(model, tokenizer, logits)

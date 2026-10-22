@@ -349,12 +349,12 @@ def cluster_path(path):
     return str(Path("/workspace-SR004.nfs2") / path.relative_to(root)) if path.is_relative_to(root) else str(path)
 
 
-def submit(dry=False, *, entrypoint="scripts/analyze_sps_cramming.py", job_kind="sps_diagnostics"):
+def submit(dry=False, *, entrypoint="scripts/analyze_sps_cramming.py", job_kind="sps_diagnostics", probe_args=()):
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
     if subprocess.check_output(["git", "diff", "HEAD", "--"], cwd=REPO):
         raise RuntimeError("Commit tracked changes first")
     stage = ROOT / "code" / commit
-    script = f"cd {shlex.quote(cluster_path(stage))} && " + shlex.join([PYTHON, entrypoint, "--phase", "probe"])
+    script = f"cd {shlex.quote(cluster_path(stage))} && " + shlex.join([PYTHON, entrypoint, "--phase", "probe", *probe_args])
     payload = dict(
         JOB_CONFIG,
         script=script,
