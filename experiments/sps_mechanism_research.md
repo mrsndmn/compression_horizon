@@ -112,6 +112,28 @@ Mean initial correct free-generation prefixes increase from 30.56 to 110.23
 and 118.65 in the hinge comparison, with 38/48 and 43/48 exact reconstructions
 of the selected longer prefixes. Most hinge texts reach the total step budget.
 
+The completed independent-schedule control is documented in
+`sps_predict_fixed_schedule.md`. Restoring the original LR trajectory at the
+extended budget recovers teacher horizon from 79.42 to 133.85, versus 132.10
+originally. It improves 33 texts and ties 15. All 6342 paired stages before the
+original budget boundary match exactly in vector, update counter and convergence.
+The extended fixed-schedule run uses 11391.65 updates on average and stops on a
+per-stage failure for every text. The regression from stretching the schedule is
+therefore distinct from a representational capacity limit. Merely allowing more
+total updates gives a small gain when the original LR path is retained.
+
+A further saved-stage audit, `terminal_constraint_audit.json` under the fixed
+control's merged output, counts violations of the recorded positive-margin
+convergence criterion. Across all 48 terminal failures the median count is ten,
+the range is two to 92, and the equal-text mean fraction satisfying the margin
+is 87.08%. A separate Arrow-based count check verifies the histogram and that
+every preceding stage converged and every terminal stage adds exactly one
+target. Thus every failed stage also violates at least one previously satisfied
+target constraint; the median lower bound is nine old-position violations.
+These are margin violations, not necessarily wrong argmax predictions. The audit
+does not localize individual positions or separate optimization-induced changes
+from BF16 context-shape changes; either can affect old constraints.
+
 ## Conclusions
 Use the paper's attention-causality distinction and its warning that trajectory
 PCA measures a path rather than the solution set. Existing knockout results
@@ -163,6 +185,46 @@ length is model/text/optimizer dependent rather than a direct stored-bit count.
 These limits bound the findings; they are not evidence for a specific remaining
 architecture-only cause.
 
+The operational interpretation of shared-predict cramming is a text-specific
+control vector for a frozen conditional reconstructor: logits at each target
+depend on the same vector and the already reconstructed history. A common vector
+can produce different outputs because the conditioning history and position
+change. Exact reconstruction imposes simultaneous target-versus-rival margin
+constraints. The objective, accessible control route, optimization trajectory
+and numerical implementation all affect achieved feasibility. This does not
+establish semantic transfer or a portable representation independent of the
+decoder; neither has been measured for the new shared-predict vectors.
+
+The strongest within-checkpoint result concerns the conditioning interface:
+shared-predict input control beats ordinary-memory control with either objective
+and with either tested initialization. It gives the optimized vector a direct
+residual path at every prediction position, including query control and its own
+temporary self K/V, while the ordinary context states stay independent of it at
+zero window. This changes several causal routes together. Their individual
+contributions and the conjecture that avoiding context modification reduces
+interference remain unisolated. All prediction constraints still share the same
+vector, and terminal failures involve old constraints as well as the added one.
+
+At the original matched budget, Standard/ordinary-memory strict hinge reaches
+54.83 tokens, SPS/ordinary-memory reaches 31.52, and SPS/shared-predict reaches
+132.10. These demonstrate an advantage for the new SPS conditioning protocol.
+They do not isolate an architectural advantage: the checkpoints have different
+learned weights, Standard has not received an analogous repeatedly applied
+readout-only control, and equal parameter count does not equate intervention
+locations or forward computation. The old memory-route and local-Jacobian
+diagnostics also do not automatically describe the new shared-predict frontier.
+
+Two unresolved causal questions should be kept distinct. To identify the source
+of the interface gain, compare an analogous readout-only intervention in Standard
+and isolate query/residual/self-KV routes at matched lengths. To identify the
+current stopping mechanism, inspect per-position margins at the first failed
+shared-predict stage before and after optimization, including an arithmetic
+control with the same quantized weights; then test whether preserving old
+constraints or relaxing the local optimization limit rescues that same prefix.
+A successful rescue would disprove infeasibility at that prefix; unsuccessful
+finite-budget searches would not establish a global ceiling. These are proposed
+distinguishing tests, not newly submitted experiments or registered job configs.
+
 ## Changelog
 - 2026-10-22: Started mechanism-directed routing, payload and controllability probes.
 
@@ -186,3 +248,8 @@ reduction as well as raw token counts; our local hypotheses remain unproven.
 - 2026-10-22: Integrated completed factorial, generation robustness and bounded mechanism conclusions.
 
 - 2026-10-22: Integrated completed fixed-BOS/shared-predict intervention: large same-checkpoint gains, free-generation checks, initialization control and optimization-budget limits.
+
+- 2026-10-23: Integrated the fixed-schedule control, exact trajectory replay and
+  saved terminal-margin audit. Distinguished the shared-predict conditioning
+  advantage, unresolved architecture attribution, old-constraint failures and
+  protocol/numerical/feasibility limits.
