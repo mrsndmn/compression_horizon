@@ -469,6 +469,12 @@ class MyTrainingArguments(TrainingArguments):
         default="cosine_with_min_lr",
         metadata={"help": "The scheduler type to use."},
     )
+    lr_scheduler_decay_steps: int | None = field(
+        default=None,
+        metadata={
+            "help": "Optional cosine_with_min_lr horizon independent of the update budget; hold its final LR thereafter."
+        },
+    )
     # NOTE: Kept as `str` for CLI parsing; converted to `dict` in __post_init__.
     lr_scheduler_kwargs: str = field(
         default_factory=lambda: {"min_lr": 1e-3},
@@ -492,6 +498,13 @@ class MyTrainingArguments(TrainingArguments):
     def __post_init__(self):
         # Convert CLI-friendly forms into a real dict early, before base TrainingArguments validation.
         self.lr_scheduler_kwargs = _parse_cli_dict(getattr(self, "lr_scheduler_kwargs", None))  # type: ignore[assignment]
+        if self.lr_scheduler_decay_steps is not None:
+            if (
+                self.lr_scheduler_decay_steps <= self.warmup_steps
+                or self.lr_scheduler_decay_steps <= 0
+                or self.lr_scheduler_type != "cosine_with_min_lr"
+            ):
+                raise ValueError("lr_scheduler_decay_steps must exceed warmup_steps and requires cosine_with_min_lr")
         if self.token_objective not in ("cross_entropy", "squared_margin"):
             raise ValueError("Unknown token_objective")
         if self.token_objective == "squared_margin":

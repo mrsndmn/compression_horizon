@@ -1,8 +1,13 @@
+from functools import partial
 from typing import Any
 
 import torch
 from torch.optim import SGD, AdamW, Optimizer
 from transformers import get_scheduler
+
+
+def _clamped_schedule(step, *, schedule, last_step):
+    return schedule(min(step, last_step))
 
 
 def build_optimizer_and_scheduler(
@@ -12,6 +17,9 @@ def build_optimizer_and_scheduler(
     num_processes: int = 1,
 ) -> tuple[Optimizer, Any]:
     """Build the AdamW/SGD optimizer + LR scheduler from training args."""
+    decay_steps = getattr(args, "lr_scheduler_decay_steps", None)
+    if decay_steps is not None and num_training_steps is None:
+        raise ValueError("lr_scheduler_decay_steps requires num_training_steps")
     if args.optim == "adamw_torch":
         optimizer = AdamW(
             parameters,
@@ -38,7 +46,14 @@ def build_optimizer_and_scheduler(
             name=args.lr_scheduler_type,
             optimizer=optimizer,
             num_warmup_steps=args.warmup_steps * num_processes,
-            num_training_steps=num_training_steps * num_processes,
+            num_training_steps=(decay_steps if decay_steps is not None else num_training_steps) * num_processes,
             scheduler_specific_kwargs=args.lr_scheduler_kwargs,
         )
+        if decay_steps is not None:
+            # The HF cosine rises again after its horizon unless its input is clamped.
+            # Keep the original LambdaLR's initialization and checkpoint semantics.
+            lr_scheduler.lr_lambdas = [
+                partial(_clamped_schedule, schedule=schedule, last_step=decay_steps * num_processes)
+                for schedule in lr_scheduler.lr_lambdas
+            ]
     return optimizer, lr_scheduler

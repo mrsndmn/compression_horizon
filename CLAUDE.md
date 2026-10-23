@@ -288,3 +288,10 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   gaps and match the registered prefix lengths, token counts and convergence threshold.
   `tests/test_sps_predict_shards.py` covers the real dry payloads, cohort partition,
   complete/idempotent merge and rejection of incomplete or inconsistent inputs.
+- The shard entrypoint's `--suite fixed_schedule` uses a separate registry and
+  artifact root. It pins `lr_scheduler_decay_steps` independently of the update
+  budget; `train.optimization` reproduces the selected cosine-with-min-LR curve
+  and holds its endpoint thereafter. The default unset argument and historical
+  `--suite budget` retain their original behavior. CLI parsing and LR values
+  before/at/after the boundary, including process scaling, are checked in
+  `tests/test_optimization.py`. Use the same suite for dry/submit/probe/merge.

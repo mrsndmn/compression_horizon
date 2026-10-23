@@ -36,22 +36,44 @@ experiment_configs = [
     )
     for index, offset in enumerate(range(0, COHORT_SIZE, SHARD_SIZE))
 ]
+FIXED_SCHEDULE_ROOT = jobs.ROOT / "predict_native_hinge_fixed_schedule_20261023"
+fixed_schedule_experiment_configs = [
+    dict(
+        exp,
+        name=exp["name"].replace("_budget30000", "_fixed_schedule_budget30000"),
+        training_args=dict(
+            exp["training_args"],
+            lr_scheduler_decay_steps=predict.TRAINING_ARGS["max_optimization_steps_per_sample"],
+        ),
+    )
+    for exp in experiment_configs
+]
+SUITES = ("budget", "fixed_schedule")
 META_FIELDS = ("embedding_role", "fixed_bos_token_id", "predict_token_id", "trainable_scalars")
 
 
-def submit(dry=False):
+def suite_settings(suite):
+    if suite == "budget":
+        return ROOT, experiment_configs
+    if suite == "fixed_schedule":
+        return FIXED_SCHEDULE_ROOT, fixed_schedule_experiment_configs
+    raise ValueError(f"Unknown shard suite: {suite}")
+
+
+def submit(dry=False, *, suite="budget"):
+    root, configs = suite_settings(suite)
     manifest = []
     commit = source_commit()
     # A partial retry must use the same immutable training snapshot.
     if not dry:
-        records = [ROOT / exp["name"] / "job.json" for exp in experiment_configs]
+        records = [root / exp["name"] / "job.json" for exp in configs]
         prior_commits = {json.loads(path.read_text())["commit"] for path in records if path.exists()}
         if len(prior_commits) > 1 or (
             not all(path.exists() for path in records) and prior_commits and prior_commits != {commit}
         ):
             raise ValueError("Existing shards use another commit; resume from their original snapshot")
-    for exp in experiment_configs:
-        jobs.OUTPUT = ROOT / exp["name"]
+    for exp in configs:
+        jobs.OUTPUT = root / exp["name"]
         path = jobs.OUTPUT / "job.json"
         if not dry and path.exists():
             print("Existing submission:", jobs.OUTPUT, flush=True)
@@ -60,13 +82,13 @@ def submit(dry=False):
                 dry=dry,
                 entrypoint="scripts/analyze_sps_predict_shards.py",
                 job_kind="sps_" + exp["name"],
-                probe_args=("--experiment", exp["name"]),
+                probe_args=("--experiment", exp["name"], "--suite", suite),
                 snapshot_commit=commit,
             )
         if not dry:
             manifest.append(dict(experiment=exp["name"], **json.loads(path.read_text())))
     if not dry:
-        jobs.write_json(ROOT / "submission_manifest.json", dict(source_commit=manifest[0]["commit"], shards=manifest))
+        jobs.write_json(root / "submission_manifest.json", dict(source_commit=manifest[0]["commit"], shards=manifest))
 
 
 def checked_samples(report, expected_ids, cache):
@@ -181,18 +203,19 @@ def check_raw(raw, report, exp, samples):
             raise ValueError("Invalid saved predict vector")
 
 
-def merge():
-    output = ROOT / "merged"
+def merge(*, suite="budget"):
+    root, configs = suite_settings(suite)
+    output = root / "merged"
     if (output / "completed").exists():
         print("Already merged:", output, flush=True)
         return output
     if output.exists():
         raise ValueError("Existing incomplete merge destination; inspect before replacing")
-    paths = [ROOT / exp["name"] for exp in experiment_configs]
+    paths = [root / exp["name"] for exp in configs]
     if not all((path / "completed").exists() for path in paths):
         raise ValueError("Incomplete shards; merge requires every successful completion marker")
-    cache = load_from_disk(predict.resolved_training_args(experiment_configs[0])["tokenized_dataset_path"])
-    control_path = experiment_configs[0]["baseline"]
+    cache = load_from_disk(predict.resolved_training_args(configs[0])["tokenized_dataset_path"])
+    control_path = configs[0]["baseline"]
     if not (control_path / "completed").exists():
         raise ValueError("Incomplete original-budget control")
     control = json.loads((control_path / "single_sample_validation.json").read_text())
@@ -202,7 +225,7 @@ def merge():
         raise ValueError("Control must contain shared predict vectors")
     samples, datasets, provenance = [], [], []
     training_commit = None
-    for exp, path in zip(experiment_configs, paths):
+    for exp, path in zip(configs, paths):
         report = json.loads((path / "single_sample_validation.json").read_text())
         settings = predict.resolved_training_args(exp)
         if report["experiment_name"] != exp["name"] or report["training_args"] != settings:
@@ -246,6 +269,7 @@ def merge():
     prefixes = [leading_correct(s["target_ids"], s["generated_ids"]) for s in samples]
     control_prefixes = [leading_correct(s["target_ids"], s["generated_ids"]) for s in controls]
     summary = dict(
+        suite=suite,
         n_samples=len(samples),
         mean_horizon=report["mean_horizon"],
         baseline_horizon=control["mean_horizon"],
@@ -255,7 +279,7 @@ def merge():
         paired_horizon_gain=paired_interval([a["horizon"] - b["horizon"] for a, b in zip(samples, controls)]),
         paired_greedy_prefix_gain=paired_interval(np.asarray(prefixes) - control_prefixes),
     )
-    with tempfile.TemporaryDirectory(prefix=".merge-", dir=ROOT) as temporary:
+    with tempfile.TemporaryDirectory(prefix=".merge-", dir=root) as temporary:
         staged = Path(temporary) / "merged"
         staged.mkdir()
         concatenate_datasets(datasets).sort(["sample_id", "stage_index"]).save_to_disk(staged / "predict_prefixes")
@@ -290,9 +314,10 @@ def plot_comparison(summary, path):
     fig, ax = plt.subplots(figsize=(8, 5))
     x = np.arange(2)
     ax.bar(x - 0.18, [summary["baseline_horizon"], summary["baseline_greedy_initial_prefix"]], 0.36, label="Original budget")
-    ax.bar(
-        x + 0.18, [summary["mean_horizon"], summary["mean_greedy_initial_prefix"]], 0.36, label="Larger budget / merged shards"
-    )
+    label = "Larger budget / merged shards"
+    if summary.get("suite") == "fixed_schedule":
+        label = "Larger budget / original LR then constant"
+    ax.bar(x + 0.18, [summary["mean_horizon"], summary["mean_greedy_initial_prefix"]], 0.36, label=label)
     ax.set_xticks(x, ["Teacher-forced horizon", "Initial correct greedy prefix"])
     ax.set(ylabel="Mean tokens", title="SPS / shared predict / native init / hinge / batch 1")
     ax.legend()
@@ -304,11 +329,17 @@ def plot_comparison(summary, path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--phase", choices=["dry", "submit", "probe", "merge"], default="dry")
-    parser.add_argument("--experiment", choices=[exp["name"] for exp in experiment_configs])
+    parser.add_argument("--suite", choices=SUITES, default="budget")
+    parser.add_argument("--experiment")
     cli = parser.parse_args()
+    root, configs = suite_settings(cli.suite)
     if cli.phase == "probe":
-        if cli.experiment is None:
-            parser.error("--experiment is required for probe")
-        predict.probe(next(exp for exp in experiment_configs if exp["name"] == cli.experiment), output_root=ROOT)
+        if cli.experiment not in {exp["name"] for exp in configs}:
+            parser.error("--experiment must name an experiment in the selected suite")
+        predict.probe(next(exp for exp in configs if exp["name"] == cli.experiment), output_root=root)
     else:
-        {"dry": lambda: submit(dry=True), "submit": submit, "merge": merge}[cli.phase]()
+        {
+            "dry": lambda: submit(dry=True, suite=cli.suite),
+            "submit": lambda: submit(suite=cli.suite),
+            "merge": lambda: merge(suite=cli.suite),
+        }[cli.phase]()

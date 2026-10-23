@@ -232,3 +232,62 @@ def test_merge_rejects_incomplete_or_inconsistent_shards(saved_shards, corruptio
     with pytest.raises(ValueError):
         shards.merge()
     assert not (shards.ROOT / "merged").exists()
+
+
+def test_fixed_schedule_dry_jobs_preserve_cohort_and_pin_decay(monkeypatch, capsys):
+    from scripts import analyze_sps_cramming as jobs
+    from scripts import analyze_sps_predict_embedding as predict
+    from scripts import analyze_sps_predict_shards as shards
+
+    monkeypatch.setattr(jobs.subprocess, "check_output", lambda args, **kwargs: "a" * 40 if "rev-parse" in args else b"")
+    shards.submit(dry=True, suite="fixed_schedule")
+    remaining = capsys.readouterr().out.strip()
+    payloads = []
+    while remaining:
+        payload, end = json.JSONDecoder().raw_decode(remaining)
+        payloads.append(payload)
+        remaining = remaining[end:].lstrip()
+    assert len(payloads) == 8
+    for payload in payloads:
+        argv = shlex.split(payload["script"])
+        assert argv[argv.index("--suite") + 1] == "fixed_schedule"
+        assert payload["instance_type"] == "a100.1gpu"
+    ids = []
+    for old, exp in zip(shards.experiment_configs, shards.fixed_schedule_experiment_configs):
+        before, after = predict.resolved_training_args(old), predict.resolved_training_args(exp)
+        assert exp["name"] != old["name"] and exp["init"] == "native"
+        assert exp["baseline"] == old["baseline"]
+        assert after.pop("lr_scheduler_decay_steps") == 10000
+        assert after == before
+        start = after["offset_dataset_items"]
+        ids.extend(range(start, start + after["limit_dataset_items"]))
+    assert ids == list(range(48))
+
+
+def test_fixed_schedule_merges_separately_with_pinned_settings(saved_shards, monkeypatch, tmp_path):
+    shards = saved_shards
+    root = tmp_path / "fixed-schedule"
+    root.mkdir()
+    configs = []
+    for original in shards.experiment_configs:
+        exp = dict(
+            original,
+            name=original["name"] + "_fixed",
+            training_args=dict(original["training_args"], lr_scheduler_decay_steps=10000),
+        )
+        configs.append(exp)
+        path = root / exp["name"]
+        shutil.copytree(shards.ROOT / original["name"], path)
+        report = json.loads((path / "single_sample_validation.json").read_text())
+        report.update(experiment_name=exp["name"], training_args=shards.predict.resolved_training_args(exp))
+        (path / "single_sample_validation.json").write_text(json.dumps(report))
+    monkeypatch.setattr(shards, "FIXED_SCHEDULE_ROOT", root)
+    monkeypatch.setattr(shards, "fixed_schedule_experiment_configs", configs)
+    merged = shards.merge(suite="fixed_schedule")
+    assert merged == root / "merged"
+    summary = json.loads((merged / "summary.json").read_text())
+    assert summary["suite"] == "fixed_schedule" and summary["n_samples"] == 48
+    manifest = json.loads((merged / "manifest.json").read_text())
+    assert all(part["training_args"]["lr_scheduler_decay_steps"] == 10000 for part in manifest["shards"])
+    assert not (shards.ROOT / "merged").exists()
+    assert shards.merge(suite="fixed_schedule") == merged
