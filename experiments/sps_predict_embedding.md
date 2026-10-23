@@ -120,9 +120,10 @@ Exact free generation is still less reliable than teacher replay at the longer
 selected lengths. The completed larger-budget native-hinge follow-up is in
 `sps_predict_native_shards.md`: its coupled budget/schedule change gives shorter
 horizons and stops at per-stage failures before using the extra total budget.
-Retaining the original LR trajectory while extending available updates is a
-cleaner next control. Neither a capacity ceiling nor a guaranteed lossless
-greedy horizon has been measured here.
+The completed fixed-trajectory control is in `sps_predict_fixed_schedule.md`:
+teacher horizon recovers to 133.85 tokens, slightly above the original 132.10,
+while all texts eventually stop at per-stage failures. Neither a capacity ceiling
+nor a guaranteed lossless greedy horizon has been measured here.
 
 ## Changelog
 - 2026-10-22: Designed the fixed-BOS/shared-predict comparison with matched per-text parameter count.
@@ -134,3 +135,5 @@ greedy horizon has been measured here.
 - 2026-10-22: Measured optimizer cost versus token position from saved stages; independently verified all counter differences and aggregates, retained zero-cost and failed stages, and plotted marginal/cumulative cost with surviving-cohort counts.
 
 - 2026-10-23: Linked completed native-hinge larger-budget shard results and retained the LR-schedule confound explicitly.
+
+- 2026-10-23: Linked the completed fixed-schedule intervention and its small additional teacher-horizon gain.

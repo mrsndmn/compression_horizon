@@ -94,6 +94,12 @@ parallelization. A clean follow-up would retain the original LR trajectory,
 hold its final LR after its original horizon, and allow additional updates.
 No new training jobs were submitted during this result analysis.
 
+The subsequent fixed-schedule intervention is now complete; see
+`sps_predict_fixed_schedule.md`. It recovers the teacher horizon to 133.85 versus
+132.10 originally and 79.42 here, supporting the LR-schedule explanation in the
+matched extended-budget comparison. Its remaining stopping limit is per-stage,
+so neither comparison measures a global capacity bound.
+
 ## Changelog
 - 2026-10-22: Replaced the pending native/random monolithic pair with a native-hinge shard registry and audited complete-cohort merge.
 
@@ -102,3 +108,5 @@ No new training jobs were submitted during this result analysis.
 - 2026-10-23: Final independent APPROVE and 52 passing tests; submitted every registered shard from the reviewed snapshot and registered the complete durable wait group.
 
 - 2026-10-23: All shard jobs completed; merged the full cohort and all raw stages, verified generation metrics and exact initial states, and documented shorter horizons, per-stage stopping and the coupled LR-schedule change.
+
+- 2026-10-23: Linked the completed fixed-schedule intervention that recovers the preceding regression.
