@@ -94,6 +94,13 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
 
 ## Usage arms
 
+- Standard additive cramming: `scripts/analyze_standard_additive.py` specializes
+  progressive training and teacher/greedy validation with `[z, E(x)+z, ...]`.
+  `--phase dry|submit|probe|merge` reuses the native MLS snapshot launcher; the
+  Python registry owns shard designs. Saved first-stage control initializations
+  stay paired by global sample ID. Artifacts use `additive_prefixes` and
+  `embedding_role=prefix_and_additive`; ordinary-memory validators must not be
+  used on these vectors. `tests/test_standard_additive.py` covers this path.
 - SPS article: `make sps-paper` regenerates assets with
   `sps_paper/reproduce.py render`, runs `sps_paper/check.py`, then compiles
   `sps_paper/main.tex`. The `sps-paper-figures`, `sps-paper-check`, and
