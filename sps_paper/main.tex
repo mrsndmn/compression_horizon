@@ -1,0 +1,392 @@
+\documentclass{article}
+
+\usepackage{microtype}
+\usepackage{graphicx}
+\graphicspath{{figures/}{./}}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{hyperref}
+\usepackage[preprint]{styles/icml2026}
+\usepackage[capitalize,noabbrev]{cleveref}
+\hypersetup{pdfsubject={Working preprint}}
+
+\icmltitlerunning{Token Cramming through Shared Prediction Embeddings}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\CE}{\mathcal{L}_{\mathrm{CE}}}
+\newcommand{\MH}{\mathcal{L}_{\mathrm{margin}}}
+\newcommand{\sg}{\mathrm{sg}}
+\newcommand{\sourcecommit}[1]{{\small\texttt{#1}}}
+
+\begin{document}
+
+\twocolumn[
+  \icmltitle{Token Cramming through Shared Prediction Embeddings}
+  % Author metadata is inherited from the repository's earlier working draft.
+  \begin{icmlauthorlist}
+    \icmlauthor{Dmitrii Tarasov}{fusionbrain,hse}
+    \icmlauthor{Timofei Lashukov}{hse}
+    \icmlauthor{Elizaveta Goncharova}{fusionbrain,hse}
+    \icmlauthor{Andrey Kuznetsov}{fusionbrain,innopolis}
+  \end{icmlauthorlist}
+  \icmlaffiliation{fusionbrain}{FusionBrain Lab, Moscow, Russia}
+  \icmlaffiliation{hse}{HSE University, Moscow, Russia}
+  \icmlaffiliation{innopolis}{Artificial Intelligence Institute, Innopolis University, Innopolis, Russia}
+  \icmlcorrespondingauthor{Dmitrii Tarasov}{dtarasov@hse.ru}
+  \icmlkeywords{token cramming, continuous conditioning, exact reconstruction, transformer mechanisms}
+  \vskip 0.3in
+]
+\printAffiliationsAndNotice{}
+
+\begin{abstract}
+How much text a frozen transformer reconstructs from one learned vector depends on how that vector enters the computation.
+We study progressive token cramming in matched Standard and SPS checkpoints, where SPS separates ordinary input positions from prediction positions.
+Within the same frozen SPS checkpoint, replacing an ordinary memory token with a fixed beginning-of-sequence token and learning one vector shared across prediction inputs raises mean exact teacher-forced length from 31.52 to 132.10 tokens on 48 matched texts under a strict margin objective, using the same 768 trainable scalars.
+Cross-entropy also benefits, from 19.42 to 64.17 tokens, and random initialization gives a similar margin-objective result.
+The vector is reused at every prediction position, so equal parameter count does not equate the conditioning interfaces.
+An extended-budget control that preserves the original learning-rate trajectory reaches 133.85 tokens and stops on a local stage limit in every text; stretching the schedule instead reaches 79.42.
+Older ordinary-memory interventions reveal context-mediated and direct prediction routes, while local rescues demonstrate that some failed prefixes remain feasible.
+These findings establish a large conditioning-site effect in one checkpoint, while leaving architecture attribution, a global capacity ceiling, and guaranteed exact free generation unresolved.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+
+Token cramming optimizes a small continuous input separately for each text while keeping the language model frozen \citep{kuratov2025cramming}.
+The resulting reconstruction length is a property of a text, a decoder, a conditioning interface, and an optimization procedure.
+It is tempting to interpret a failed reconstruction stage as the point at which an embedding runs out of capacity.
+That interpretation requires more than observing that one finite optimization run stopped.
+The same vector dimension may support substantially different reconstruction when its computational access changes.
+
+We investigate this issue using two native checkpoints: a conventional causal transformer, called \emph{Standard}, and an SPS transformer with interleaved ordinary input and prediction slots.
+At the zero prediction window studied here, earlier prediction states cannot be read by subsequent positions.
+This creates a useful distinction between controlling an ordinary memory position and controlling the prediction stream itself.
+An ordinary memory can influence both later ordinary context states and prediction states through attention.
+A vector shared only across prediction inputs directly changes readout computations while leaving ordinary context states independent of that vector for a fixed token history.
+
+Our central experiment holds the SPS checkpoint, texts, vector dimension, and progressive protocol fixed while changing this conditioning interface.
+With a strict margin objective, mean selected teacher-forced length increases from 31.52 to 132.10 tokens.
+Every one of the 48 texts improves.
+The corresponding Standard ordinary-memory result is 54.83 tokens, but that comparison does not isolate architecture: the checkpoints have different learned weights, and Standard has not received an analogous repeatedly applied readout intervention.
+The most direct conclusion is therefore within-checkpoint: the earlier SPS ordinary-memory result is not a ceiling on this checkpoint's ability to reconstruct from one learned vector.
+
+We also examine what the achieved lengths measure.
+A matched objective factorial shows that a margin loss helps both ordinary-memory models without removing the Standard--SPS gap.
+A larger-budget study separates available updates from the learning-rate trajectory and actual updates used.
+The restored trajectory adds only 1.75 tokens on average before all texts hit the per-stage limit.
+At those terminal stages, multiple positive-margin constraints fail, including previously satisfied constraints.
+These are not necessarily argmax errors.
+Finally, interventions and local geometry probes on the earlier ordinary-memory protocol identify causal routes and recover several failed prefixes without changing the model or vector size.
+We keep those findings separate from the much longer shared-prediction frontier.
+
+The study makes three contributions: a controlled change of conditioning site with a large same-checkpoint gain; objective, schedule, stopping, and free-generation measurements that bound the interpretation of that gain; and a reproducibility bundle that rebuilds the reported evidence without running new optimization.
+All claims concern the measured checkpoints and matched texts rather than an architecture-wide capacity law.
+
+\section{Related Work}
+\label{sec:related}
+
+\paragraph{Per-text continuous reconstruction.}
+\citet{kuratov2025cramming} replace an encoder with per-sample optimization and demonstrate reconstruction from highly compressed continuous inputs.
+They argue that uncertainty reduction, rather than raw sequence length alone, better characterizes the limits they observe.
+We use token length as an operational measure on a fixed text cohort and decoder; we do not interpret it as a decoder-independent stored-bit count.
+Our question concerns the conditioning interface and the distinction between achieved reconstruction and infeasibility.
+
+\paragraph{Continuous conditioning of frozen models.}
+Prefix tuning learns continuous task-specific prefixes while keeping the language model frozen \citep{li2021prefix}.
+Prompt tuning similarly optimizes soft prompts for downstream tasks \citep{lester2021power}.
+Here the learned vector is text-specific, and the criterion is reconstruction of that text rather than generalization to a task distribution.
+Our shared-prediction intervention also differs computationally from placing one learned token before a sequence: its parameters are tied across all prediction inputs.
+These distinctions matter when comparing the number of learned scalars or interpreting semantic utility.
+
+\paragraph{Attention routes and controllability.}
+The separation of query--key addressing from output--value transmission in the transformer-circuits framework motivates our key/value interventions \citep{elhage2021mathematical}.
+That framework's attention-only examples do not establish mechanisms in our deeper models with MLPs.
+We therefore measure counterfactual effects directly and avoid treating attention weights, intervention effects, or local Jacobian rank as an additive capacity decomposition.
+
+\section{Reconstruction and Conditioning Interfaces}
+\label{sec:method}
+
+\subsection{Progressive feasibility}
+
+For a text prefix $x_{1:L}$ and a learned vector $z\in\R^d$, let
+$\ell_t(z;x_{<t})\in\R^{|\mathcal V|}$ denote the target-aligned logits of the frozen decoder.
+Define the target-versus-best-rival gap
+\begin{equation}
+ m_t(z)=\ell_{t,x_t}(z)-\max_{v\ne x_t}\ell_{t,v}(z).
+ \label{eq:margin}
+\end{equation}
+Exact teacher forcing requires the target to be the selected argmax at every position.
+Strict convergence additionally requires $m_t\ge\epsilon$ for every target.
+We optimize either mean cross-entropy or a squared margin deficit,
+\begin{align}
+ \CE(z)&=-\frac{1}{L}\sum_{t=1}^{L}\log p_z(x_t\mid x_{<t}),\\
+ \MH(z)&=\frac{1}{L}\sum_{t=1}^{L}[\tau-m_t(z)]_+^2.
+ \label{eq:objective}
+\end{align}
+The loss target $\tau$ and stopping gap $\epsilon$ are separate controls.
+In the strict-hinge comparisons both are 0.05.
+The reported raw criterion uses argmax matching without a positive stopping gap.
+
+Progressive optimization begins with one target and extends the prefix by one token after convergence.
+The learned vector and optimizer state are inherited across stages.
+The \emph{teacher-forced horizon} $H$ is the length of the deepest converged saved stage under the registered budget.
+It is an achieved length, not a proof that length $H+1$ is infeasible.
+We select one final converged vector per text and evaluate its full teacher replay and greedy decoding separately.
+The \emph{initial correct greedy prefix} $G$ counts generated tokens before the first error for that vector, up to its selected length $H$.
+We do not search earlier vectors for a better greedy result.
+
+\subsection{Native Standard and zero-window SPS}
+\label{sec:sps}
+
+Standard uses an ordinary causal sequence $[c_0,c_1,\ldots]$.
+For ordinary-memory cramming, $c_0=z$ and $c_j=E(x_j)$ for $j\ge1$; the output at position $t-1$ predicts $x_t$.
+SPS interleaves each ordinary input with a prediction input,
+\begin{equation}
+ [c_0,p_0,c_1,p_1,\ldots,c_L,p_L],
+ \label{eq:interleave}
+\end{equation}
+where $c_j$ and $p_j$ share rotary position $j$, and output logits are read only at $p_j$.
+For interleaved query and key indices $q,k$, the zero-window visibility rule is
+\begin{equation}
+ A_{qk}=\mathbf{1}\{k\le q\}\,
+ \mathbf{1}\{k\text{ even}\ \lor\ \lfloor q/2\rfloor=\lfloor k/2\rfloor\}.
+ \label{eq:mask}
+\end{equation}
+Thus ordinary keys persist, while a prediction slot can read its own temporary key/value but earlier prediction keys expire.
+Ordinary states cannot read any prediction slot.
+The first target is read from $p_0$, after the initial ordinary slot; BOS is not a reconstructed target.
+
+In ordinary-memory SPS, $c_0=z$ and every $p_j$ begins at the frozen native prediction embedding $e_{\mathrm{pred}}$.
+The initial memory state is causally autonomous: its layerwise trajectory depends on itself, while other positions may read its outgoing keys and values.
+Later ordinary states can consequently depend on $z$ despite input/prediction separation.
+
+In \emph{shared-prediction cramming}, we set $c_0=E(\mathrm{BOS})$ and $p_j=z$ at every prediction input.
+The same $d$ scalars are reused rather than learning $L$ separate vectors.
+By \cref{eq:mask}, the ordinary context states are independent of $z$ at every layer conditional on a fixed token history.
+During free generation the chosen history itself can depend on $z$.
+Each prediction state receives direct residual input, query control, and its own temporary key/value through $z$, which can also affect its subsequent MLP computation.
+This changes several routes together; it does not isolate which one causes the gain.
+We replace prediction \emph{inputs} only: the tied output head and its prediction-token row stay frozen, and no vocabulary item is added.
+
+\subsection{Matched measurements and numerical regime}
+
+The main cohort consists of the same 48 cached PG-19 texts selected by the source registry, with GPT-2 tokenization and exact target-ID matching across arms.
+Both checkpoints have 12 layers and hidden width 768 and were saved after 1,000,341,504 training tokens.
+The run label \texttt{pilot\_1b} refers to the pretraining token budget.
+All full progressive cramming runs use one vector and batch size one, frozen weights, and BF16 model arithmetic.
+The main comparisons use an initial learning rate of 0.3, at most 10,000 updates per text, and at most 1,000 updates at a new stage.
+The code registries remain the design authority; \cref{app:repro} maps each measurement to its source.
+
+Reported intervals resample matched texts as pairs at fixed checkpoints and a fixed optimization seed.
+They describe variation over this text cohort, not checkpoint, pretraining-seed, or optimization-seed uncertainty.
+Free generation uses the same BF16 checkpoint and learned vector as training, with the ordinary generated history and native SPS mask.
+Teacher replay and incremental decoding can differ numerically because the forward context shape changes.
+We consequently report observed greedy outcomes rather than inferring them from teacher-forced success.
+
+\section{The Conditioning Site Changes Achieved Length}
+\label{sec:site}
+
+\begin{table*}[t]
+ \centering
+ \small
+ \input{tables/main_results}
+ \caption{Matched original-budget reconstruction results. $H$ is the selected exact teacher-forced length; $G$ is the initial correct greedy prefix of that selected vector. Exact greedy counts concern each arm's own selected length. Every selected vector replays exactly under teacher forcing. All arms learn 768 scalars per text.}
+ \label{tab:main}
+\end{table*}
+
+\begin{figure}[t]
+ \centering
+ \includegraphics[width=\columnwidth]{site_objective.pdf}
+ \caption{Achieved teacher-forced lengths under the original matched budget. The large within-SPS change comes from conditioning the prediction inputs with one shared vector. The Standard comparison also changes the learned checkpoint.}
+ \label{fig:site}
+\end{figure}
+
+Within SPS, shared-prediction conditioning raises mean $H$ from 19.42 to 64.17 under CE and from 31.52 to 132.10 under strict hinge (\cref{tab:main,fig:site}).
+The paired gains are 44.75 tokens (95\% text-bootstrap interval 41.50--47.98) and 100.58 (96.46--104.60), respectively.
+Every text improves in both comparisons.
+The strict-hinge mean is approximately 4.2 times the ordinary-memory mean for the same checkpoint and vector dimension.
+
+The effect does not require initialization at the pretrained prediction row.
+Random-initialized shared-prediction hinge reaches 130.23 tokens, a gain of 98.71 (93.00--103.96) over the ordinary-memory control.
+Native minus random initialization is only 1.88 tokens, with interval $-2.23$--6.04; these runs establish no winner between the two initializations.
+All three shared-prediction arms improve teacher-forced length on all 48 texts relative to their corresponding ordinary-memory control.
+
+Longer teacher-forced prefixes remain less reliable under free generation.
+The native hinge arm has mean $G=110.23$ and exactly reconstructs 38/48 selected prefixes, compared with $G=30.56$ and 45/48 for ordinary-memory strict hinge.
+The random arm has $G=118.65$ and 43/48 exact selected prefixes.
+These counts compare different lengths; they do not show a matched-length robustness ranking.
+In particular, the 132.10 mean teacher-forced length is not a guaranteed lossless greedy horizon.
+
+What has changed is the access provided to one text-specific vector.
+Ordinary memory supplies one causal position's outgoing layerwise keys and values, with effects relayed through the context.
+Shared prediction instead supplies the initial residual state of each readout position while ordinary states remain independent of that vector conditional on the token history.
+The same vector can yield different tokens because position and reconstructed history differ.
+Equal scalar count therefore controls the number of learned parameters, but not intervention sites, attention computation, or forward cost.
+
+\section{Objectives and Optimization Limits}
+\label{sec:controls}
+
+\subsection{Exact constraints and mean cross-entropy}
+
+The ordinary-memory objective factorial crosses CE versus squared hinge with raw versus strict stopping (\cref{tab:factorial}).
+Raw CE reaches 32.31 tokens for Standard and 19.42 for SPS.
+Strict hinge raises these to 54.83 and 31.52: gains of 22.52 (19.79--25.31) and 12.10 (10.46--13.79).
+Changing the loss helps both checkpoints substantially, while the absolute Standard-minus-SPS gap increases from 12.90 to 23.31 tokens.
+Under raw stopping, proportional gains are also similar (77.8\% and 81.2\%).
+Loss choice is a shared bottleneck rather than an explanation that removes the SPS disadvantage.
+
+The positive stopping gap has a separate role.
+For hinge, it reduces selected lengths from 57.46 to 54.83 for Standard and 35.19 to 31.52 for SPS, while exact greedy counts increase from 37/48 to 44/48 and 29/48 to 45/48.
+The two objectives should therefore be compared with their stopping criteria identified.
+Even strict convergence does not guarantee exact BF16 decoding.
+
+A local audit of four selected failed SPS ordinary-memory prefixes explains one way CE can be poorly aligned with feasibility.
+Exact hinge solutions have higher mean CE than their corresponding erroneous CE-restart vectors in every case (3.181 versus 1.209 averaged across cases).
+At each selected CE vector, correct- and wrong-token CE gradients oppose one another, and infinitesimal plain CE descent worsens the worst-token margin.
+This establishes a local mismatch, not a statement about global CE minima or the direction of the actual preconditioned, momentum-bearing Adam step.
+
+\subsection{Available budget is not used budget}
+\label{sec:budget}
+
+\begin{table*}[t]
+ \centering
+ \small
+ \input{tables/budget_control}
+ \caption{Native-initialized shared-prediction strict hinge under three completed protocols. The extension allows more total updates; its fixed-schedule version preserves the original learning-rate path and then holds its endpoint. Exact greedy counts concern different selected lengths.}
+ \label{tab:budget}
+\end{table*}
+
+\begin{figure}[t]
+ \centering
+ \includegraphics[width=\columnwidth]{budget_control.pdf}
+ \caption{Shared-prediction budget control. Preserving the original learning-rate trajectory recovers the regression caused by stretching it. The extended run stops at local stage failures before exhausting the larger total budget.}
+ \label{fig:budget}
+\end{figure}
+
+The original native-hinge run reaches the total update limit on 47/48 texts, suggesting budget censoring.
+Simply raising the available total budget to 30,000 also stretches the existing cosine learning-rate schedule.
+That completed protocol reaches only 79.42 tokens, with every text worse and every run stopping at a stage failure before using the total budget.
+It does not isolate the effect of extra updates.
+
+We therefore compare it with a fresh deterministic replay that allows the same extended budget but fixes the original learning-rate trajectory, holding its endpoint after the original scheduler horizon.
+The fixed-trajectory result is 133.85 tokens (\cref{tab:budget,fig:budget}).
+All 48 texts improve relative to the stretched schedule, by 54.44 tokens on average (50.65--58.06).
+Relative to the original run, 33 improve, 15 tie, and none worsen; mean gain is 1.75 (1.19--2.40), about 1.3\%.
+All 6,342 paired stages ending before the original budget boundary match exactly in optimized vector, update count, and convergence flag.
+This supports the learning-rate intervention as the explanation of the stretched-schedule regression in this matched comparison.
+
+The extended fixed-trajectory runs use 11,391.65 updates per text on average (range 4,784--15,082), versus 9,891.33 originally.
+Every one stops after a failed stage's 1,000-update allowance; none reaches 30,000.
+The available total budget tripled, but actual mean updates increased by about 15.2\% and teacher-forced length by 1.3\%.
+This is evidence of a remaining protocol limit, not a global representational ceiling.
+Mean $G$ rises to 121.19 with 41/48 exact selected prefixes, but the paired greedy-prefix gain interval includes zero ($-3.42$--25.35).
+
+\subsection{Terminal failure involves old constraints}
+\label{sec:terminal}
+
+\begin{figure}[t]
+ \centering
+ \includegraphics[width=\columnwidth]{terminal_constraints.pdf}
+ \caption{Positive-margin violations at the first failed stage of the extended fixed-trajectory run. Every stage adds one target to a previously converged prefix. Counts above one necessarily include old target constraints, but do not identify argmax errors or their cause.}
+ \label{fig:terminal}
+\end{figure}
+
+The saved-stage terminal audit counts violations of the recorded positive-margin stopping criterion rather than only a failed-stage flag.
+The median is ten constraints, with range two to 92; the equal-text mean fraction satisfying the margin is 87.08\% (\cref{fig:terminal,tab:terminal}).
+Every preceding stage converged, and each terminal stage adds exactly one target.
+Consequently every terminal failure violates at least one old target constraint; the median lower bound is nine old-position violations.
+This rules out describing the saved failure solely as inability to fit the new target while preserving all earlier margins.
+
+The audit does not record a positionwise before/after replay.
+It cannot determine which old positions fail, whether their argmax changes, or how much failure comes from optimization versus BF16 changes induced by the longer context shape.
+A target can remain the argmax and still miss the 0.05 gap.
+Separating these causes requires per-position replay under controlled arithmetic and the same quantized weights.
+
+\section{Mechanism Evidence from Ordinary Memory}
+\label{sec:mechanism}
+
+The following interventions concern the earlier ordinary-memory protocol, at short matched prefixes or its first failed stages.
+They do not diagnose the longer shared-prediction frontier.
+Their role is to test simple explanations of ordinary-memory behavior and clarify why the site intervention changes the causal picture.
+
+\subsection{Context mediation and direct prediction reads}
+
+\begin{figure}[t]
+ \centering
+ \includegraphics[width=\columnwidth]{routes.pdf}
+ \caption{Ordinary-memory route interventions at matched exact prefixes. SPS has a strong early memory-to-context effect and stronger later direct memory-to-prediction effect. These counterfactual NLL changes are non-additive and do not measure shared-prediction capacity.}
+ \label{fig:routes}
+\end{figure}
+
+We remove selected attention edges from the memory key, renormalizing the remaining attention, and distinguish destinations in ordinary context versus prediction slots.
+At matched exact-stage memories, first-layer SPS memory-to-context knockout increases NLL by 2.034 nats/token, versus 0.220 for memory-to-prediction knockout; the joint effect is 2.194.
+By layer eight the effects are 0.038 and 0.857, respectively (\cref{fig:routes,tab:routes}).
+Thus a fixed, context-independent initial prediction query does not imply that the dominant early memory effect is a direct prediction read.
+Memory information can first modify ordinary context states and be read later.
+
+A complementary intervention replaces projected memory keys or values with those produced by a norm-matched donor memory while retaining the original memory residual trajectory.
+Across layers, donor-value replacement increases NLL by 5.277 for Standard and 4.834 for SPS; donor-key replacement gives 2.396 and 2.450.
+Self-patching is an identity control to within $3.70\times10^{-6}$ NLL, and joint all-layer key/value patching reproduces the donor-memory condition on scored positions.
+Values have the larger effect under this intervention in both models.
+These effects neither count stored bits nor sum to independent route contributions.
+We exclude the first target from scored route comparisons because Standard predicts it directly from the memory residual.
+
+\subsection{Local rank and unchanged-dimension rescues}
+\label{sec:geometry}
+
+At the first failed SPS ordinary-memory length, we differentiate the margins in \cref{eq:margin} with respect to the learned memory vector and compare both checkpoints at the same target length.
+Every measured previous-token margin Jacobian has full row rank.
+At warm start, the mean fraction of the new-token gradient orthogonal to previous-token constraint rows is 0.847 for Standard and 0.875 for SPS.
+These results weaken a simple local rank-exhaustion explanation.
+They do not guarantee a finite feasible step: the active competitor may change, nonlinear curvature matters, and protected old margins can fail after a finite perturbation.
+Moreover, SPS is evaluated at its own frontier whereas Standard is usually below its frontier.
+
+Restarting four selected failed SPS prefixes without changing the checkpoint or memory dimension supplies a more direct feasibility test (\cref{tab:rescue}).
+CE restarts recover none within the diagnostic budget.
+Squared-margin Adam recovers all four in FP32, and three pass both exact teacher replay and greedy generation in the original BF16 regime.
+A constrained margin controller also recovers all four in FP32, with only one passing BF16 validation.
+The three original-precision successes disprove infeasibility at those selected original stopping points.
+They do not establish a new progressive horizon, remove the overall Standard--SPS gap, or transfer automatically to shared-prediction failures.
+
+\section{Discussion and Limitations}
+\label{sec:discussion}
+
+The central result is that conditioning the shared SPS prediction input substantially improves achieved reconstruction for this frozen checkpoint.
+An ordinary memory's horizon therefore cannot be read as the intrinsic capacity of a 768-dimensional control vector.
+The accessible route matters: ordinary-memory information reaches prediction computations through outgoing memory keys/values and context mediation, whereas shared prediction directly initializes each readout state.
+Avoiding modifications to ordinary context may reduce interference, but that hypothesis remains unisolated from query, residual, and temporary self-key/value effects.
+All prediction constraints still share the same vector, and the terminal audit shows that old constraints can fail together with the new one.
+
+Three comparisons must remain distinct.
+First, the conditioning-site comparison holds one SPS checkpoint fixed and demonstrates a large protocol effect.
+Second, the ordinary-memory Standard--SPS comparison changes learned weights as well as architecture.
+Third, the extended-budget comparison changes optimization opportunity and, unless explicitly fixed, its schedule.
+None is an architecture-only or parameter-count-only capacity experiment.
+Repeated intervention sites and SPS's interleaved forward computation also prevent an efficiency claim based only on learned scalar count.
+The comparisons do not match FLOPs or wall-clock time; SPS doubles the internal positions relative to its ordinary input sequence.
+
+The evidence is restricted to one checkpoint of each type, 48 matched texts, and one optimization seed.
+Bootstrap intervals quantify text variation only; initialization and schedule comparisons are selected finite experiments rather than a resolved optimum.
+The native/random comparison supports similar achieved lengths within uncertainty, not initialization invariance in general.
+Local route and geometry measurements describe their selected states, not all solutions.
+We do not measure semantic transfer, downstream usefulness, or decoder-independent representation quality for the new vectors.
+
+Finally, exact teacher replay is distinct from reliable compression for free generation.
+Several selected long prefixes fail greedy decoding despite a positive training margin.
+Observed stopping also remains a finite optimization outcome: the final fixed-trajectory experiment exhausts its local stage allowance before its total budget.
+An analogous repeatedly applied Standard readout intervention, route isolation within shared prediction, and controlled per-position replay at its failed stages would distinguish remaining causal explanations.
+Successful rescues would establish feasibility for particular prefixes; unsuccessful searches would still not certify a global ceiling.
+
+\section{Conclusion}
+
+One shared prediction-input vector raises the SPS checkpoint's original-budget mean exact teacher-forced reconstruction from 31.52 to 132.10 tokens while retaining 768 learned scalars per text.
+The effect persists under CE and with random initialization.
+Objective and schedule controls show that achieved horizons also depend materially on optimization, and older same-dimension rescues demonstrate that failure need not imply infeasibility.
+The supported claim is a large improvement in a particular conditioning protocol, with free-generation reliability and architecture-level capacity left open.
+
+\bibliography{references}
+\bibliographystyle{styles/icml2026}
+
+\appendix
+\input{appendix}
+
+\end{document}

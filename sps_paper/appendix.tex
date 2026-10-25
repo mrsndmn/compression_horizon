@@ -1,0 +1,199 @@
+\section{Reproducibility and Evidence Boundaries}
+\label{app:repro}
+
+The manuscript accompanies an independent reproducibility bundle in \texttt{sps\_paper/}; it does not modify the earlier \texttt{paper/} draft.
+The bundle distinguishes three operations.
+\emph{Export} reads completed experiment artifacts and validates the compact evidence snapshot.
+\emph{Render} rebuilds the paper's tables and figures from the versioned snapshot without checkpoints, a GPU, shared storage, or network access.
+\emph{Plan} describes historical experiment replay and its external prerequisites; it does not submit a job.
+Rebuilding a figure is consequently distinct from rerunning the optimization that produced its observations.
+The snapshot is stored in \path{data/manifest.json},
+\path{data/cohort.json.gz}, \path{data/runs.json.gz}, and
+\path{data/probes.json.gz}; \path{data/derived_metrics.json} records the computed summaries.
+From the repository root, offline rendering uses
+\texttt{python sps\_paper/reproduce.py render}; the nonexecuting historical replay plan uses
+\texttt{python sps\_paper/reproduce.py plan}.
+The accompanying README records the remaining commands, and the snapshot records complete source commits and full job identifiers.
+
+\paragraph{Design authority.}
+Experiment design lives in the Python registries, rather than this manuscript's descriptive summaries.
+The ordinary-memory training and objective factorial are defined by
+\path{scripts/jobs/run_jobs_sps.py}, including \texttt{TRAINING\_ARGS},
+\texttt{lr\_sweep\_experiment\_configs}, and \texttt{objective\_experiment\_configs}.
+Shared-prediction training uses \texttt{PredictEmbeddingTrainer} and
+\texttt{experiment\_configs} in \path{scripts/analyze_sps_predict_embedding.py}.
+Extended-budget partitions and the independent schedule control use the two registries in
+\path{scripts/analyze_sps_predict_shards.py}.
+The native model's interleaving, shared rotary positions, visibility rule, and odd-slot readout are implemented in
+\path{src/compression_horizon/models/sps_causal_lm.py}.
+The scalar objectives are implemented in \path{src/compression_horizon/train/loss.py}.
+No paper-rendering command launches training.
+
+\paragraph{Historical snapshots.}
+The original shared-prediction runs were submitted from
+\sourcecommit{9d20b38a8ab842e2dcb97df21cff373c8b99f54a}.
+The stretched-schedule shards used
+\sourcecommit{f96ca50fe8e834c9fe6f9e0251a15042aaf8a3aa},
+and the fixed-trajectory control used
+\sourcecommit{cce451fd6625609f1d089de25bb637f479ec827c}.
+The objective factorial used
+\sourcecommit{4e5726aa444e07b49512cb2af6416a7136b78f3c}.
+The route and margin-geometry diagnostics used
+\sourcecommit{c155f7c67bda8fbd63d13319322d6f7e4cb2a2e9},
+and the local rescue used
+\sourcecommit{157a04b98608905364dda5cd311a6c90ab7a3b21}.
+These identify historical training/probe code; the current paper-rendering source has its own repository commit.
+Complete per-run provenance is retained in the bundle rather than inferred from a run-name prefix.
+
+\paragraph{External prerequisites for replay.}
+The Standard and SPS weights are native checkpoints external to the compact paper bundle.
+Full replay also requires the pinned token cache, the original environment and GPU implementation, and access to historical artifact paths or equivalent explicit replacements.
+The texts are the 48 source-cache items selected by the launch registry, not a newly sampled evaluation set.
+The snapshot preserves the numerical evidence needed for the reported plots and matched statistics; it is not a substitute for model weights or an independently trained replication.
+
+\paragraph{Integrity checks.}
+Selected horizons are matched to the deepest converged raw stage, and target IDs are checked against the pinned cache.
+For shared prediction, saved artifacts label the vector's role, initialization, fixed BOS, prediction token, and trainable scalar count.
+Generation measurements are recomputed from saved generated and target token IDs.
+Shard merges require each registered sample exactly once, complete stage progression, consistent settings and source provenance, and the full target sequence.
+For the fixed-trajectory comparison, saved vectors, cumulative counters, and convergence agree exactly with the original control for all 6,342 stages ending before its budget boundary.
+These checks concern consistency and provenance of completed measurements, not independent repetition over seeds.
+
+\section{Metrics, Pairing, and Arithmetic}
+\label{app:metrics}
+
+The teacher-forced horizon is an integer per text.
+It is taken from saved convergence flags and validated by exact target-aligned replay of the selected vector.
+Means in the paper are equal-text means, not pooled token-weighted averages.
+The initial correct greedy prefix is
+\begin{equation}
+ G=\max\{g\in\{0,\ldots,H\}:\widehat x_{1:g}=x_{1:g}\},
+\end{equation}
+where $\widehat x$ is generated using the one selected final vector.
+Exact greedy success is $\mathbf{1}\{G=H\}$.
+It is not the longest greedily feasible prefix over all saved vectors.
+Because different arms select different $H$, their exact greedy counts cannot be interpreted as matched-length reliability measurements.
+
+Paired differences retain the same text ID across compared arms.
+The percentile bootstrap resamples those paired IDs with replacement using a fixed analysis seed.
+It does not resample model checkpoints, independent optimizations, or pretraining data.
+Accordingly, the intervals cannot support population-wide architecture or optimization-seed claims.
+We report observed native/random results without choosing an initialization winner from an interval that includes zero.
+
+All main optimizations and free-generation checks use BF16.
+Margin deficits are calculated in FP32 after model logits, as implemented in the loss function.
+The local geometry and route diagnostics promote the original BF16-quantized weights to FP32 arithmetic; this does not restore information lost in weight quantization.
+Their unmodified outputs can differ from the original BF16 training outputs, especially at small margins.
+The rescue therefore validates selected vectors again using the actual BF16 forward and free generation.
+Even with batch size one, full-prefix teacher replay and incremental generation can take different numerical paths because their sequence shapes differ.
+Only directly measured token counts are used for exact reconstruction claims.
+
+\section{Full Ordinary-Memory Objective Factorial}
+\label{app:objectives}
+
+\begin{table*}[t]
+ \centering
+ \small
+ \input{tables/objective_factorial}
+ \caption{Ordinary-memory factorial at the matched original budget. Loss and stopping margin are crossed rather than conflated. The scalar CE and squared-margin objectives are defined in \cref{eq:objective}; raw stopping uses argmax matching and strict stopping requires a positive target gap.}
+ \label{tab:factorial}
+\end{table*}
+
+The factorial separates two explanations: whether the scalar objective favors every target ranking first, and whether the convergence criterion supplies numerical slack.
+Changing raw to strict stopping under CE changes mean lengths only slightly (32.31 to 32.46 for Standard and 19.42 to 19.44 for SPS), while the hinge changes lengths substantially.
+The relation need not be monotonic in any single run: changing stopping can alter when a stage ends, its inherited optimizer state, and subsequent updates.
+We interpret the complete registered protocol, not a pointwise dominance relation between objectives.
+
+The gradient audit uses four selected old-protocol failed prefixes and saved restart solutions.
+At the selected CE vectors, the cosine between CE gradients from currently correct and wrong tokens ranges from $-0.655$ to $-0.560$.
+The total gradient norm divided by the sum of the two group norms averages 0.522.
+Cosines between negative CE gradient and worst-token margin gradient range from $-0.228$ to $-0.118$; corresponding hinge-descent cosines are 0.868 to 1.000.
+These are local derivative measurements of scalar objectives.
+They do not establish that actual Adam steps follow plain gradient descent or that SPS has greater gradient conflict than Standard.
+The constrained controller's exact solutions have mean CE 1.379, showing that the larger CE of the hinge solutions is not necessary for feasibility.
+
+An earlier CE-only learning-rate grid also leaves a substantial ordinary-memory gap.
+\begin{table}[htbp]
+ \centering
+ \small
+ \input{tables/lr_sweep}
+ \caption{The four registered CE learning-rate sweep variants. Values are equal-text teacher-forced horizons on the matched cohort; these are measured configurations rather than a globally optimal-rate search.}
+ \label{tab:lr-sweep}
+\end{table}
+Across tested rates, the best observed Standard mean is 32.77 and the best SPS mean is 19.42.
+The SPS results at the two largest tested rates differ by only 0.125 tokens with a paired interval including zero.
+This motivated a common rate for subsequent controlled comparisons; it does not establish a globally optimal rate or remove selection uncertainty.
+The registry and versioned evidence retain the complete grid.
+
+\section{Budget and Terminal-Constraint Audit}
+\label{app:terminal}
+
+\begin{table}[htbp]
+ \centering
+ \small
+ \resizebox{\columnwidth}{!}{\input{tables/terminal_constraints}}
+ \caption{Saved terminal stages of the native shared-prediction fixed-trajectory extension. Violations concern the recorded positive-margin convergence criterion. The old-constraint count is a lower bound obtained by allowing the single added target to account for one violation.}
+ \label{tab:terminal}
+\end{table}
+
+If a failed stage extends $L-1$ converged targets to $L$ and records $V$ violations of the positive-margin criterion, at most one can be the newly added target.
+The number of old violations is therefore at least $V-1$.
+The observed minimum $V=2$ establishes at least one old violation in every text; the median $V=10$ establishes a median lower bound of nine.
+This reasoning uses the saved counts and stage relationship only.
+It neither identifies individual positions nor says that all violated margins correspond to incorrect argmax predictions.
+
+The final saved vector has changed during the failed optimization, and extending the context can also change BF16 computation.
+Without per-position evaluation at the warm start and optimized vector under controlled shapes and arithmetic, those explanations cannot be separated.
+The audit therefore supports simultaneous constraint loss, while leaving the cause and recoverability at the new frontier unresolved.
+
+Saved-stage optimizer costs also help interpret the original native-hinge shared-prediction run.
+Median cumulative updates at positions 10, 25, 50, 75, 100 and 125 are 179, 529.5, 1,269, 3,316.5, 6,344 and 8,476.
+The contributing cohorts are 48, 48, 48, 48, 47 and 38 texts.
+Median incremental successful-stage costs at those positions are 17, 33.5, 40, 70, 52 and 71 updates.
+They are noisy rather than monotonic and are costs of reoptimizing the whole prefix with inherited optimizer state and a running schedule, not isolated-token complexity.
+Zero-update successes are retained.
+Late summaries condition on surviving texts and cannot establish length as the sole causal driver of cost.
+
+\section{Ordinary-Memory Intervention and Rescue Details}
+\label{app:mechanism}
+
+\begin{table}[htbp]
+ \centering
+ \small
+ \resizebox{\columnwidth}{!}{\input{tables/causal_routes}}
+ \caption{Ordinary-memory causal route and donor-patch summaries. Changes are equal-text mean NLL relative to each model's own baseline on targets after the first. Layer indices are one-based. Key and value patches are counterfactual interventions rather than additive information allocations.}
+ \label{tab:routes}
+\end{table}
+
+\begin{table}[htbp]
+ \centering
+ \small
+ \input{tables/rescue}
+ \caption{Local restart results at four selected failed SPS ordinary-memory prefixes, without added trainable scalars. FP32 uses the original BF16-quantized weights promoted for arithmetic. Original-regime success requires actual BF16 teacher replay and greedy reconstruction. These are prefix rescues, not full progressive runs.}
+ \label{tab:rescue}
+\end{table}
+
+The route probe uses 16 texts at target length 12 and memories optimized for exactly that stage, rather than cropping longer-stage vectors.
+Donor memories come from another selected text and are rescaled to match the recipient norm before computing their projected keys/values.
+The recipient residual trajectory is preserved during a key-only or value-only patch.
+Removing memory-key edges changes softmax normalization and later states, so joint and individual effects need not add.
+The broader attention-ablation probe likewise measures sensitivity of already optimized memories, not a derivative of achievable horizon with respect to a route.
+
+The local geometry probe uses eight selected texts at their first failed SPS ordinary-memory length, evaluating both checkpoints at that same length and at warm-start and optimized memories.
+For the old-token margin Jacobian $J_{<L}$ and new-token gradient $g_L$, it measures
+\begin{equation}
+ \rho=\frac{\|P_{\ker J_{<L}}g_L\|_2}{\|g_L\|_2}.
+\end{equation}
+Full old-row rank and a substantial $\rho$ leave a first-order direction that changes the new margin without changing old margins.
+They provide no guarantee of a finite nonlinear feasible move.
+The median minimum previous-token margins at warm start are 0.147 for Standard and 0.029 for SPS.
+Because the sampling frontier differs between models, this smaller SPS slack may be a consequence of proximity to its stopping point.
+It is not an isolated architecture-specific cause.
+Likewise, PCA of a progressive optimization trajectory describes the path taken by the optimizer rather than the dimension of the feasible solution set; we do not use trajectory dimensionality as a capacity certificate.
+
+The four-text rescue compares CE Adam restarts, squared-margin Adam, and a constrained margin controller from saved failed-stage memories.
+The controller solves a local minimum-norm margin problem with a trust region and finite-forward validation.
+Diagnostic accounting treats one scalar-loss backward as one vector--Jacobian product and a full $L$-row Jacobian as $L$ such products; forward counts are tracked separately.
+Equal derivative budgets are not equal wall-clock budgets.
+Squared-margin Adam reaches all four FP32 solutions in 20--55 gradients, but only three retain both exact criteria in BF16.
+No result here is a rescue attempt at the final shared-prediction frontier.

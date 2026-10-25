@@ -16,6 +16,20 @@ remain for provenance and reproduction, not the current launch plan.
 
 ## Building the paper
 
+The separate SPS working preprint is in `sps_paper/`. Build it with
+`make sps-paper`: this regenerates its tables/figures from versioned evidence,
+checks source references and compiles `sps_paper/build/main.pdf`.
+`make sps-paper-figures`, `make sps-paper-check` and `make sps-paper-clean`
+operate only on this article. Original-paper commands and cohort rules below
+remain scoped to `paper/`. The new article has its own matched SPS cohort.
+
+`sps_paper/reproduce.py render` consumes versioned evidence without a GPU or
+private mounts; `export` refreshes evidence from completed shared artifacts;
+`plan` describes historical experiment replay and external prerequisites without
+submitting jobs. Generated `sps_paper/tables/*.tex` and statistical figure PDFs
+must be changed through that generator, never by hand. The manuscript explicitly
+separates teacher forcing, greedy prefix lengths and exact generation counts.
+
 Build the compiled PDF with **`make paper`** (runs `paper/lint_paper.py` first via
 `paper-check`, then `latexmk -pdf` from inside `paper/`). Output lands at
 `paper/build/example_paper.pdf`. Related targets: `make paper-check` (lint only),
@@ -80,6 +94,15 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
 
 ## Usage arms
 
+- SPS article: `make sps-paper` regenerates assets with
+  `sps_paper/reproduce.py render`, runs `sps_paper/check.py`, then compiles
+  `sps_paper/main.tex`. The `sps-paper-figures`, `sps-paper-check`, and
+  `sps-paper-clean` targets also work independently; the directory builds alone.
+- SPS reproducibility: `sps_paper/reproduce.py export` audits completed external
+  artifacts into versioned evidence; `render` uses only that evidence; `plan`
+  prints pinned historical GPU replay commands without executing them. Tests
+  live in `tests/test_sps_paper_check.py` and `tests/test_sps_paper_reproduce.py`.
+  These commands do not submit jobs or run as part of the original paper build.
 - Poster editing: `poster/poster.html`, local `poster/images/`, `poster/fonts/`,
   and `poster/profiles/`; preserves English title/authors at the top.
 - Poster rendering: `python poster/build_poster.py`; Playwright print emulation
