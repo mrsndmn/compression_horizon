@@ -29,7 +29,7 @@ and outcomes; design settings remain in Python.
   invoke a fresh portable adversarial review and address findings.
 - [x] Submit the authorized shards, preserve full job IDs and register a new
   durable wait.
-- [ ] Merge, compare and plot when the group resolves.
+- [x] Merge, compare and plot when the group resolves.
 
 **Review focus:** first position is z rather than 2z; each later input receives
 z exactly once; generation reconstructs raw token embeddings at each step;

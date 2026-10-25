@@ -101,6 +101,12 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
   stay paired by global sample ID. Artifacts use `additive_prefixes` and
   `embedding_role=prefix_and_additive`; ordinary-memory validators must not be
   used on these vectors. `tests/test_standard_additive.py` covers this path.
+- Completed Standard additive analysis: `scripts/analyze_standard_additive_results.py`
+  audits the merged cohort and produces paired CSV/JSON/plots. Optional `--probe`
+  evaluates fixed terminal vectors on CPU with promoted BF16 weights; conditions
+  live in its Python registry. It never optimizes vectors or submits jobs, and
+  its FP32 measurements are separate from the original GPU reconstruction runs.
+  `--output-dir` permits isolated regeneration without changing training artifacts.
 - SPS article: `make sps-paper` regenerates assets with
   `sps_paper/reproduce.py render`, runs `sps_paper/check.py`, then compiles
   `sps_paper/main.tex`. The `sps-paper-figures`, `sps-paper-check`, and
