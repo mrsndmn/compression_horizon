@@ -995,6 +995,7 @@ def replay_plan(data):
                     "p.CHECKPOINT=os.environ['SPS_CHECKPOINT']",
                     "p.TRAINING_ARGS=dict(p.TRAINING_ARGS,tokenized_dataset_path=cache)",
                     "p.jobs.CACHE_ROOT=Path(cache).parent",
+                    "p.jobs.cluster_path=lambda path:str(path)",
                     "out.mkdir(parents=True,exist_ok=False)",
                 ]
             )

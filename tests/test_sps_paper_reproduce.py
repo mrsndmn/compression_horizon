@@ -269,3 +269,62 @@ importlib.import_module = instrument
             continue
         result = real_run([sys.executable, "-c", prefix + "\n" + block], cwd=ROOT, text=True, capture_output=True)
         assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("mount", ["/mnt/virtual_ai0001053-00054_SR004-nfs2", "/workspace-SR004.nfs2"])
+def test_replay_preserves_explicit_predict_checkpoint_and_cache_paths(mount, monkeypatch):
+    import re
+    from types import SimpleNamespace
+
+    from scripts import analyze_sps_predict_embedding as predict
+
+    api = module()
+    data = api.load_snapshot(ROOT / "sps_paper/data")
+    blocks = re.findall(r"python - <<'PY'\n(.*?)\nPY", api.replay_plan(data), re.S)
+    replay = Path(mount) / "replay-path-test"
+    checkpoint = str(Path(mount) / "checkpoints/sps.pt")
+    monkeypatch.setenv("REPLAY_ROOT", str(replay))
+    monkeypatch.setenv("SPS_CHECKPOINT", checkpoint)
+    monkeypatch.setattr(predict.torch, "set_num_threads", lambda _: None)
+    # No files/model are needed to exercise the actual probe up to dataset load.
+    mkdir = Path.mkdir
+    monkeypatch.setattr(Path, "mkdir", lambda path, *a, **kw: None if path.is_relative_to(replay) else mkdir(path, *a, **kw))
+    for obj, attr in (
+        (predict, "CHECKPOINT"),
+        (predict, "TRAINING_ARGS"),
+        (predict, "ROOT"),
+        (predict.jobs, "CACHE_ROOT"),
+        (predict.jobs, "cluster_path"),
+    ):
+        monkeypatch.setattr(obj, attr, getattr(obj, attr))
+    monkeypatch.setattr(predict, "MyTrainingArguments", lambda **kw: SimpleNamespace(**(dict(offset_dataset_items=None) | kw)))
+
+    def load_checkpoint(path, **kwargs):
+        assert path == checkpoint
+        return SimpleNamespace(config=SimpleNamespace(eos_token_id=50256))
+
+    monkeypatch.setattr(predict, "load_sps_checkpoint", load_checkpoint)
+    monkeypatch.setattr(predict, "load_sps_tokenizer", lambda: SimpleNamespace(bos_token_id=50256))
+    calls = []
+
+    class DatasetBoundary(Exception):
+        pass
+
+    def load_dataset(**kwargs):
+        assert kwargs["tokenized_dataset_path"] == str(replay / "exact_cached_cohort")
+        assert kwargs["model_checkpoint"] == checkpoint
+        calls.append(kwargs)
+        raise DatasetBoundary
+
+    monkeypatch.setattr(predict, "load_or_create_tokenized_dataset", load_dataset)
+    probe = predict.probe
+
+    def input_loading_only(*args, **kwargs):
+        with pytest.raises(DatasetBoundary):
+            probe(*args, **kwargs)
+
+    monkeypatch.setattr(predict, "probe", input_loading_only)
+    for block in blocks:
+        if "from scripts import analyze_sps_predict_embedding as p" in block:
+            exec(compile(block, "<predict-replay>", "exec"), {})
+    assert len(calls) == sum(len(run["jobs"]) for run in data["runs"].values() if run["site"] == "shared_predict")
