@@ -88,13 +88,19 @@ repository root:
 export STANDARD_CHECKPOINT=/absolute/path/to/standard/ckpt_tokens_1000341504_final.pt
 export SPS_CHECKPOINT=/absolute/path/to/sps/ckpt_tokens_1000341504_final.pt
 export REPLAY_ROOT=/absolute/path/to/a/new/replay_directory
-# After reviewing the script and preparing upstream diagnostic inputs:
+# After reviewing the script and preparing the archived Python dependencies:
 bash /tmp/replay_sps_experiments.sh
 ```
 
 The plan reconstructs the exact selected tokenized cohort from the bundled IDs,
-without retokenizing. It pins original experiment source commits and uses their Python registries rather
-than retyping training settings. It does not submit MLspace jobs. Historical
+without retokenizing. It pins original experiment source commits and uses their
+Python registries rather than retyping training settings. The two original
+single-sample baselines are included as attention-ablation prerequisites.
+Fresh training outputs are linked under `REPLAY_ROOT/upstream/` using the
+historical input registry names; diagnostics consume these outputs with the
+supplied checkpoint and cache paths. Rescue runs before the dependent gradient
+audit. Original optimized-vector artifacts are not required. The script does
+not submit MLspace jobs. Historical
 CE/random controls are included for reproducing reported results; the current
 launch policy for new shared-predict experiments remains hinge/native and
 single-sample cramming.
@@ -102,12 +108,12 @@ single-sample cramming.
 The native `.pt` checkpoints are external research inputs and are **not
 distributed** in this directory. `data/cohort.json.gz` contains the exact selected
 input token IDs; the original cache files are identified by provenance hashes.
-Saved-stage causal/geometry/rescue diagnostics additionally need the optimized vectors from
-their upstream experiments and the source-run layout identified in the plan.
 The compact offline bundle preserves measurements and vector hashes, not the
-full optimized-vector datasets or model weights. The replay plan states these
-dependencies explicitly. Rebuilding publication assets is tested here; a fresh
-end-to-end GPU retraining of every historical experiment is not claimed.
+full optimized-vector datasets or model weights. The replay plan reconstructs
+the vectors by training the upstream experiments before running their probes.
+Rebuilding publication assets and loading the fresh diagnostic inputs are
+tested here; a fresh end-to-end GPU retraining of every historical experiment
+is not claimed.
 
 ## Interpretation and editing
 

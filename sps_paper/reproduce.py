@@ -224,7 +224,10 @@ def export_snapshot(artifacts_root, destination):
         for sample in samples:
             if "teacher_replay_correct_tokens" not in sample:
                 count = sample["teacher_replay_accuracy"] * len(sample["target_ids"])
-                if not math.isclose(count, round(count), abs_tol=1e-6):
+                # Legacy reports store a float32 mean rather than the integer
+                # count; account for its rounding error scaled by target length.
+                tolerance = max(1e-6, len(sample["target_ids"]) * np.finfo(np.float32).eps)
+                if not math.isclose(count, round(count), abs_tol=tolerance):
                     raise ValueError("Historical teacher count is not integral")
                 sample["teacher_replay_correct_tokens"] = round(count)
         if report["n_samples"] != len(cohort) or not math.isclose(
@@ -253,6 +256,16 @@ def export_snapshot(artifacts_root, destination):
 
     for base in ordinary.experiment_configs:
         model = "standard" if base["name"].startswith("standard") else "sps"
+        add(
+            model + "_ce_baseline",
+            root / ordinary.BASELINE_RUNS[base["name"]].name,
+            model=model,
+            site="ordinary_memory",
+            cell="ce_baseline",
+            settings=dict(ordinary.TRAINING_ARGS),
+            registry="ordinary:experiment_configs",
+            selector=base["name"],
+        )
         basepath = root / ordinary.OBJECTIVE_BASELINES[base["name"]].name
         exp = next(e for e in ordinary.lr_sweep_experiment_configs if e["name"] == base["name"] + "_lr0.3")
         add(
@@ -927,7 +940,7 @@ def replay_plan(data):
         ': "${REPLAY_ROOT:?set fresh absolute replay directory}"',
         "export STANDARD_CHECKPOINT SPS_CHECKPOINT REPLAY_ROOT",
         'test ! -e "$REPLAY_ROOT"',
-        'mkdir -p "$REPLAY_ROOT/code" "$REPLAY_ROOT/outputs"',
+        'mkdir -p "$REPLAY_ROOT/code" "$REPLAY_ROOT/outputs" "$REPLAY_ROOT/upstream"',
         "python - <<'PY'",
         "import gzip,json,os",
         "from pathlib import Path",
@@ -962,7 +975,8 @@ def replay_plan(data):
             lines.extend(
                 [
                     "from scripts.jobs import run_jobs_sps as r",
-                    f"exp=next(e for e in r.{selector} if e['name']=={run['selector']!r})",
+                    f"exp=dict(next(e for e in r.{selector} if e['name']=={run['selector']!r}))",
+                    f"exp['checkpoint']=os.environ[{'STANDARD_CHECKPOINT' if run['model'] == 'standard' else 'SPS_CHECKPOINT'!r}]",
                     "args=dict(r.TRAINING_ARGS,**exp.get('training_args',{}))",
                     f"args.update(model_checkpoint=os.environ[{'STANDARD_CHECKPOINT' if run['model'] == 'standard' else 'SPS_CHECKPOINT'!r}],tokenized_dataset_path=cache,output_dir=str(out))",
                     "out.mkdir(parents=True,exist_ok=False)",
@@ -971,6 +985,7 @@ def replay_plan(data):
                     "for k,v in args.items(): cmd.extend(['--'+k,str(v)])",
                     "subprocess.run(cmd,check=True)",
                     "subprocess.run([sys.executable,'scripts/validation/validate_sps_batch1_run.py','--run-dir',str(out)],check=True)",
+                    f"(Path(os.environ['REPLAY_ROOT'])/'upstream'/{run['source']!r}).symlink_to(out,target_is_directory=True)",
                 ]
             )
         else:
@@ -1005,12 +1020,13 @@ def replay_plan(data):
     lines.extend(
         [
             "# Saved-stage diagnostic replay dependencies:",
-            "# Probe commands below require original source-run paths restored under artifacts/sps_cramming/",
-            "# (or relocate their existing saved-input registries consistently). They use optimized vectors,",
-            "# not just the compact measurements. Rerun the historical source experiments above first.",
+            "# Fresh ordinary-memory runs above are linked under upstream/ using historical registry names.",
+            "# Each diagnostic reads those newly trained vectors and the relocated checkpoint/cache paths.",
+            "# Rescue precedes the gradient audit; its fresh result is linked under the original registry name.",
         ]
     )
-    for name, probe in data["probes"].items():
+    for name in ("ablation", "routes", "geometry", "rescue", "gradients"):
+        probe = data["probes"][name]
         script = {
             "routes": "analyze_sps_memory_routes",
             "geometry": "analyze_sps_margin_geometry",
@@ -1026,14 +1042,15 @@ def replay_plan(data):
                 "import importlib,os",
                 "from pathlib import Path",
                 "from scripts import analyze_sps_cramming as jobs",
-                "# Restore upstream saved memories/designs and original checkpoint/cache paths before running.",
-                "upstream=os.environ.get('UPSTREAM_ARTIFACTS_ROOT')",
-                "if upstream: jobs.ROOT=Path(upstream).resolve()",
+                "jobs.ROOT=Path(os.environ['REPLAY_ROOT'])/'upstream'",
+                "# Fresh designs already contain the explicit absolute input paths; do not remap mounts.",
+                "jobs.cluster_path=lambda path:str(path)",
                 f"p=importlib.import_module('scripts.{script}')",
                 f"out=Path(os.environ['REPLAY_ROOT'])/'outputs'/{name!r}",
                 "out.mkdir(parents=True,exist_ok=False)",
                 "p.OUTPUT=out",
                 "jobs.OUTPUT=out",
+                f"(jobs.ROOT/{PROBES[name]!r}).symlink_to(out,target_is_directory=True)",
                 "p.probe()",
                 "PY",
                 ")",

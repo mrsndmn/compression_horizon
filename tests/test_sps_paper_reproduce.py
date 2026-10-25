@@ -161,9 +161,111 @@ def test_replay_heredocs_are_executable_python_and_use_fresh_outputs():
     api = module()
     plan = api.replay_plan(api.load_snapshot(ROOT / "sps_paper/data"))
     blocks = re.findall(r"python - <<'PY'\n(.*?)\nPY", plan, re.S)
-    assert len(blocks) == 25
+    assert len(blocks) == 1 + len(api.load_snapshot(ROOT / "sps_paper/data")["runs"]) + 5
     for block in blocks:
         ast.parse(block)
     assert "out.mkdir(parents=True,exist_ok=False)" in plan
     assert "p.OUTPUT=out" in plan and "jobs.OUTPUT=out" in plan
     assert "p.ROOT=out" in plan
+
+
+def test_replay_includes_attention_ablation_source_runs():
+    api = module()
+    data = api.load_snapshot(ROOT / "sps_paper/data")
+    for model in ("standard", "sps"):
+        run = data["runs"][model + "_ce_baseline"]
+        assert run["registry"] == "ordinary:experiment_configs"
+        assert run["source_commit"] == "e95b204e0bddf65a0d82953e8140c69d64a3e083"
+
+
+def test_replay_diagnostic_loaders_consume_fresh_training_outputs(tmp_path, monkeypatch):
+    """Exercise real consumer I/O; replace only training/model computation."""
+    import re
+
+    from datasets import Dataset
+
+    api = module()
+    data = api.load_snapshot(ROOT / "sps_paper/data")
+    plan = api.replay_plan(data)
+    blocks = re.findall(r"python - <<'PY'\n(.*?)\nPY", plan, re.S)
+    replay = tmp_path / "replay"
+    (replay / "upstream").mkdir(parents=True)
+    (replay / "outputs").mkdir()
+    cache = replay / "exact_cached_cohort"
+    Dataset.from_list([{"input_ids": [100 + i, 42], "attention_mask": [1, 1]} for i in range(48)]).save_to_disk(str(cache))
+    monkeypatch.setenv("REPLAY_ROOT", str(replay))
+    monkeypatch.setenv("UPSTREAM_ARTIFACTS_ROOT", str(replay / "upstream"))
+    monkeypatch.setenv("STANDARD_CHECKPOINT", str(tmp_path / "standard.pt"))
+    monkeypatch.setenv("SPS_CHECKPOINT", str(tmp_path / "sps.pt"))
+    real_run = subprocess.run
+
+    def training_boundary(command, **kwargs):
+        if "scripts/activation_distillation.py" in command:
+            args = dict(zip(command[2::2], command[3::2]))
+            output = Path(args["--output_dir"])
+            rows = [
+                dict(
+                    sample_id=i,
+                    stage_index=0,
+                    stage_seq_len=1,
+                    num_input_tokens=1,
+                    final_convergence=1.0,
+                    convergence_threshold=1.0,
+                    embedding=[[0.0] * 768],
+                )
+                for i in range(48)
+            ]
+            Dataset.from_list(rows).save_to_disk(str(output / "progressive_prefixes"))
+        else:
+            assert "scripts/validation/validate_sps_batch1_run.py" in command
+            output = Path(command[command.index("--run-dir") + 1])
+            (output / "single_sample_validation.json").write_text(
+                json.dumps({"samples": [dict(sample_id=i, target_ids=[100 + i]) for i in range(48)]})
+            )
+        return subprocess.CompletedProcess(command, 0)
+
+    keys = {"standard_ce_raw", "sps_ce_raw", "standard_ce_baseline", "sps_ce_baseline"}
+    with monkeypatch.context() as patch:
+        patch.setattr(subprocess, "run", training_boundary)
+        for block in blocks:
+            if any(f"/'outputs'/{key!r}" in block for key in keys):
+                exec(compile(block, "<replay-training>", "exec"), {})
+
+    # Each real script is imported after its artifact root is set, as in the
+    # generated separate Python processes. No old mount or GPU is consulted.
+    prefix = r"""
+import importlib, json, os
+from pathlib import Path
+original_import = importlib.import_module
+def instrument(name, package=None):
+    p = original_import(name, package)
+    if name not in {'scripts.analyze_sps_memory_ablation', 'scripts.analyze_sps_memory_routes',
+                    'scripts.analyze_sps_margin_geometry', 'scripts.analyze_sps_margin_rescue',
+                    'scripts.audit_sps_objective_gradients'}:
+        return p
+    def input_loading_only():
+        root = Path(os.environ['REPLAY_ROOT'])
+        if name.endswith('analyze_sps_memory_ablation'):
+            groups, targets = p.load_inputs()
+            assert len(targets) == 48
+        else:
+            groups, cache = p.saved_inputs()
+            assert cache[0]['input_ids'] == [100, 42]
+        for key, group in groups.items():
+            expected = os.environ['STANDARD_CHECKPOINT' if key == 'standard' else 'SPS_CHECKPOINT']
+            assert group['design']['experiment']['checkpoint'] == expected
+            assert group['design']['training_args']['tokenized_dataset_path'] == str(root/'exact_cached_cohort')
+        if name.endswith('audit_sps_objective_gradients'):
+            assert p.SOURCE.resolve() == (root/'outputs/rescue/probe.json').resolve()
+            assert json.loads(p.SOURCE.read_text()) == {'fresh': True}
+        assert p.OUTPUT.parent == root/'outputs'
+        (p.OUTPUT/'probe.json').write_text(json.dumps({'fresh': True}))
+    p.probe = input_loading_only
+    return p
+importlib.import_module = instrument
+"""
+    for block in blocks:
+        if "p=importlib.import_module('scripts." not in block:
+            continue
+        result = real_run([sys.executable, "-c", prefix + "\n" + block], cwd=ROOT, text=True, capture_output=True)
+        assert result.returncode == 0, result.stdout + result.stderr

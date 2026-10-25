@@ -47,7 +47,9 @@ Complete per-run provenance is retained in the bundle rather than inferred from 
 
 \paragraph{External prerequisites for replay.}
 The Standard and SPS weights are native checkpoints external to the compact paper bundle.
-Full replay also requires the pinned token cache, the original environment and GPU implementation, and access to historical artifact paths or equivalent explicit replacements.
+Full replay requires the original environment and GPU implementation.
+The plan reconstructs the exact token cache from bundled IDs, trains the upstream ordinary-memory baselines, and links their fresh outputs under the historical diagnostic registry names.
+Rescue precedes its dependent gradient audit; checkpoints and cache paths are explicitly relocated.
 The texts are the 48 source-cache items selected by the launch registry, not a newly sampled evaluation set.
 The snapshot preserves the numerical evidence needed for the reported plots and matched statistics; it is not a substitute for model weights or an independently trained replication.
 
