@@ -25,10 +25,11 @@ and outcomes; design settings remain in Python.
 - [x] Implement the specialized trainer and evaluation; run the focused tests.
 - [x] Test disjoint shard launch and merge integrity; implement the registry,
   snapshot submission and merged paired comparison.
-- [ ] Verify the complete suite and real-checkpoint preflight, commit, then
+- [x] Verify the complete suite and real-checkpoint preflight, commit, then
   invoke a fresh portable adversarial review and address findings.
-- [ ] Submit the authorized shards, preserve full job IDs and register a new
-  durable wait. Merge, compare and plot when the group resolves.
+- [x] Submit the authorized shards, preserve full job IDs and register a new
+  durable wait.
+- [ ] Merge, compare and plot when the group resolves.
 
 **Review focus:** first position is z rather than 2z; each later input receives
 z exactly once; generation reconstructs raw token embeddings at each step;
