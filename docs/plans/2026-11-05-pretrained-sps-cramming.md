@@ -16,8 +16,13 @@ The ledger is `ROOT/operations/storage-return-20261106.json`.
 
 Versioned evidence and generated pretrained figures/tables are in `sps_paper/`;
 `pretrained.py` provides export, offline render/verification and an executable
-exact-cache/original-worker replay. The full article builds. All 63 focused
-checks passed. Current work is final independent review and commit/push; the
+exact-cache/original-worker replay. The full article builds. The author's 63
+focused checks and the independent reviewer's broader 89 checks passed.
+Independent adversarial review of
+`b83b8f0b091dede32562b7a6fde8e3c36c8e8698` returned `APPROVE`; all seven generated
+assets reproduce byte for byte and a fresh six-cohort export reproduces the
+versioned metrics exactly. The implementation and completion records are committed
+for publication on `feat/pretrained-sps-cramming`; the
 operational sections below retain the launch/storage history. Do not resubmit
 completed cohorts or register another wait for them. A later delivery of either
 CE/KD group's completion is already handled by this record.
@@ -63,7 +68,7 @@ wait for cleanup; do not autonomously relocate artifacts or requeue while full.
 - [x] After all cohort writers finish, return the remaining NFS1 artifacts to physical NFS2.
 - [x] Merge complete cohorts, compare within families, and plot results.
 - [x] Extend versioned article evidence/replay, regenerate assets, compile PDF.
-- [ ] Commit/push the final evidence and manuscript; verify applicable PR checks.
+- [x] Commit/push the final evidence and manuscript; record unavailable remote PR checks.
 
 Implementation and verification records, complete job UUIDs and measurements are
 in `experiments/pretrained_sps_cramming.md` and the external manifests. Source
