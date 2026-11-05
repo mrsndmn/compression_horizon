@@ -155,7 +155,7 @@ from the selected vector are distinct measurements. These are descriptive
 sample results and do not establish a statistically reliable advantage for KD
 over AR, a capacity ceiling, or the causal source of differences.
 
-### Active original SmolLM AR wave
+### Initial original SmolLM AR attempt: storage failure
 
 The source-registry launcher submitted the next wave from immutable snapshot
 `5cf15914950fa9bb349f7bba34080724f720c408`. Archived training fingerprints and all
@@ -170,9 +170,22 @@ shard payloads were verified. Full unique job identifiers in shard order:
 - `lm-mpi-job-be59b587-6c9c-4fb4-9f67-07003217c979`.
 - `lm-mpi-job-245742c7-30d9-4efc-aa61-b77f2d6adb1e`.
 
-New durable group `c6400159d2f24d47aada04e34758eb31`, key
-`pretrained-sps-smol-ar-9603ad849360-20261105`, observes this wave. The resolved
-Qwen group was not reused, and no completed Qwen shard was resubmitted.
+Durable group `c6400159d2f24d47aada04e34758eb31`, key
+`pretrained-sps-smol-ar-9603ad849360-20261105`, resolved on the first failed job.
+A later provider audit confirms all eight jobs failed and no shard completed.
+Every job log reports `OSError: [Errno 28] No space left on device` during
+TensorBoard writes. Shared NFS2 filled completely; this attempt provides no
+complete SmolLM cohort or valid comparison result.
+
+The series' artifact tree was copied to available shared NFS1. All copied files
+were checked by SHA-256 before switching the logical registry `ROOT` through a
+symlink. The physical tree is
+`/workspace-SR004.nfs1/d.tarasov/sps-artifacts/cramming_pretrained_20261105`.
+The migration manifest is `ROOT/operations/storage-migration-20261105.json`.
+All three complete Qwen cohorts passed the original auditor again after this
+move, reproducing the same metrics. Training code, data identities and code
+fingerprints remain unchanged. The failed SmolLM attempts are kept separately
+for diagnosis rather than counted as successful samples.
 
 ## Conclusions
 
@@ -210,3 +223,5 @@ teacher-forced horizon than original AR. Interpretation must preserve both metri
   audit its complete cohort and confirm raw-document pairing across all Qwen variants.
 - 2026-11-05: Submit original SmolLM AR and register a new durable group after
   verifying its complete job set and immutable source payloads.
+- 2026-11-05: Diagnose shared-storage exhaustion in every original SmolLM AR
+  shard; copy and checksum the series artifacts on NFS1 and re-audit all Qwen cohorts.

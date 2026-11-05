@@ -1,150 +1,99 @@
 # Pretrained SPS cramming
 
-The interactive interview accepted support/validation, matched original-AR
-comparisons, and reproducible integration into `sps_paper/`. The executable design
-is `scripts/pretrained_sps_experiments.py`. The interview record is local at
+The accepted interview covers four adapted checkpoints, matched original AR
+controls, and reproducible integration into `sps_paper/`. The sole executable
+experiment design is `scripts/pretrained_sps_experiments.py`; its settings must
+not be duplicated here. The interview record is local at
 `run/deep-interview/deep-interview-pretrained-sps-cramming.md`.
 
+## Tasks and current status
+
 - [x] Verify actual checkpoint families/revisions and existing BOS identities.
-- [x] Implement differentiable native-backbone SPS interface and reference tests.
+- [x] Implement differentiable native-backbone SPS interfaces and reference tests.
 - [x] Define immutable, deduplicated preflight/main launch routes and wave limits.
-- [x] Pass focused/full tests and independent review after addressing findings.
-- [x] Pass real-checkpoint GPU preflights (both complete; all six variants checked).
-- [ ] Submit/observe the successive main waves with durable Arkhip groups.
-- [ ] Audit/merge complete cohorts, compare within families and plot results.
-- [ ] Extend versioned article evidence/replay; regenerate assets and compile PDF.
-- [ ] Commit/push results and verify applicable PR checks.
+- [x] Pass focused/full checks and independent review after fixes.
+- [x] Complete both real-checkpoint GPU preflights; verify all six variants.
+- [x] Complete and audit original Qwen AR.
+- [x] Complete and audit Qwen SPS-CE.
+- [x] Complete and audit Qwen SPS-KD.
+- [x] Recover the artifact tree from full NFS2 and re-audit all Qwen cohorts.
+- [ ] Retry original SmolLM AR after the storage failure; audit its full cohort.
+- [ ] Submit/observe and audit SmolLM SPS-CE.
+- [ ] Submit/observe and audit SmolLM SPS-KD.
+- [ ] Merge complete cohorts, compare within families, and plot results.
+- [ ] Extend versioned article evidence/replay, regenerate assets, compile PDF.
+- [ ] Commit/push the final evidence and manuscript; verify applicable PR checks.
 
-Artifacts live outside this repository under the source registry's absolute
-`ROOT`. `data/` contains pinned raw texts and family-native IDs; `preflight/` and
-`runs/` are separated by code fingerprint; `code/` contains immutable Git snapshots.
-Each successful worker writes its completion marker only after validation.
+Implementation and verification records, complete job UUIDs and measurements are
+in `experiments/pretrained_sps_cramming.md` and the external manifests. Source
+training fingerprint remains
+`9603ad8493600a9e5577a3dad2d7abf28c2b2a41cfd241e3bfeb7f87bdcd5a4f`.
+The implementation passed 325 repository tests and independent review; the later
+cohort-auditor change passed 61 focused compatibility/replay tests and a fresh
+`APPROVE`. Storage recovery changes no model/trainer code or scientific settings.
 
-Run source modules with the existing project Python and `PYTHONPATH=src:.`:
+## Storage incident and completed recovery
+
+The initial SmolLM AR wave came from
+`5cf15914950fa9bb349f7bba34080724f720c408`. Durable group
+`c6400159d2f24d47aada04e34758eb31`, key
+`pretrained-sps-smol-ar-9603ad849360-20261105`, resolved on a failed job.
+Its other statuses were cached; a subsequent provider check confirmed all eight
+failed with no shard completion marker. Every log confirms `OSError: [Errno 28]
+No space left on device` during TensorBoard writes. NFS2 filled completely;
+inodes were available. Partial attempts are not valid cohort measurements.
+
+The series' artifact tree was copied to available shared NFS1, and every file
+was checked by SHA-256. The registry's logical `ROOT` now links through
+`/workspace-SR004.nfs1/d.tarasov/cramming` to
+`/workspace-SR004.nfs1/d.tarasov/sps-artifacts/cramming_pretrained_20261105`.
+The short intermediate link allowed switching when NFS2 had no free data blocks.
+The migration ledger is `ROOT/operations/storage-migration-20261105.json`.
+Original derived summaries whose provenance was refreshed by the round-trip
+audit are retained under `ROOT/operations/pre-migration-originals/`.
+
+All three Qwen audits passed again with unchanged metrics and fingerprints.
+Only verified duplicate copies of this series were removed from NFS2. The eight
+failed shard directories, original job records, provider statuses and failure
+logs are retained under
+`ROOT/failed_attempts/smol_ar/initial-20261105-enospc/`. Canonical SmolLM AR shard
+paths are ready for the normal-launcher retry. Input checkpoints remain at their
+original read paths. Unrelated datasets and checkpoints were not changed.
+
+## Execution and continuation
+
+Use the existing project Python and `PYTHONPATH=src:.`. The inherited HTTP proxy
+hangs on MLspace authentication; use `NO_PROXY=api.ai.cloud.ru` and
+`no_proxy=api.ai.cloud.ru` for launcher commands in this environment.
 
 ```sh
-python -m scripts.run_pretrained_sps_cramming --phase dry
-python -m scripts.run_pretrained_sps_cramming --phase dry --kind runs
-python -m scripts.run_pretrained_sps_cramming --phase prepare
-python -m scripts.run_pretrained_sps_cramming --phase preflight
-# Register returned complete job UUIDs with Arkhip job_wait.
-# After successful preflight completion, and after each main wave:
 python -m scripts.run_pretrained_sps_cramming --phase advance
-# Audit a complete model cohort before its comparison is published:
-python -m scripts.analyze_pretrained_sps --experiment qwen_ar
+# Register returned complete job UUIDs with a NEW Arkhip job_wait group.
+# After a wave successfully completes, audit its full cohort, for example:
+python -m scripts.analyze_pretrained_sps --experiment smol_ar
 ```
 
-`advance` submits the next incomplete model's shards; it cannot bypass missing
-preflights or duplicate recorded submissions. Do not run a local waiting shell.
-The final article update follows completed measurement, not submission status.
-The cohort auditor rejects incomplete/duplicate or inconsistent shard evidence
-and exports scalar per-text metrics without new model inference.
+`advance` submits only the next incomplete model's shards using immutable Git
+archives and deduplicated records. It cannot bypass preflights or the concurrency
+limit. On recovery, register a NEW group for the replacement jobs; do not include
+old failed IDs. After successful SmolLM AR audit, advance CE, then KD, auditing
+each complete wave. Never repeat completed Qwen cohorts or preflights, and do not
+keep a local dispatcher or a polling shell alive. A failure resolves its entire
+one-shot group; remaining/replacement jobs need new observation.
 
-## Current handoff
+## Final analysis and article
 
-Implementation snapshot: `4da4f0f1af82698888ba06ecda7fc5a8a282dacd`.
-Code fingerprint: `9603ad8493600a9e5577a3dad2d7abf28c2b2a41cfd241e3bfeb7f87bdcd5a4f`.
-Focused tests: 17 passed. Full repository: 325 passed. Full Ruff and both dry
-routes pass. Fresh independent review: APPROVE. The prepared cache checks both
-IDs and masks plus family/revision/design/raw-document identity. The earlier
-cache is preserved as `ROOT/data-schema1-before-review`; raw documents are equal.
+Wait for all requested cohorts before final paired plots and article integration.
+Preserve raw-document pairing and native-token identity within each family.
+Keep teacher-forced horizon separate from initial correct greedy generation of
+the selected vector; the latter is not a search for a maximal greedy horizon.
+Report stopping budgets and AR/SPS conditioning-site and initialization differences.
+Budget-limited lengths do not establish capacity ceilings or a causal explanation.
 
-Preflight jobs and the durable group are recorded in
-`experiments/pretrained_sps_cramming.md`. After the outcome, require both family
-completion markers and matching `preflight.json` fingerprints before running
-`--phase advance`. Register a new one-shot Arkhip group for the returned complete
-job UUIDs. On each main-wave completion, inspect completion evidence and advance
-the next registered model; never resubmit a completed shard. Once all model waves
-finish, the remaining implementation is the audited merger and article evidence,
-plots, tables and replay integration. Do not report submission as measurement.
+Bundle audited evidence with source/job/data provenance for offline replay, add
+paired figures/tables, extend article reproduction/checks, compile `sps_paper`,
+and commit/push the result. Do not report job submission as measurement.
 
-Branch `feat/pretrained-sps-cramming` is pushed. GitHub repository access and push
-work, but creating the PR was rejected with HTTP 403,
-`Resource not accessible by personal access token`; the credential helper has no
-alternative GitHub credential. Consequently no PR was created and server CI is
-unverified. Local checks above passed. No merge or unrelated branch update was
-attempted. This provider permission issue does not block the authorized MLS jobs.
-
-## Completed Qwen AR wave
-
-The preflight group resolved with both jobs completed; both output markers and
-fingerprints were audited. All six upstream-reference logit errors are zero.
-The bounded smoke calls did not converge within their short training budget and
-are not reported as reconstruction-capacity measurements.
-
-Original Qwen AR was submitted from snapshot
-`bde700240cac62d5b5e3d6fe1691da79930d136d`. Full shard IDs are recorded in the
-experiment Markdown and external job manifests. The source-vs-staged fingerprint
-and all submitted offsets, complete UUIDs and resource payloads were verified.
-Resolved durable group: `17b4d1437baf49d2b994784f35f02198`;
-key: `pretrained-sps-qwen-ar-9603ad849360-20261105`.
-
-Its successful outcome and complete saved sample set were audited below. Do not
-repeat either completed preflight or this completed model wave. Continue through
-all registered model waves before the final paired analysis and article integration.
-
-## Completed Qwen AR and SPS-CE audits
-
-The original Qwen AR durable group resolved with all jobs completed. Reusable
-`analyze_pretrained_sps` audits the full cohort against source revisions, code
-fingerprints/archives, family-native data identities, raw stages, registered
-budgets and exact saved target/generated IDs. Qwen AR results are recorded in
-`experiments/pretrained_sps_cramming.md` and external JSON/CSV. All texts exhausted
-the total budget. Teacher-forcing success does not imply exact greedy generation.
-
-Completed main wave: Qwen SPS-CE, submitted from
-`d30039f3c7ff19f1fd2b829b3f3c91c5e4732980`.
-Resolved durable group: `a5f9a4cc7568462c8450dea4bbc7f477`;
-key: `pretrained-sps-qwen-ce-9603ad849360-20261105`.
-The auditor with `--experiment qwen_ce` passed for all expected texts and saved
-stages; its JSON/CSV outputs are complete. A separate CSV check confirmed identical
-ordered document hashes across AR and CE. Both exhaust their total budgets;
-teacher-forced and greedy results are recorded separately in the experiment file.
-The completed Qwen SPS-KD audit is recorded below. The remaining paired analysis
-and article integration still wait for all requested cohorts.
-
-The cohort auditor and its stopping-boundary fixes passed 61 focused tests across
-analysis, pretrained-model compatibility and existing SPS-paper replay. A fresh
-independent adversarial review returned `APPROVE` after checking the real complete
-cohort, JSON/CSV consistency and refusal to export missing inputs. The committed
-auditor is `a95c70284a0b399b8ed8bef6e99f00ec61380651`; the training fingerprint
-remains unchanged. This verification performs no new inference or optimization.
-
-Operational note: the inherited HTTP proxy timed out before authentication when
-submitting the next wave. Direct verified TLS and HTTP to `api.ai.cloud.ru` work.
-Use the normal launcher with `NO_PROXY=api.ai.cloud.ru` in this environment. No
-job submission intents or job records were created by either failed auth attempt.
-
-## Completed Qwen SPS-KD wave and delivery recovery
-
-Direct API access succeeded. All registered Qwen SPS-KD shards were submitted
-from `545de7f9d3a399eb1b9c864197d3aa373b890642`; the complete job UUIDs are in
-the experiment file and external manifests. Their payloads, offsets, unique IDs,
-source commits and archived training fingerprints were audited.
-
-Resolved durable group: `4f8b9d015b874a51bc106086f8f5a4c6`;
-key: `pretrained-sps-qwen-kd-9603ad849360-20261105`.
-All jobs completed, but the automatic continuation delivery failed with
-`workspace routing discovery timed out`. The group-list check shows it as
-`blocked` with reason `all_finished`, and all eight jobs as `completed`. This is
-a delivery failure rather than a failed training run or an active observation.
-
-The resumed audit with `--experiment qwen_kd` passed for all 48 texts. A separate
-CSV recomputation verified horizon/generation metrics, budget stops and ordered
-raw-document hashes across all three Qwen variants. No Qwen cohort was repeated.
-
-## Active original SmolLM AR wave
-
-The launcher advanced to original SmolLM AR from immutable snapshot
-`5cf15914950fa9bb349f7bba34080724f720c408`. Every job's full UUID, registered
-offset, source commit and complete payload were verified against its manifest;
-the archived training fingerprint is unchanged. Full IDs are in the experiment
-file and external records.
-
-New active durable group: `c6400159d2f24d47aada04e34758eb31`;
-key: `pretrained-sps-smol-ar-9603ad849360-20261105`.
-On a successful outcome, audit `--experiment smol_ar`, then advance SmolLM CE
-using the normal launcher and proxy exception above. Register a NEW durable group
-for the returned complete job IDs. Do not repeat completed Qwen waves or either
-preflight. Full paired plots and article integration still require the remaining
-SmolLM cohorts.
+The branch is `feat/pretrained-sps-cramming`. Push works, but GitHub rejected PR
+creation with HTTP 403, `Resource not accessible by personal access token`.
+No PR was created and server CI is unverified. This does not block the MLS jobs.
