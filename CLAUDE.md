@@ -18,12 +18,16 @@ User instruction (2026-11-05): never relocate experiment artifacts to another
 volume on your own when jobs fail because storage is full. Wait for storage
 cleanup; do not requeue affected jobs while the storage condition remains.
 
-The already-running pretrained SmolLM AR retry may finish on NFS1. Once all its
-current jobs are terminal and no workers are writing this artifact tree, return
-the series artifacts to their original physical NFS2 location. This return is
-explicitly authorized. Verify the copy before switching paths or removing the
-NFS1 copy. If NFS2 has insufficient space, wait for cleanup. Complete this return
-before launching later model waves. Future relocation requires an explicit user
+The pretrained SmolLM AR retry may finish on NFS1. The user's subsequent request
+authorizes launching the remaining CE/KD cohorts immediately alongside AR,
+without waiting for its eight jobs or the storage return. Their new outputs and
+code archives go directly to NFS2 through `scripts.run_pretrained_sps_parallel.py`.
+Existing AR output paths stay in place while its workers write. Once every
+cohort's writers are terminal, consolidate the temporary NFS1 artifacts into the
+existing NFS2 tree and restore the original logical ROOT to physical NFS2. Verify
+the copy before switching paths or removing the NFS1 copy. Preserve CE/KD outputs
+already on NFS2; do not copy routing links onto their own targets. If space is
+insufficient, wait for cleanup. Future relocation requires an explicit user
 instruction; lack of space does not authorize it.
 
 # Project conventions
@@ -144,3 +148,4 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
 - `scripts/run_pretrained_sps_cramming.py --phase probe` → `pretrained_sps_worker.py` reference parity, token-only AR and shared-predict trainers.
 - `models.pretrained_sps.load_pretrained_sps/load_pretrained_tokenizer` → pinned Llama/Qwen3 backbones and strict adapted-state loading; `tests/test_pretrained_sps.py`.
 - `python -m scripts.analyze_pretrained_sps --experiment <name>` → completed-cohort raw-stage/target/provenance audit and JSON/CSV; `tests/test_pretrained_sps_analysis.py`.
+- `python -m scripts.run_pretrained_sps_parallel [--dry]` → concurrent remaining-cohort submission and NFS2 output routing; `tests/test_pretrained_sps_parallel.py`.

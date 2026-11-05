@@ -15,6 +15,8 @@ for original autoregressive controls. The sole experiment-design registry is
 `scripts.run_pretrained_sps_cramming`. Models, revisions, objectives, budgets,
 data selection, shard boundaries, initialization and compute resources live there.
 Completed model cohorts are audited by `scripts.analyze_pretrained_sps.audit_experiment`.
+The concurrent remaining-cohort submission entrypoint is
+`scripts.run_pretrained_sps_parallel`, which imports the same worker/design registry.
 
 ## Results
 
@@ -209,9 +211,11 @@ jobs. Original failed IDs are excluded from the new group.
 
 The user subsequently instructed that the series artifacts must return to NFS2
 once the current jobs finish. This return is pending; current writers retain
-NFS1 until all active jobs are terminal. Later waves must wait for the verified
-return and adequate NFS2 space. On future storage-exhaustion failures, wait for
-cleanup rather than autonomously relocating artifacts.
+NFS1 until all active jobs are terminal. The user's later instruction requests
+immediate parallel CE/KD launch; new outputs go directly to NFS2. Consolidation
+waits until all cohort writers finish and preserves those NFS2 outputs. On future
+storage-exhaustion failures, wait for cleanup rather than autonomously relocating
+artifacts.
 
 ## Conclusions
 
@@ -255,3 +259,5 @@ teacher-forced horizon than original AR. Interpretation must preserve both metri
   scientific protocol on recovered storage, and register a new durable group.
 - 2026-11-05: Record the user's storage policy: return current artifacts to
   NFS2 after the running jobs finish; wait for cleanup on future ENOSPC failures.
+- 2026-11-05: Add the requested concurrent remaining-cohort route with NFS2
+  output routing, immutable code staging, deduplication and unchanged worker design.

@@ -6,21 +6,28 @@ experiment design is `scripts/pretrained_sps_experiments.py`; its settings must
 not be duplicated here. The interview record is local at
 `run/deep-interview/deep-interview-pretrained-sps-cramming.md`.
 
-## User storage instruction: takes precedence
+## Latest user schedule and storage instructions
 
-User instruction (2026-11-05): after the current jobs finish, return the series
-artifacts to NFS2. Never autonomously relocate artifacts if a job fails due to
-lack of space; wait until storage is cleaned up. The current NFS1 location is
-temporary. No later model wave may start on NFS1 under the previous recovery plan.
+The user now requests immediate parallel launch of the remaining cohorts,
+without waiting for the active AR jobs. This supersedes the earlier requirement
+to return storage before launching later waves. Use
+`scripts.run_pretrained_sps_parallel.py` for the selected remaining variants;
+scientific model/data/training settings still come from the original registry.
 
-Wait until every job in the active SmolLM AR retry is terminal before changing
-its storage paths. Then copy the whole artifact tree back to physical NFS2,
-verify all file hashes and saved cohort evidence, and replace the logical ROOT
-symlink with the returned directory. Preserve the NFS1 source until the return
-is fully verified; only then remove the verified duplicate and temporary link.
-Check space on ROOT.parent, not ROOT (which currently resolves to NFS1). If
-space or writes are insufficient, leave the complete source intact and wait
-for cleanup; do not switch to a partial copy or use another volume as fallback.
+New CE/KD outputs and immutable source archives go directly to physical NFS2 at
+`ROOT.parent / (ROOT.name + "_nfs2")`; model and source-commit links in logical
+ROOT provide compatibility with the existing worker and auditor. AR continues
+writing its existing NFS1 paths. This launcher does not relocate existing data.
+The operational entrypoint records its own source SHA and Git commit separately
+from the unchanged scientific worker fingerprint.
+
+Keep all active output paths stable until every cohort's writers are terminal.
+Then consolidate temporary NFS1 artifacts into the already populated NFS2 tree,
+preserving CE/KD directories already there. Skip routing links whose targets are
+those directories; do not copy them onto their own targets. Verify all files and
+cohort audits before replacing logical ROOT with the consolidated physical NFS2
+directory and removing verified NFS1 duplicates. On any space-related failure,
+wait for cleanup; do not autonomously relocate artifacts or requeue while full.
 
 ## Tasks and current status
 
@@ -90,13 +97,20 @@ python -m scripts.run_pretrained_sps_cramming --phase advance
 python -m scripts.analyze_pretrained_sps --experiment smol_ar
 ```
 
-`advance` submits only the next incomplete model's shards using immutable Git
-archives and deduplicated records. It cannot bypass preflights or the concurrency
-limit. On recovery, register a NEW group for the replacement jobs; do not include
-old failed IDs. After successful SmolLM AR audit and verified return to NFS2,
-advance CE, then KD, auditing each complete wave. Never repeat completed Qwen cohorts or preflights, and do not
-keep a local dispatcher or a polling shell alive. A failure resolves its entire
-one-shot group; remaining/replacement jobs need new observation.
+`advance` is the historical sequential route. The new concurrent route is:
+
+```sh
+python -m scripts.run_pretrained_sps_parallel --dry
+python -m scripts.run_pretrained_sps_parallel
+```
+
+The new route reuses registered workers/resources, immutable snapshots,
+preflight gates and shard deduplication. It accounts for active suite jobs,
+checks NFS2 space, and never moves current AR data. Use independent durable groups
+for each submitted model. A failure resolves an entire one-shot group, so observe
+remaining/replacement jobs with a NEW group. Do not repeat completed Qwen cohorts
+or preflights, and do not keep a local dispatcher/polling shell alive. Once all
+remaining variants are submitted, do not call advance to submit another wave.
 
 ## Final analysis and article
 
@@ -124,11 +138,10 @@ output path was verified. Replacement IDs are disjoint from the failed attempt.
 
 Active durable group: `4ac4f9c8421a45309c365b1ecb2903a1`;
 key: `pretrained-sps-smol-ar-retry1-9603ad849360-20261105`.
-On completion, confirm all current jobs are terminal, audit `smol_ar` if its
-cohort is complete, and return the artifacts to NFS2 as instructed above. If
-NFS2 is still full, wait for cleanup before returning or submitting later waves.
-After the verified return, advance SmolLM CE using the normal launcher and proxy
-exception. Register a NEW group for newly submitted complete IDs. Preserve the
-failed-attempt archive and do not repeat completed Qwen/preflight jobs. On any
-new space-related failure, observe remaining jobs as needed and wait for cleanup
-instead of moving artifacts or immediately requeueing.
+On this group's outcome, audit `smol_ar` when complete and record its result.
+Other independently observed cohorts keep running. Do not change global ROOT
+or consolidate storage while any of the three model cohorts still has writers.
+The remaining CE/KD cohorts are submitted by the concurrent entrypoint above;
+record their complete job IDs and independent groups after successful submission.
+When all cohorts finish, consolidate storage as above, then finish the complete
+paired analysis and article. On new ENOSPC failures, wait for cleanup.
