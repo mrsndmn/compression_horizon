@@ -30,11 +30,15 @@ python -m scripts.run_pretrained_sps_cramming --phase preflight
 # Register returned complete job UUIDs with Arkhip job_wait.
 # After successful preflight completion, and after each main wave:
 python -m scripts.run_pretrained_sps_cramming --phase advance
+# Audit a complete model cohort before its comparison is published:
+python -m scripts.analyze_pretrained_sps --experiment qwen_ar
 ```
 
 `advance` submits the next incomplete model's shards; it cannot bypass missing
 preflights or duplicate recorded submissions. Do not run a local waiting shell.
 The final article update follows completed measurement, not submission status.
+The cohort auditor rejects incomplete/duplicate or inconsistent shard evidence
+and exports scalar per-text metrics without new model inference.
 
 ## Current handoff
 
@@ -80,3 +84,20 @@ validation evidence, then run `--phase advance` for the next model from the
 source registry and register a NEW durable group. Do not repeat either completed
 preflight. Continue through all registered model waves before the final paired
 analysis and article integration.
+
+## Qwen AR audit and active SPS-CE wave
+
+The original Qwen AR durable group resolved with all jobs completed. Reusable
+`analyze_pretrained_sps` audits the full cohort against source revisions, code
+fingerprints/archives, family-native data identities, raw stages, registered
+budgets and exact saved target/generated IDs. Qwen AR results are recorded in
+`experiments/pretrained_sps_cramming.md` and external JSON/CSV. All texts exhausted
+the total budget. Teacher-forcing success does not imply exact greedy generation.
+
+Current active main wave: Qwen SPS-CE, submitted from
+`d30039f3c7ff19f1fd2b829b3f3c91c5e4732980`.
+Durable group: `a5f9a4cc7568462c8450dea4bbc7f477`;
+key: `pretrained-sps-qwen-ce-9603ad849360-20261105`.
+On its successful outcome, run the auditor with `--experiment qwen_ce`, then
+advance the next model from the registry and register a NEW group. The remaining
+paired analysis and article integration still wait for all requested cohorts.

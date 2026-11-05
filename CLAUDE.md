@@ -129,3 +129,4 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
 - `scripts/run_pretrained_sps_cramming.py --phase preflight|advance` → immutable single-GPU snapshot/wave submission.
 - `scripts/run_pretrained_sps_cramming.py --phase probe` → `pretrained_sps_worker.py` reference parity, token-only AR and shared-predict trainers.
 - `models.pretrained_sps.load_pretrained_sps/load_pretrained_tokenizer` → pinned Llama/Qwen3 backbones and strict adapted-state loading; `tests/test_pretrained_sps.py`.
+- `python -m scripts.analyze_pretrained_sps --experiment <name>` → completed-cohort raw-stage/target/provenance audit and JSON/CSV; `tests/test_pretrained_sps_analysis.py`.

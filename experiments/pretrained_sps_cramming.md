@@ -14,6 +14,7 @@ for original autoregressive controls. The sole experiment-design registry is
 `scripts/pretrained_sps_experiments.py`; the launcher is
 `scripts.run_pretrained_sps_cramming`. Models, revisions, objectives, budgets,
 data selection, shard boundaries, initialization and compute resources live there.
+Completed model cohorts are audited by `scripts.analyze_pretrained_sps.audit_experiment`.
 
 ## Results
 
@@ -47,8 +48,7 @@ these calls are interface checks rather than compression-horizon measurements.
 The first main wave, original Qwen AR, was submitted from
 `bde700240cac62d5b5e3d6fe1691da79930d136d`. The immutable worker archive has the
 same code fingerprint as the successful preflights; payload audits verify unique
-jobs, disjoint registered offsets and single-GPU resources. Main results remain
-pending. Full job identifiers in shard order:
+jobs, disjoint registered offsets and single-GPU resources. The wave subsequently completed. Full job identifiers in shard order:
 
 - `lm-mpi-job-499954e3-2c15-4774-8a08-29814c8e5371`.
 - `lm-mpi-job-2379e738-ca1e-494c-a3e5-9ec951d1f339`.
@@ -60,7 +60,42 @@ pending. Full job identifiers in shard order:
 - `lm-mpi-job-6e3cc7af-1066-4c1d-9c1c-049620e71ee7`.
 
 Arkhip group `17b4d1437baf49d2b994784f35f02198`, key
-`pretrained-sps-qwen-ar-9603ad849360-20261105`, observes this main wave.
+`pretrained-sps-qwen-ar-9603ad849360-20261105`, resolved with all jobs completed.
+
+
+### Completed original Qwen AR cohort
+
+The reproducible raw-stage audit is
+`python -m scripts.analyze_pretrained_sps --experiment qwen_ar`.
+Its JSON/CSV outputs are under `ROOT/analysis/9603ad849360/qwen_ar/` and are
+regenerated from the complete original shards, native target cache and worker
+provenance. It reads no model weights and performs no optimization or inference.
+
+All 48 texts are present once. Mean teacher-forced horizon is 295.0625 tokens
+(median 302.5). Every selected prefix replays exactly under teacher forcing.
+Mean initial correct greedy prefix is 168.6667 tokens; exact generation of the
+selected prefix succeeds on 15/48 texts. These generation values refer to one
+selected vector per text and are not a search for a maximal greedy horizon.
+All 48 texts terminate at the total update budget; no capacity ceiling is
+established. Worker times range from 5524.35 to 6035.49 seconds per shard;
+they exclude scheduler waiting and container startup.
+
+The next main wave, Qwen SPS adapted with CE, was submitted from
+`d30039f3c7ff19f1fd2b829b3f3c91c5e4732980`. Its reconstruction objective is still
+the registered hinge; CE names the upstream adaptation recipe. Job identifiers:
+
+- `lm-mpi-job-e6fd1595-3e75-460f-a773-f753023108df`.
+- `lm-mpi-job-39b2deb4-192a-4bcf-a1fb-2b82460cfb77`.
+- `lm-mpi-job-87ecdfd0-7c83-4805-93aa-265896ea6cd9`.
+- `lm-mpi-job-2a410d40-0a0b-441c-8175-983340371d02`.
+- `lm-mpi-job-fa472ff8-e74f-4fbc-83fd-26b21887acfd`.
+- `lm-mpi-job-b1744259-0113-45ad-a020-1fa9db8c5d38`.
+- `lm-mpi-job-14acc8b7-94e8-4c5f-89b2-cbb1c5ffc0da`.
+- `lm-mpi-job-efdb9585-ad24-4f6b-9ffb-8dc2b4453cf6`.
+
+Arkhip group `a5f9a4cc7568462c8450dea4bbc7f477`, key
+`pretrained-sps-qwen-ce-9603ad849360-20261105`, observes this wave. No SPS-versus-AR
+comparison is reported before the matching SPS measurements are complete.
 
 ## Conclusions
 
@@ -80,3 +115,6 @@ Historical SmolLM CE results are separate from the new matched protocol.
 
 - 2026-11-05: Audit successful real-checkpoint preflights, submit the original
   Qwen AR main wave and register a new durable group for the complete shard set.
+
+- 2026-11-05: Complete and audit the original Qwen AR cohort; submit the Qwen
+  SPS-CE wave, register durable observation and add a reusable cohort auditor.
