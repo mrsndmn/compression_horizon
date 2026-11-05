@@ -33,9 +33,9 @@ Real-checkpoint preflights were submitted from
 
 Arkhip durable group `67041115a5ce4e1c8aca12e6e9d09f39`, key
 `pretrained-sps-preflight-9603ad849360-20261105`, resolved with both jobs completed. Artifacts
-are under the source registry's `ROOT`; each family preflight checks its original
-AR and both adapted variants. The main cohorts wait for successful preflight
-completion. No new reconstruction horizon is measured yet.
+are under the source registry's `ROOT`; each family preflight checked its original
+AR and both adapted variants. These preflights qualify the execution interface;
+they do not measure reconstruction horizons.
 
 Both real-checkpoint preflights completed successfully. For all six variants,
 logits match the pinned upstream reference exactly (maximum error zero); gradient
