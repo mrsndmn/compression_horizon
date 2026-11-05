@@ -99,3 +99,10 @@ key: `pretrained-sps-qwen-ce-9603ad849360-20261105`.
 On its successful outcome, run the auditor with `--experiment qwen_ce`, then
 advance the next model from the registry and register a NEW group. The remaining
 paired analysis and article integration still wait for all requested cohorts.
+
+The cohort auditor and its stopping-boundary fixes passed 61 focused tests across
+analysis, pretrained-model compatibility and existing SPS-paper replay. A fresh
+independent adversarial review returned `APPROVE` after checking the real complete
+cohort, JSON/CSV consistency and refusal to export missing inputs. The committed
+auditor is `a95c70284a0b399b8ed8bef6e99f00ec61380651`; the training fingerprint
+remains unchanged. This verification performs no new inference or optimization.
