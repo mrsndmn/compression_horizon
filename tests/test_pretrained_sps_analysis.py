@@ -88,6 +88,30 @@ def test_total_budget_and_margin_failure_are_separate_from_argmax_accuracy():
     assert result["horizon"] == 0 and result["teacher_exact"] and result["greedy_exact"]
 
 
+def test_successful_post_update_measurement_still_stops_at_stage_budget():
+    rows = raw_stages()
+    rows[-1]["final_convergence"] = 1.0
+    sample = dict(sample_record(ids=[2, 3, 4]), steps_taken=1002)
+    result = audit_sample(rows, sample, [2, 3, 4, 5], settings(), valid_length=4)
+    assert result["stop_reason"] == "stage_budget"
+    assert result["horizon"] == 3 and result["first_failed_length"] is None
+    assert result["teacher_exact"] and result["total_steps"] == 1002
+
+
+@pytest.mark.parametrize("budget", ["total", "stage"])
+def test_successful_measurements_cannot_continue_after_budget_exhaustion(budget):
+    rows = raw_stages()[:2]
+    cfg = settings()
+    if budget == "total":
+        cfg["max_optimization_steps_per_sample"] = 1
+        rows[-1]["steps_taken"] = 1
+    else:
+        cfg["max_optimization_steps_per_token"] = 1
+    sample = dict(sample_record(), steps_taken=rows[-1]["steps_taken"])
+    with pytest.raises(ValueError, match="Unexpected stages after budget exhaustion"):
+        audit_sample(rows, sample, [2, 3, 4], cfg, valid_length=3)
+
+
 @pytest.fixture(params=["ar", "ce"])
 def cohort(tmp_path, monkeypatch, request):
     from datasets import Dataset

@@ -118,3 +118,6 @@ Historical SmolLM CE results are separate from the new matched protocol.
 
 - 2026-11-05: Complete and audit the original Qwen AR cohort; submit the Qwen
   SPS-CE wave, register durable observation and add a reusable cohort auditor.
+- 2026-11-05: Address independent-review findings in the cohort auditor: recognize
+  successful final measurements at a stage limit and reject continuation after
+  either stopping budget. Training code and completed measurements are unchanged.

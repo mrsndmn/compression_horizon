@@ -89,6 +89,11 @@ def audit_sample(stages, sample, target_ids, settings, *, valid_length):
             and updates <= settings["max_optimization_steps_per_sample"]
         ):
             raise ValueError("Stage update counters violate the registered budget")
+        if index != len(stages) - 1 and (
+            updates == settings["max_optimization_steps_per_sample"]
+            or updates - previous == settings["max_optimization_steps_per_token"]
+        ):
+            raise ValueError("Unexpected stages after budget exhaustion")
         previous = updates
         if not 0 <= stage["final_convergence"] <= 1:
             raise ValueError("Invalid convergence value")
@@ -118,10 +123,12 @@ def audit_sample(stages, sample, target_ids, settings, *, valid_length):
     terminal_delta = terminal["steps_taken"] - (stages[-2]["steps_taken"] if len(stages) > 1 else 0)
     if terminal["steps_taken"] == settings["max_optimization_steps_per_sample"]:
         stop = "total_budget"
-    elif terminal["final_convergence"] < terminal["convergence_threshold"]:
-        if terminal_delta != settings["max_optimization_steps_per_token"]:
-            raise ValueError("Failed terminal stage did not consume its stage budget")
+    elif terminal_delta == settings["max_optimization_steps_per_token"]:
+        # The trainer remeasures after the last update without updating its
+        # convergence state. Even a successful final measurement stops here.
         stop = "stage_budget"
+    elif terminal["final_convergence"] < terminal["convergence_threshold"]:
+        raise ValueError("Failed terminal stage did not consume its stage budget")
     elif terminal["num_input_tokens"] == valid_length:
         stop = "sequence_cap" if valid_length == settings["max_sequence_length"] else "document_end"
     else:

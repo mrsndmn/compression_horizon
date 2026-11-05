@@ -65,25 +65,23 @@ alternative GitHub credential. Consequently no PR was created and server CI is
 unverified. Local checks above passed. No merge or unrelated branch update was
 attempted. This provider permission issue does not block the authorized MLS jobs.
 
-## Active main wave
+## Completed Qwen AR wave
 
 The preflight group resolved with both jobs completed; both output markers and
 fingerprints were audited. All six upstream-reference logit errors are zero.
 The bounded smoke calls did not converge within their short training budget and
 are not reported as reconstruction-capacity measurements.
 
-Original Qwen AR is now submitted from snapshot
+Original Qwen AR was submitted from snapshot
 `bde700240cac62d5b5e3d6fe1691da79930d136d`. Full shard IDs are recorded in the
 experiment Markdown and external job manifests. The source-vs-staged fingerprint
 and all submitted offsets, complete UUIDs and resource payloads were verified.
-Active durable group: `17b4d1437baf49d2b994784f35f02198`;
+Resolved durable group: `17b4d1437baf49d2b994784f35f02198`;
 key: `pretrained-sps-qwen-ar-9603ad849360-20261105`.
 
-On its successful outcome, audit the complete expected sample set and saved
-validation evidence, then run `--phase advance` for the next model from the
-source registry and register a NEW durable group. Do not repeat either completed
-preflight. Continue through all registered model waves before the final paired
-analysis and article integration.
+Its successful outcome and complete saved sample set were audited below. Do not
+repeat either completed preflight or this completed model wave. Continue through
+all registered model waves before the final paired analysis and article integration.
 
 ## Qwen AR audit and active SPS-CE wave
 
