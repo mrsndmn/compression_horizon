@@ -114,3 +114,18 @@ Operational note: the inherited HTTP proxy timed out before authentication when
 submitting the next wave. Direct verified TLS and HTTP to `api.ai.cloud.ru` work.
 Use the normal launcher with `NO_PROXY=api.ai.cloud.ru` in this environment. No
 job submission intents or job records were created by either failed auth attempt.
+
+## Active Qwen SPS-KD wave
+
+Direct API access succeeded. All registered Qwen SPS-KD shards were submitted
+from `545de7f9d3a399eb1b9c864197d3aa373b890642`; the complete job UUIDs are in
+the experiment file and external manifests. Their payloads, offsets, unique IDs,
+source commits and archived training fingerprints were audited.
+
+Active durable group: `4f8b9d015b874a51bc106086f8f5a4c6`;
+key: `pretrained-sps-qwen-kd-9603ad849360-20261105`.
+On successful outcome, audit `--experiment qwen_kd`, then use the normal launcher
+with the proxy exception above to advance to original SmolLM AR. Register a NEW
+durable group for the returned jobs. Do not repeat either completed Qwen cohort
+or the preflights. Full paired plots and article integration remain pending the
+complete registered comparison.

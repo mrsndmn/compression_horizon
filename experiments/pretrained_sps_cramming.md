@@ -116,6 +116,26 @@ over all saved vectors for a maximal greedy horizon. No capacity ceiling or
 cause of the gap is established by these budget-limited measurements. KD and
 the complete SmolLM comparison are pending.
 
+### Active Qwen SPS-KD wave
+
+The next registered wave was submitted from immutable source snapshot
+`545de7f9d3a399eb1b9c864197d3aa373b890642`. The training fingerprint is unchanged;
+archived code, shard payloads and unique complete job identifiers were verified.
+As with CE, KD names the upstream adaptation recipe; cramming uses the registered
+reconstruction objective. Full identifiers in shard order:
+
+- `lm-mpi-job-1ac096ce-c31d-46eb-b115-1292896d9a35`.
+- `lm-mpi-job-3b7052a5-4f73-4334-bf0d-baa279b81406`.
+- `lm-mpi-job-aae1a841-5915-4136-9a6c-fd718f1e7735`.
+- `lm-mpi-job-eed0aa92-2a7c-4546-84a9-06077f4058d6`.
+- `lm-mpi-job-a4eea671-b642-4144-bc3e-7192ec1f813c`.
+- `lm-mpi-job-afa48859-262a-4836-948c-10a4fb7188d0`.
+- `lm-mpi-job-96d750ec-4260-4310-a3da-e03651a9cea0`.
+- `lm-mpi-job-b9086c1c-2fac-4752-8226-d34701196517`.
+
+Arkhip group `4f8b9d015b874a51bc106086f8f5a4c6`, key
+`pretrained-sps-qwen-kd-9603ad849360-20261105`, observes this wave.
+
 ## Conclusions
 
 Compare variants within each tokenizer family. Original autoregressive controls
@@ -144,3 +164,5 @@ registered protocol, including its distinct conditioning site and initialization
   either stopping budget. Training code and completed measurements are unchanged.
 - 2026-11-05: Audit the complete Qwen SPS-CE cohort and verify paired raw texts
   against original Qwen AR; record teacher-forced and greedy measurements separately.
+- 2026-11-05: Submit the Qwen SPS-KD wave after resolving a local proxy timeout;
+  verify all archived payloads and register a new durable group.
