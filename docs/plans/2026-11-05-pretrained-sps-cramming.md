@@ -6,6 +6,22 @@ experiment design is `scripts/pretrained_sps_experiments.py`; its settings must
 not be duplicated here. The interview record is local at
 `run/deep-interview/deep-interview-pretrained-sps-cramming.md`.
 
+## Completion status (2026-11-06)
+
+All six requested cohorts completed and passed the original raw-stage auditor,
+including a complete re-audit after the storage return. The original registry
+ROOT is once again a physical NFS2 directory; the `_nfs2` path is a compatibility
+link for archived job payloads. Verified NFS1 duplicates have been removed.
+The ledger is `ROOT/operations/storage-return-20261106.json`.
+
+Versioned evidence and generated pretrained figures/tables are in `sps_paper/`;
+`pretrained.py` provides export, offline render/verification and an executable
+exact-cache/original-worker replay. The full article builds. All 63 focused
+checks passed. Current work is final independent review and commit/push; the
+operational sections below retain the launch/storage history. Do not resubmit
+completed cohorts or register another wait for them. A later delivery of either
+CE/KD group's completion is already handled by this record.
+
 ## Latest user schedule and storage instructions
 
 The user now requests immediate parallel launch of the remaining cohorts,
@@ -42,11 +58,11 @@ wait for cleanup; do not autonomously relocate artifacts or requeue while full.
 - [x] Recover the artifact tree from full NFS2 and re-audit all Qwen cohorts.
 - [x] Retry original SmolLM AR after the storage failure; audit its full cohort.
 - [x] Submit SmolLM SPS-CE and SPS-KD concurrently on NFS2; register independent durable groups.
-- [ ] Audit the full SmolLM SPS-CE cohort when its group completes.
-- [ ] Audit the full SmolLM SPS-KD cohort when its group completes.
-- [ ] After all cohort writers finish, return the remaining NFS1 artifacts to physical NFS2.
-- [ ] Merge complete cohorts, compare within families, and plot results.
-- [ ] Extend versioned article evidence/replay, regenerate assets, compile PDF.
+- [x] Audit the full SmolLM SPS-CE cohort when its group completes.
+- [x] Audit the full SmolLM SPS-KD cohort when its group completes.
+- [x] After all cohort writers finish, return the remaining NFS1 artifacts to physical NFS2.
+- [x] Merge complete cohorts, compare within families, and plot results.
+- [x] Extend versioned article evidence/replay, regenerate assets, compile PDF.
 - [ ] Commit/push the final evidence and manuscript; verify applicable PR checks.
 
 Implementation and verification records, complete job UUIDs and measurements are
@@ -132,7 +148,7 @@ The branch is `feat/pretrained-sps-cramming`. Push works, but GitHub rejected PR
 creation with HTTP 403, `Resource not accessible by personal access token`.
 No PR was created and server CI is unverified. This does not block the MLS jobs.
 
-## Completed SmolLM AR retry and active concurrent cohorts
+## Completed SmolLM cohorts (durable group history)
 
 All replacement shards were submitted from
 `41e9014e3c1a62f83b87453175b7d568ee073850`; complete job UUIDs are in the experiment
@@ -155,11 +171,8 @@ are recorded in `experiments/pretrained_sps_cramming.md`.
 - SPS-KD group: `dcb94f77dd7d4e4eb6d335e6e2ee1186`;
   key: `pretrained-sps-smol-kd-parallel-9603ad849360-20261105`.
 
-On each group's successful outcome, audit its complete cohort and record the
-result; other independently observed cohorts keep running. Do not call either
-launcher to submit another wave. A failure resolves only its one-shot group;
-register a NEW group for remaining jobs as needed. On new ENOSPC failures, wait
-for cleanup and keep paths fixed. Do not change global ROOT or consolidate
-storage while either remaining cohort still has writers. Once all cohorts
-finish, consolidate storage as above, then finish the complete paired analysis
-and article.
+Both groups resolved successfully; their complete cohorts were audited and
+incorporated in the portable evidence and article. No requested jobs remain.
+Later delivery of these resolved outcomes needs no repeated actions. The storage
+return is complete as recorded above. On future ENOSPC failures, wait for cleanup
+and preserve existing paths rather than autonomously moving artifacts.

@@ -149,3 +149,4 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
 - `models.pretrained_sps.load_pretrained_sps/load_pretrained_tokenizer` → pinned Llama/Qwen3 backbones and strict adapted-state loading; `tests/test_pretrained_sps.py`.
 - `python -m scripts.analyze_pretrained_sps --experiment <name>` → completed-cohort raw-stage/target/provenance audit and JSON/CSV; `tests/test_pretrained_sps_analysis.py`.
 - `python -m scripts.run_pretrained_sps_parallel [--dry]` → concurrent remaining-cohort submission and NFS2 output routing; `tests/test_pretrained_sps_parallel.py`.
+- `sps_paper/pretrained.py export|render|verify|plan|restore-data|replay` → audited pretrained evidence, offline assets and original-worker GPU replay; `tests/test_pretrained_sps_paper.py`.

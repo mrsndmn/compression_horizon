@@ -218,22 +218,21 @@ Mean initial correct greedy prefix is 164.6667 tokens; exact greedy generation
 of the selected prefix succeeds on 22/48 texts. All texts exhaust the total
 update budget. Worker times range from 3528.66 to 3678.41 seconds per shard,
 excluding scheduling and startup. These results do not establish a capacity
-ceiling. The complete matched SmolLM SPS comparison is pending.
+ceiling. The subsequently completed SmolLM SPS cohorts are described below.
 
 The user subsequently instructed that the series artifacts must return to NFS2
-once the current jobs finish. This return is pending; current writers retain
-NFS1 until all active jobs are terminal. The user's later instruction requests
+once the current jobs finish. Writers retained
+NFS1 until all active jobs were terminal. The user's later instruction requested
 immediate parallel CE/KD launch; new outputs go directly to NFS2. Consolidation
-waits until all cohort writers finish and preserves those NFS2 outputs. On future
+waited until all cohort writers finished and preserved those NFS2 outputs. On future
 storage-exhaustion failures, wait for cleanup rather than autonomously relocating
 artifacts.
 
 ### Concurrent SmolLM SPS-CE and SPS-KD cohorts
 
 At the user's request, both remaining cohorts were submitted together without
-waiting for AR. All sixteen jobs were accepted and their first durable status
-checks report running. This is submission evidence; their complete measurements
-are pending. Source snapshot: `cd9e30a06422f49577faf995765a6e399e7c3e11`.
+waiting for AR. All sixteen jobs were accepted, first reported running and later
+completed successfully. Source snapshot: `cd9e30a06422f49577faf995765a6e399e7c3e11`.
 The operational entrypoint SHA-256 is
 `b9078524ede908b6c584b6816049b84640e111e89e9fdbe5ba38f7b4e2df2adb`;
 the scientific worker fingerprint remains unchanged.
@@ -258,7 +257,7 @@ Full job identifiers follow in shard order.
 - `lm-mpi-job-03830a50-8ed7-46c0-9fad-4c427d59931d`.
 
 Durable group `ecc357182d434b07b1b6fe682efbe85a`, key
-`pretrained-sps-smol-ce-parallel-9603ad849360-20261105`, independently observes this cohort.
+`pretrained-sps-smol-ce-parallel-9603ad849360-20261105`, resolved with all jobs completed.
 
 #### SmolLM SPS-KD
 
@@ -272,8 +271,48 @@ Durable group `ecc357182d434b07b1b6fe682efbe85a`, key
 - `lm-mpi-job-9ce4fb8e-58d1-4a91-a6d8-2995de6effc9`.
 
 Durable group `dcb94f77dd7d4e4eb6d335e6e2ee1186`, key
-`pretrained-sps-smol-kd-parallel-9603ad849360-20261105`, independently observes this cohort.
+`pretrained-sps-smol-kd-parallel-9603ad849360-20261105`, resolved with all jobs completed.
 
+### Completed SmolLM SPS cohorts
+
+Both full-cohort raw-stage audits pass. All selected prefixes replay exactly
+under teacher forcing. SPS-CE has mean horizon 330.4583 tokens (median 331),
+mean initial correct greedy prefix 159.3125, and 11/48 exact selected greedy
+prefixes. SPS-KD has mean horizon 337.9792 (median 336), mean greedy prefix
+198.125, and 20/48 exact selected greedy prefixes. Worker times are
+3664.36--4134.00 seconds per CE shard and 3716.86--4098.29 per KD shard,
+excluding scheduling and startup. Every text exhausts its total update budget.
+
+Against original SmolLM AR, paired mean teacher-forced gains are 73.7917
+tokens for CE (95% text-bootstrap interval 64.9792--81.6042) and 81.3125 for KD
+(73.25--89.5833). Greedy-prefix paired intervals include zero for both;
+the positive KD point estimate does not establish a resolved generation gain.
+The raw-document hashes/order agree across all six variants and native target
+IDs/masks agree within each family. Cross-family token counts are not a common
+information measure.
+
+### NFS2 return and portable article evidence
+
+After provider evidence confirmed every cohort's jobs terminal, remaining NFS1
+artifacts were copied into the existing NFS2 tree. SHA-256 checks verified 4,131
+regular files (3,685,308,390 bytes); the three known routing links were skipped
+while preserving their existing NFS2 targets. The original logical `ROOT` is now
+a physical directory on NFS2. The previous `_nfs2` path remains a compatibility
+link to it for archived payloads. All six original raw-stage audits passed again
+after switching paths. Verified NFS1 duplicate files and their temporary short
+alias were removed only after a second checksum comparison. The complete ledger
+is `ROOT/operations/storage-return-20261106.json`. No unrelated artifacts moved.
+
+`sps_paper/pretrained.py` exports compact measured evidence, recomputes offline
+metrics/pairing/stopping and generates the new tables/figures. Its executable
+replay plan restores exact native token caches, stages the original worker
+commits, runs preflights and invokes their training functions using source
+settings. It does not submit jobs. The versioned evidence includes all 288 text
+measurements and full source/job identities. The article now includes the
+pretrained comparison separately from the pilot mechanism evidence. Focused
+compatibility, offline render, cache restoration and replay-dispatch checks pass
+(63 tests); the complete article PDF builds successfully. Fresh full GPU replay
+is not claimed.
 
 ## Conclusions
 
@@ -285,6 +324,11 @@ The completed Qwen CE/AR comparison currently favors original AR under the
 registered protocol, including its distinct conditioning site and initialization.
 KD narrows the observed greedy-generation gap while retaining a lower
 teacher-forced horizon than original AR. Interpretation must preserve both metrics.
+SmolLM has a clear teacher-forced improvement under both SPS adaptation recipes,
+which does not generalize to Qwen or establish a free-generation gain. Every
+pretrained text is total-budget limited, so these measurements cannot determine
+a representational ceiling or isolate the effects of decoupling from adaptation,
+insertion site and initialization.
 
 ## Changelog
 
@@ -323,3 +367,8 @@ teacher-forced horizon than original AR. Interpretation must preserve both metri
   records and physical NFS2 paths, and register independent durable CE/KD groups.
 - 2026-11-05: Audit the completed replacement SmolLM AR cohort; retain its
   artifact paths until all remaining cohort writers finish and storage is consolidated.
+- 2026-11-06: Audit both complete SmolLM SPS cohorts and verify six-way raw-text
+  pairing plus within-family native IDs. Return all remaining artifacts to NFS2
+  with checksum verification, repeat all audits, then remove verified duplicates.
+- 2026-11-06: Add portable pretrained evidence, offline figures/paired statistics,
+  exact-cache/original-worker replay and the completed comparison to `sps_paper`.

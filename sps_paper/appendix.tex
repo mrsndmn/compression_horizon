@@ -61,6 +61,33 @@ Shard merges require each registered sample exactly once, complete stage progres
 For the fixed-trajectory comparison, saved vectors, cumulative counters, and convergence agree exactly with the original control for all 6,342 stages ending before its budget boundary.
 These checks concern consistency and provenance of completed measurements, not independent repetition over seeds.
 
+\section{Pretrained Follow-up Evidence and Replay}
+\label{app:pretrained}
+
+The additional design registry is \path{scripts/pretrained_sps_experiments.py};
+\path{scripts/pretrained_sps_worker.py} implements native-backbone shared-prediction and original-AR training.
+The adapter is \path{src/compression_horizon/models/pretrained_sps.py}, with the pinned upstream implementation vendored beside it.
+Real-checkpoint preflights check all three variants in each family.
+Full-cohort export first invokes the original raw-stage auditor, \path{scripts/analyze_pretrained_sps.py}, before writing \path{data/pretrained.json.gz} and \path{data/pretrained_manifest.json}.
+The snapshot contains raw-document hashes/texts, both native token caches with attention masks, selected teacher/greedy token measurements, scalar stage records, and complete job/source provenance.
+Optimized vectors and checkpoint weights remain external.
+
+\path{sps_paper/pretrained.py} recomputes the compact snapshot's stage/selection consistency, target identities, stopping reasons and paired statistics offline.
+Its \texttt{render} command generates the pretrained tables, figures and \path{data/pretrained_metrics.json}; the standard article build includes this step.
+Its \texttt{plan} command prints an executable serial replay without submitting jobs.
+The replay restores the exact bundled native caches rather than retokenizing, archives the original worker commits from Git, runs their family preflights, and invokes the original \texttt{train\_shard} with filesystem paths relocated to fresh output and external checkpoint roots.
+Training settings are imported from each archived registry rather than retyped into the replay script.
+Replay requires original weights, pinned HF snapshots, suitable GPU resources and the archived dependencies; rebuilding the publication assets requires none of them.
+CPU checks cover cache restoration, dispatch and offline reconstruction, not a second full GPU optimization of all six cohorts.
+
+\begin{table*}[t]
+ \centering
+ \small
+ \input{tables/pretrained_paired}
+ \caption{Pretrained paired differences on the same raw texts within each native-tokenizer family. Percentile 95\% intervals resample paired texts at fixed checkpoints and optimization seed. They do not represent independent training-seed uncertainty or matched-length greedy reliability.}
+ \label{tab:pretrained-paired}
+\end{table*}
+
 \section{Metrics, Pairing, and Arithmetic}
 \label{app:metrics}
 

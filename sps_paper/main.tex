@@ -45,6 +45,7 @@ Cross-entropy also benefits, from 19.42 to 64.17 tokens, and random initializati
 The vector is reused at every prediction position, so equal parameter count does not equate the conditioning interfaces.
 An extended-budget control that preserves the original learning-rate trajectory reaches 133.85 tokens and stops on a local stage limit in every text; stretching the schedule instead reaches 79.42.
 Older ordinary-memory interventions reveal context-mediated and direct prediction routes, while local rescues demonstrate that some failed prefixes remain feasible.
+An additional pretrained-model study finds longer shared-prediction teacher-forced prefixes than original AR in SmolLM2-1.7B, but shorter ones in Qwen3-1.7B-Base; all of these runs exhaust their total update budget.
 These findings establish a large conditioning-site effect in one checkpoint, while leaving architecture attribution, a global capacity ceiling, and guaranteed exact free generation unresolved.
 \end{abstract}
 
@@ -347,6 +348,60 @@ A constrained margin controller also recovers all four in FP32, with only one pa
 The three original-precision successes disprove infeasibility at those selected original stopping points.
 They do not establish a new progressive horizon, remove the overall Standard--SPS gap, or transfer automatically to shared-prediction failures.
 
+\section{Pretrained Adaptations: The Effect Depends on the Model}
+\label{sec:pretrained}
+
+We extend the measurement protocol to original AR, SPS-CE and SPS-KD variants of Qwen3-1.7B-Base and SmolLM2-1.7B.
+Here CE and KD label upstream SPS adaptation recipes; all six cramming arms use the same strict squared-margin objective.
+Each learns one 2,048-dimensional input vector per text, with frozen model weights and output heads.
+SPS replaces its shared prediction input, initialized from the checkpoint's native prediction vector, while its first ordinary input is the vocabulary's existing BOS.
+The AR control uses an ordinary memory prefix with the registered random initialization.
+These arms therefore compare complete conditioning protocols rather than architecture alone.
+
+This follow-up uses the same 48 raw documents across all six arms, retokenized once with each family's pinned native tokenizer.
+Its cohort is separate from the earlier GPT-2-tokenized pilot experiments.
+We compare token lengths within each family, without interpreting cross-tokenizer lengths as a common information measure.
+The pretrained SPS adapter reproduces its upstream interleaving and visibility mask: ordinary states cannot read prediction keys, and only the current prediction key is visible.
+Its prediction rotary index is one greater than its paired ordinary index, unlike the equal-index native pilot convention in \cref{sec:sps}.
+Both real-checkpoint preflights matched their upstream logits exactly and passed gradient and ordinary-history checks before the main runs.
+
+\begin{table*}[t]
+ \centering
+ \small
+ \input{tables/pretrained_results}
+ \caption{Audited pretrained follow-up, with 48 texts per row and equal-text means. Teacher replay is exact for every selected vector. Greedy exact counts score each arm's own selected prefix, rather than a common length. All 288 texts exhaust the total update budget. CE/KD describe adaptation, not the cramming loss.}
+ \label{tab:pretrained}
+\end{table*}
+
+\begin{figure*}[t]
+ \centering
+ \includegraphics[width=0.9\textwidth]{pretrained_horizons.pdf}
+ \caption{Pretrained teacher-forced horizons. Error bars are percentile 95\% bootstrap intervals over the fixed text cohort. SmolLM shared prediction exceeds its original AR control under this protocol; Qwen does not. Equal learned dimension does not equal computational access, initialization or learned weights.}
+ \label{fig:pretrained}
+\end{figure*}
+
+For SmolLM, original AR achieves mean $H=256.67$; SPS-CE reaches $330.46$ and SPS-KD $337.98$ (\cref{tab:pretrained,fig:pretrained}).
+The corresponding greedy prefixes are $164.67$, $159.31$ and $198.13$.
+Thus CE's longer teacher-forced reconstruction does not produce a longer mean correct generated prefix from the selected vectors.
+Qwen has the opposite teacher-forced ordering: original AR reaches $295.06$, versus $280.02$ for SPS-CE and $275.10$ for SPS-KD.
+Its greedy means are $168.67$, $106.96$ and $171.75$.
+Qwen KD's greedy point estimate is close to AR despite its shorter teacher-forced horizon; this is not an architecture-wide advantage.
+Both SmolLM teacher-forced paired gain intervals exclude zero, whereas the Qwen CE horizon interval includes zero.
+The SmolLM KD greedy gain interval also includes zero; we do not claim a resolved free-generation improvement (\cref{tab:pretrained-paired}).
+
+Every follow-up text uses the entire registered total update budget, unlike the pilot fixed-trajectory extension's per-stage stopping.
+These data therefore establish neither saturation nor a representational ceiling for the pretrained models.
+They show that the shared-prediction protocol's advantage over original AR depends on the checkpoint family and metric, and that decoupling alone does not guarantee a better achieved length.
+The learned weights, adaptation recipe, insertion site and initialization remain joint differences between AR and SPS.
+The compact evidence retains per-text paired differences, all stage counters, native target IDs and full job/source provenance; \cref{app:pretrained} describes its replay.
+
+\begin{figure*}[t]
+ \centering
+ \includegraphics[width=0.9\textwidth]{pretrained_greedy.pdf}
+ \caption{Initial correct greedy prefixes of the selected teacher-forced vectors, with text-bootstrap 95\% intervals. These measurements are not a search across saved vectors for the maximal greedily feasible horizon.}
+ \label{fig:pretrained-greedy}
+\end{figure*}
+
 \section{Discussion and Limitations}
 \label{sec:discussion}
 
@@ -364,7 +419,7 @@ None is an architecture-only or parameter-count-only capacity experiment.
 Repeated intervention sites and SPS's interleaved forward computation also prevent an efficiency claim based only on learned scalar count.
 The comparisons do not match FLOPs or wall-clock time; SPS doubles the internal positions relative to its ordinary input sequence.
 
-The evidence is restricted to one checkpoint of each type, 48 matched texts, and one optimization seed.
+The native mechanism evidence is restricted to one checkpoint of each type, 48 matched texts, and one optimization seed; the pretrained follow-up adds one checkpoint per adaptation recipe in each of two families.
 Bootstrap intervals quantify text variation only; initialization and schedule comparisons are selected finite experiments rather than a resolved optimum.
 The native/random comparison supports similar achieved lengths within uncertainty, not initialization invariance in general.
 Local route and geometry measurements describe their selected states, not all solutions.
