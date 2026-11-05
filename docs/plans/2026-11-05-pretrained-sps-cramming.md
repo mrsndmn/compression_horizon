@@ -40,10 +40,11 @@ wait for cleanup; do not autonomously relocate artifacts or requeue while full.
 - [x] Complete and audit Qwen SPS-CE.
 - [x] Complete and audit Qwen SPS-KD.
 - [x] Recover the artifact tree from full NFS2 and re-audit all Qwen cohorts.
-- [ ] Retry original SmolLM AR after the storage failure; audit its full cohort.
-- [ ] After current jobs finish, return the artifact tree to physical NFS2.
-- [ ] Submit/observe and audit SmolLM SPS-CE on NFS2.
-- [ ] Submit/observe and audit SmolLM SPS-KD.
+- [x] Retry original SmolLM AR after the storage failure; audit its full cohort.
+- [x] Submit SmolLM SPS-CE and SPS-KD concurrently on NFS2; register independent durable groups.
+- [ ] Audit the full SmolLM SPS-CE cohort when its group completes.
+- [ ] Audit the full SmolLM SPS-KD cohort when its group completes.
+- [ ] After all cohort writers finish, return the remaining NFS1 artifacts to physical NFS2.
 - [ ] Merge complete cohorts, compare within families, and plot results.
 - [ ] Extend versioned article evidence/replay, regenerate assets, compile PDF.
 - [ ] Commit/push the final evidence and manuscript; verify applicable PR checks.
@@ -55,6 +56,8 @@ training fingerprint remains
 The implementation passed 325 repository tests and independent review; the later
 cohort-auditor change passed 61 focused compatibility/replay tests and a fresh
 `APPROVE`. Storage recovery changes no model/trainer code or scientific settings.
+The concurrent operational route passed 54 focused tests and fresh independent
+adversarial review (`APPROVE`), with the scientific fingerprint unchanged.
 
 ## Storage incident and completed recovery
 
@@ -129,19 +132,34 @@ The branch is `feat/pretrained-sps-cramming`. Push works, but GitHub rejected PR
 creation with HTTP 403, `Resource not accessible by personal access token`.
 No PR was created and server CI is unverified. This does not block the MLS jobs.
 
-## Active SmolLM AR retry
+## Completed SmolLM AR retry and active concurrent cohorts
 
 All replacement shards were submitted from
 `41e9014e3c1a62f83b87453175b7d568ee073850`; complete job UUIDs are in the experiment
 file and external manifests. Every payload, offset, source archive and physical
 output path was verified. Replacement IDs are disjoint from the failed attempt.
 
-Active durable group: `4ac4f9c8421a45309c365b1ecb2903a1`;
+Resolved durable group: `4ac4f9c8421a45309c365b1ecb2903a1`;
 key: `pretrained-sps-smol-ar-retry1-9603ad849360-20261105`.
-On this group's outcome, audit `smol_ar` when complete and record its result.
-Other independently observed cohorts keep running. Do not change global ROOT
-or consolidate storage while any of the three model cohorts still has writers.
-The remaining CE/KD cohorts are submitted by the concurrent entrypoint above;
-record their complete job IDs and independent groups after successful submission.
-When all cohorts finish, consolidate storage as above, then finish the complete
-paired analysis and article. On new ENOSPC failures, wait for cleanup.
+All replacement jobs completed and the full `smol_ar` audit passed; results are
+recorded in the experiment document. A later delivery of this group's outcome
+needs no repeat audit or submission.
+
+Both remaining cohorts have already been submitted from immutable source
+`cd9e30a06422f49577faf995765a6e399e7c3e11` by the concurrent entrypoint.
+Full job identifiers, payload verification and the physical submission manifest
+are recorded in `experiments/pretrained_sps_cramming.md`.
+
+- SPS-CE group: `ecc357182d434b07b1b6fe682efbe85a`;
+  key: `pretrained-sps-smol-ce-parallel-9603ad849360-20261105`.
+- SPS-KD group: `dcb94f77dd7d4e4eb6d335e6e2ee1186`;
+  key: `pretrained-sps-smol-kd-parallel-9603ad849360-20261105`.
+
+On each group's successful outcome, audit its complete cohort and record the
+result; other independently observed cohorts keep running. Do not call either
+launcher to submit another wave. A failure resolves only its one-shot group;
+register a NEW group for remaining jobs as needed. On new ENOSPC failures, wait
+for cleanup and keep paths fixed. Do not change global ROOT or consolidate
+storage while either remaining cohort still has writers. Once all cohorts
+finish, consolidate storage as above, then finish the complete paired analysis
+and article.

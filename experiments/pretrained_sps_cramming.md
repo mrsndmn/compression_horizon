@@ -189,7 +189,7 @@ move, reproducing the same metrics. Training code, data identities and code
 fingerprints remain unchanged. The failed SmolLM attempts are kept separately
 for diagnosis rather than counted as successful samples.
 
-### Active original SmolLM AR retry
+### Completed original SmolLM AR retry
 
 After archiving every failed attempt, the normal launcher submitted a replacement
 wave from `41e9014e3c1a62f83b87453175b7d568ee073850`. Each canonical shard output
@@ -209,6 +209,17 @@ New durable group `4ac4f9c8421a45309c365b1ecb2903a1`, key
 `pretrained-sps-smol-ar-retry1-9603ad849360-20261105`, observes these replacement
 jobs. Original failed IDs are excluded from the new group.
 
+All eight replacements subsequently completed, resolving this group with
+`all_finished`. `python -m scripts.analyze_pretrained_sps --experiment smol_ar`
+passes on all 48 unique texts; its JSON/CSV outputs are under
+`ROOT/analysis/9603ad849360/smol_ar/`. Mean teacher-forced horizon is 256.6667
+tokens (median 248.5), with exact teacher-forced replay for all selected prefixes.
+Mean initial correct greedy prefix is 164.6667 tokens; exact greedy generation
+of the selected prefix succeeds on 22/48 texts. All texts exhaust the total
+update budget. Worker times range from 3528.66 to 3678.41 seconds per shard,
+excluding scheduling and startup. These results do not establish a capacity
+ceiling. The complete matched SmolLM SPS comparison is pending.
+
 The user subsequently instructed that the series artifacts must return to NFS2
 once the current jobs finish. This return is pending; current writers retain
 NFS1 until all active jobs are terminal. The user's later instruction requests
@@ -216,6 +227,53 @@ immediate parallel CE/KD launch; new outputs go directly to NFS2. Consolidation
 waits until all cohort writers finish and preserves those NFS2 outputs. On future
 storage-exhaustion failures, wait for cleanup rather than autonomously relocating
 artifacts.
+
+### Concurrent SmolLM SPS-CE and SPS-KD cohorts
+
+At the user's request, both remaining cohorts were submitted together without
+waiting for AR. All sixteen jobs were accepted and their first durable status
+checks report running. This is submission evidence; their complete measurements
+are pending. Source snapshot: `cd9e30a06422f49577faf995765a6e399e7c3e11`.
+The operational entrypoint SHA-256 is
+`b9078524ede908b6c584b6816049b84640e111e89e9fdbe5ba38f7b4e2df2adb`;
+the scientific worker fingerprint remains unchanged.
+
+New outputs and source archives resolve directly to physical NFS2:
+`/mnt/virtual_ai0001053-00054_SR004-nfs2/d.tarasov/sps-artifacts/cramming_pretrained_20261105_nfs2`.
+The submission manifest is `latest-parallel.json` in that directory. All full
+job IDs, registered offsets, source archives and payloads were verified; existing
+AR output paths were preserved on NFS1. The concurrent route passed 54 focused
+tests, formatting/lint checks and fresh independent adversarial review (`APPROVE`).
+Full job identifiers follow in shard order.
+
+#### SmolLM SPS-CE
+
+- `lm-mpi-job-96f276d4-075b-41c0-9d83-25b66f66a48b`.
+- `lm-mpi-job-d62821aa-7832-475c-a1bf-1e21be5a55cf`.
+- `lm-mpi-job-0f01f442-abab-4bb2-b458-1456ab16ff68`.
+- `lm-mpi-job-f97dd297-510b-41f9-b9a8-98151dbbcf70`.
+- `lm-mpi-job-f312a5ac-a030-42bb-b72e-5b538de4cc45`.
+- `lm-mpi-job-709024b5-d5a1-49af-8f63-dce286a61aad`.
+- `lm-mpi-job-a44d0162-d3c3-4469-9fe1-081e05ae9a31`.
+- `lm-mpi-job-03830a50-8ed7-46c0-9fad-4c427d59931d`.
+
+Durable group `ecc357182d434b07b1b6fe682efbe85a`, key
+`pretrained-sps-smol-ce-parallel-9603ad849360-20261105`, independently observes this cohort.
+
+#### SmolLM SPS-KD
+
+- `lm-mpi-job-13bf892a-dd6b-46cc-a5c7-4239345f20f5`.
+- `lm-mpi-job-1cca5b72-cc19-4fb8-90b9-daa6f31ffde0`.
+- `lm-mpi-job-f4838e64-70e1-4372-bb28-0aec9e5e3e6e`.
+- `lm-mpi-job-ee0903e0-4ee5-4eda-94fd-afa4f806bfa8`.
+- `lm-mpi-job-a7c83cff-c294-4724-9cb2-d9b118d0144a`.
+- `lm-mpi-job-3c70d589-e619-4690-82f2-d65ac5e6567b`.
+- `lm-mpi-job-8805c830-927d-4cf2-b39f-2171d0350242`.
+- `lm-mpi-job-9ce4fb8e-58d1-4a91-a6d8-2995de6effc9`.
+
+Durable group `dcb94f77dd7d4e4eb6d335e6e2ee1186`, key
+`pretrained-sps-smol-kd-parallel-9603ad849360-20261105`, independently observes this cohort.
+
 
 ## Conclusions
 
@@ -261,3 +319,7 @@ teacher-forced horizon than original AR. Interpretation must preserve both metri
   NFS2 after the running jobs finish; wait for cleanup on future ENOSPC failures.
 - 2026-11-05: Add the requested concurrent remaining-cohort route with NFS2
   output routing, immutable code staging, deduplication and unchanged worker design.
+- 2026-11-05: Submit both remaining SmolLM SPS cohorts, verify all sixteen job
+  records and physical NFS2 paths, and register independent durable CE/KD groups.
+- 2026-11-05: Audit the completed replacement SmolLM AR cohort; retain its
+  artifact paths until all remaining cohort writers finish and storage is consolidated.
