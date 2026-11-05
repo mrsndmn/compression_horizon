@@ -113,12 +113,12 @@ teacher-forced tokens on average than original Qwen AR (5.10% lower), and its
 initial correct greedy prefix is 61.7083 tokens shorter (36.59% lower). The latter
 scores generation from the selected teacher-forced vector; it is not a search
 over all saved vectors for a maximal greedy horizon. No capacity ceiling or
-cause of the gap is established by these budget-limited measurements. KD and
-the complete SmolLM comparison are pending.
+cause of the gap is established by these budget-limited measurements. The
+complete SmolLM comparison is pending.
 
-### Active Qwen SPS-KD wave
+### Completed Qwen SPS-KD cohort
 
-The next registered wave was submitted from immutable source snapshot
+The Qwen SPS-KD wave was submitted from immutable source snapshot
 `545de7f9d3a399eb1b9c864197d3aa373b890642`. The training fingerprint is unchanged;
 archived code, shard payloads and unique complete job identifiers were verified.
 As with CE, KD names the upstream adaptation recipe; cramming uses the registered
@@ -134,7 +134,45 @@ reconstruction objective. Full identifiers in shard order:
 - `lm-mpi-job-b9086c1c-2fac-4752-8226-d34701196517`.
 
 Arkhip group `4f8b9d015b874a51bc106086f8f5a4c6`, key
-`pretrained-sps-qwen-kd-9603ad849360-20261105`, observes this wave.
+`pretrained-sps-qwen-kd-9603ad849360-20261105`, resolved with all jobs completed.
+Its automatic continuation failed during event delivery with
+`workspace routing discovery timed out`; this was a delivery error rather than
+a failed training job. Processing resumed following the user's group-status check.
+
+`python -m scripts.analyze_pretrained_sps --experiment qwen_kd` passes for the
+complete cohort. All 48 sample identities and ordered document hashes match
+both other Qwen variants. Mean teacher-forced horizon is 275.1042 tokens (median
+273), with exact teacher-forced replay for all selected prefixes. Mean initial
+correct greedy prefix is 171.75 tokens, and exact greedy generation succeeds on
+16/48 selected prefixes. Every text exhausts the total update budget. Worker
+times range from 6299.28 to 6644.08 seconds per shard, excluding scheduling and
+container startup.
+
+KD has a lower mean teacher-forced horizon than both original AR and SPS-CE,
+while its mean initial greedy prefix is close to original AR and above SPS-CE.
+The different rankings reinforce that teacher-forced horizon and free generation
+from the selected vector are distinct measurements. These are descriptive
+sample results and do not establish a statistically reliable advantage for KD
+over AR, a capacity ceiling, or the causal source of differences.
+
+### Active original SmolLM AR wave
+
+The source-registry launcher submitted the next wave from immutable snapshot
+`5cf15914950fa9bb349f7bba34080724f720c408`. Archived training fingerprints and all
+shard payloads were verified. Full unique job identifiers in shard order:
+
+- `lm-mpi-job-3cc121d3-68e3-4767-a880-66fc3f0cf4ca`.
+- `lm-mpi-job-fde88bb5-a046-4300-ad0c-351cccdfc415`.
+- `lm-mpi-job-e1d60b8e-8a7d-4da7-8d4a-b69bf53fb526`.
+- `lm-mpi-job-17ea846b-657f-4624-b2d6-41d0d87270cf`.
+- `lm-mpi-job-f2b4ab1c-d175-4d0e-9930-cd15d7a9c0f8`.
+- `lm-mpi-job-b42f44cd-be5a-461c-b31e-7a9b03cddf91`.
+- `lm-mpi-job-be59b587-6c9c-4fb4-9f67-07003217c979`.
+- `lm-mpi-job-245742c7-30d9-4efc-aa61-b77f2d6adb1e`.
+
+New durable group `c6400159d2f24d47aada04e34758eb31`, key
+`pretrained-sps-smol-ar-9603ad849360-20261105`, observes this wave. The resolved
+Qwen group was not reused, and no completed Qwen shard was resubmitted.
 
 ## Conclusions
 
@@ -144,6 +182,8 @@ alone cannot isolate architecture, adaptation or a universal capacity limit.
 Historical SmolLM CE results are separate from the new matched protocol.
 The completed Qwen CE/AR comparison currently favors original AR under the
 registered protocol, including its distinct conditioning site and initialization.
+KD narrows the observed greedy-generation gap while retaining a lower
+teacher-forced horizon than original AR. Interpretation must preserve both metrics.
 
 ## Changelog
 
@@ -166,3 +206,7 @@ registered protocol, including its distinct conditioning site and initialization
   against original Qwen AR; record teacher-forced and greedy measurements separately.
 - 2026-11-05: Submit the Qwen SPS-KD wave after resolving a local proxy timeout;
   verify all archived payloads and register a new durable group.
+- 2026-11-05: Recover continuation after the Qwen KD event-delivery error;
+  audit its complete cohort and confirm raw-document pairing across all Qwen variants.
+- 2026-11-05: Submit original SmolLM AR and register a new durable group after
+  verifying its complete job set and immutable source payloads.

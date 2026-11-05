@@ -100,8 +100,8 @@ The auditor with `--experiment qwen_ce` passed for all expected texts and saved
 stages; its JSON/CSV outputs are complete. A separate CSV check confirmed identical
 ordered document hashes across AR and CE. Both exhaust their total budgets;
 teacher-forced and greedy results are recorded separately in the experiment file.
-The next registered model is Qwen SPS-KD. The remaining paired analysis and
-article integration still wait for all requested cohorts.
+The completed Qwen SPS-KD audit is recorded below. The remaining paired analysis
+and article integration still wait for all requested cohorts.
 
 The cohort auditor and its stopping-boundary fixes passed 61 focused tests across
 analysis, pretrained-model compatibility and existing SPS-paper replay. A fresh
@@ -115,17 +115,36 @@ submitting the next wave. Direct verified TLS and HTTP to `api.ai.cloud.ru` work
 Use the normal launcher with `NO_PROXY=api.ai.cloud.ru` in this environment. No
 job submission intents or job records were created by either failed auth attempt.
 
-## Active Qwen SPS-KD wave
+## Completed Qwen SPS-KD wave and delivery recovery
 
 Direct API access succeeded. All registered Qwen SPS-KD shards were submitted
 from `545de7f9d3a399eb1b9c864197d3aa373b890642`; the complete job UUIDs are in
 the experiment file and external manifests. Their payloads, offsets, unique IDs,
 source commits and archived training fingerprints were audited.
 
-Active durable group: `4f8b9d015b874a51bc106086f8f5a4c6`;
+Resolved durable group: `4f8b9d015b874a51bc106086f8f5a4c6`;
 key: `pretrained-sps-qwen-kd-9603ad849360-20261105`.
-On successful outcome, audit `--experiment qwen_kd`, then use the normal launcher
-with the proxy exception above to advance to original SmolLM AR. Register a NEW
-durable group for the returned jobs. Do not repeat either completed Qwen cohort
-or the preflights. Full paired plots and article integration remain pending the
-complete registered comparison.
+All jobs completed, but the automatic continuation delivery failed with
+`workspace routing discovery timed out`. The group-list check shows it as
+`blocked` with reason `all_finished`, and all eight jobs as `completed`. This is
+a delivery failure rather than a failed training run or an active observation.
+
+The resumed audit with `--experiment qwen_kd` passed for all 48 texts. A separate
+CSV recomputation verified horizon/generation metrics, budget stops and ordered
+raw-document hashes across all three Qwen variants. No Qwen cohort was repeated.
+
+## Active original SmolLM AR wave
+
+The launcher advanced to original SmolLM AR from immutable snapshot
+`5cf15914950fa9bb349f7bba34080724f720c408`. Every job's full UUID, registered
+offset, source commit and complete payload were verified against its manifest;
+the archived training fingerprint is unchanged. Full IDs are in the experiment
+file and external records.
+
+New active durable group: `c6400159d2f24d47aada04e34758eb31`;
+key: `pretrained-sps-smol-ar-9603ad849360-20261105`.
+On a successful outcome, audit `--experiment smol_ar`, then advance SmolLM CE
+using the normal launcher and proxy exception above. Register a NEW durable group
+for the returned complete job IDs. Do not repeat completed Qwen waves or either
+preflight. Full paired plots and article integration still require the remaining
+SmolLM cohorts.
