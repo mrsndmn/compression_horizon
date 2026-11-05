@@ -129,3 +129,13 @@ All experiment selection, model paths, hyperparameters and job settings remain
 in the original training/diagnostic Python source. The replay manifest records
 historical provenance. Add new experiments to source before exporting their
 completed evidence; do not edit generated tables or invent new results here.
+
+## Pretrained SPS follow-up (measurement pending)
+
+The new pretrained Qwen3/SmolLM2 CE/KD comparison is defined by
+`scripts/pretrained_sps_experiments.py`, with execution/replay steps in
+`docs/plans/2026-11-05-pretrained-sps-cramming.md`. It uses the native source
+tokenizers and a separate pretrained adapter; historical GPT-2 cohort token IDs
+are not inputs for these models. Its measurements have not yet been added to the
+versioned evidence or manuscript. Export/asset integration follows the completed,
+audited cohorts and must preserve the historical evidence routes above.

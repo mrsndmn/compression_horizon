@@ -77,3 +77,18 @@ The published reproducibility repository (FusionBrainLab/progressive_cramming). 
 the renamed `progressive_cramming` package, README, LICENSE, and the existing
 presentation deck. Distinct from the internal `compression_horizon` research repo.
 _Avoid:_ "compression_horizon" when referring to the public artifact.
+
+## Shared Prediction Embedding
+One per-text learnable vector reused as the input to every SPS prediction slot,
+while ordinary context-token embeddings and model weights remain fixed.
+_Avoid:_ "first-position memory" (a different conditioning site), "trained output row".
+
+## Teacher-Forced Horizon
+The longest prefix that satisfies the registered reconstruction criterion during
+Progressive Cramming when each prediction receives the correct preceding tokens.
+_Avoid:_ "lossless generation length", "model capacity" (neither is established by this measurement).
+
+## Initial Correct Greedy Prefix
+The number of consecutive correct target tokens before the first mismatch in
+greedy generation from the selected memory embedding, without supplying target history.
+_Avoid:_ "maximal greedy horizon" (which would require comparing more than the selected vector).
