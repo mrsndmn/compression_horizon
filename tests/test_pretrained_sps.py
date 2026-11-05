@@ -132,6 +132,8 @@ def test_progressive_worker_trainer_save_offset_and_freeze(tmp_path, monkeypatch
     )
     row = load_from_disk(trainer.train())[0]
     assert row["sample_id"] == 6
+    assert (tmp_path / "embeddings/embedding_sample_6_stage_0.pt").exists()
+    assert (tmp_path / "embeddings/initialization_embedding_sample_6_stage_0.pt").exists()
     if sps:
         assert row["embedding_role"] == "shared_predict"
         torch.testing.assert_close(torch.tensor(row["initialization_embedding"]), original["prediction"][None])
@@ -196,3 +198,54 @@ def test_uncertain_submission_is_not_retried(monkeypatch, tmp_path):
     (output / "submission-intent.json").write_text("{}")
     with pytest.raises(RuntimeError, match="uncertain"):
         launcher.submit_one("preflight", "qwen", 0, None, {}, set())
+
+
+def test_untracked_source_rejected_before_snapshot_submission(monkeypatch):
+    from scripts import run_pretrained_sps_cramming as launcher
+
+    monkeypatch.setattr(
+        launcher.subprocess, "check_output", lambda args, **kw: b"src/ignored_or_untracked.py\0" if "ls-files" in args else b""
+    )
+    with pytest.raises(RuntimeError, match="untracked source Python"):
+        launcher.submit("preflight")
+
+
+@pytest.mark.parametrize("corruption", ["source", "revision", "design", "mask"])
+def test_prepared_data_identity_and_mask_integrity(monkeypatch, tmp_path, corruption):
+    import hashlib
+
+    from datasets import Dataset
+    from scripts import pretrained_sps_worker as worker
+
+    monkeypatch.setattr(worker, "ROOT", tmp_path)
+    monkeypatch.setattr(worker, "COHORT", 2)
+    monkeypatch.setitem(worker.TRAINING_ARGS, "max_sequence_length", 3)
+    exp = worker.experiment_configs[0]
+    dest = tmp_path / "data"
+    data = dict(input_ids=[[1, 2, 3], [4, 5, 6]], attention_mask=[[1, 1, 1], [1, 1, 1]])
+    raw = [dict(sample_id=i, text=str(i), sha256=hashlib.sha256(str(i).encode()).hexdigest()) for i in range(2)]
+    manifest = dict(
+        source=exp["source"],
+        revision=exp["revision"],
+        targets_sha256=worker.target_digest(data),
+        document_hashes=[r["sha256"] for r in raw],
+    )
+    worker.write_json(dest / "design.json", worker.data_design())
+    worker.write_json(dest / "raw.json", raw)
+    worker.write_json(dest / (exp["family"] + ".json"), manifest)
+    Dataset.from_dict(data).save_to_disk(str(dest / exp["family"]))
+    (dest / "completed").touch()
+    assert len(worker.validate_data(exp)[0]) == 2
+    if corruption in {"source", "revision"}:
+        manifest[corruption] = "incompatible"
+        worker.write_json(dest / (exp["family"] + ".json"), manifest)
+    elif corruption == "design":
+        design = worker.data_design()
+        design["sequence_cap"] += 1
+        worker.write_json(dest / "design.json", design)
+    else:
+        (dest / exp["family"]).rename(dest / "old-cache")
+        data["attention_mask"][0][-1] = 0
+        Dataset.from_dict(data).save_to_disk(str(dest / exp["family"]))
+    with pytest.raises(ValueError):
+        worker.validate_data(exp)

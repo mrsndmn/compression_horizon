@@ -115,6 +115,9 @@ def submit_one(kind, name, offset, client, options, active):
 def submit(phase):
     if subprocess.check_output(["git", "diff", "HEAD", "--"], cwd=REPO):
         raise RuntimeError("Commit tracked changes before launching immutable code")
+    untracked = subprocess.check_output(["git", "ls-files", "--others", "-z", "--", "src"], cwd=REPO)
+    if any(p.endswith(b".py") for p in untracked.split(b"\0")):
+        raise RuntimeError("Commit or move untracked source Python files before snapshot submission")
     if not (ROOT / "data/completed").exists():
         raise RuntimeError("Prepare the pinned model-native data first")
     if phase == "preflight":

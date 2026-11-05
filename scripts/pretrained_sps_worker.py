@@ -2,6 +2,7 @@
 
 import gc
 import hashlib
+import json
 import os
 import time
 from pathlib import Path
@@ -38,11 +39,16 @@ class TokenOnlyTrainer(ProgressiveCrammingTrainer):
             raise ValueError("This worker supports token-only reconstruction")
         return ()
 
-    def _collect_stage_rows(self, *args, **kwargs):
-        rows = super()._collect_stage_rows(*args, **kwargs)
-        for row in rows:
-            row["sample_id"] += self.args.offset_dataset_items or 0
-        return rows
+    def _collect_stage_rows(self, batch_ctx, stage_ctx, ctx, state, last_loss, last_convergence, sample_id_counter):
+        return super()._collect_stage_rows(
+            batch_ctx,
+            stage_ctx,
+            ctx,
+            state,
+            last_loss,
+            last_convergence,
+            sample_id_counter + (self.args.offset_dataset_items or 0),
+        )
 
 
 class PretrainedPredictTrainer(PredictEmbeddingTrainer, TokenOnlyTrainer):
@@ -63,18 +69,54 @@ def model_and_tokenizer(exp, dtype=torch.bfloat16):
     return model, tokenizer
 
 
-def prepare_data():
-    """Pin raw texts once, then family-native targets once, outside snapshots."""
-    dest = ROOT / "data"
-    design = dict(
+def data_design():
+    return dict(
+        schema=2,
         cohort=COHORT,
         sequence_cap=TRAINING_ARGS["max_sequence_length"],
         dataset=TRAINING_ARGS["dataset_name"],
         sources={e["family"]: [e["source"], e["revision"]] for e in experiment_configs},
     )
+
+
+def target_digest(data):
+    payload = {key: list(data[key]) for key in ("input_ids", "attention_mask")}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def validate_data(exp, *, require_complete=True):
+    dest = ROOT / "data"
+    if require_complete and not (dest / "completed").exists():
+        raise ValueError("Prepared data completion marker missing")
+    if read_json(dest / "design.json") != data_design():
+        raise ValueError("Prepared data design does not match the source registry")
+    manifest = read_json(dest / (exp["family"] + ".json"))
+    if [manifest["source"], manifest["revision"]] != [exp["source"], exp["revision"]]:
+        raise ValueError("Prepared data source/revision does not match the source registry")
+    raw = read_json(dest / "raw.json")
+    if (
+        [r["sample_id"] for r in raw] != list(range(COHORT))
+        or [r["sha256"] for r in raw] != manifest["document_hashes"]
+        or any(hashlib.sha256(r["text"].encode()).hexdigest() != r["sha256"] for r in raw)
+    ):
+        raise ValueError("Prepared document identities do not match")
+    data = load_from_disk(str(dest / exp["family"]))
+    if len(data) != COHORT or any(
+        len(row[key]) != TRAINING_ARGS["max_sequence_length"] for row in data for key in ("input_ids", "attention_mask")
+    ):
+        raise ValueError("Prepared data cohort/sequence length mismatch")
+    if target_digest(data) != manifest["targets_sha256"]:
+        raise ValueError("Pinned targets or attention masks changed after preparation")
+    return data, manifest
+
+
+def prepare_data():
+    """Pin raw texts once, then family-native targets once, outside snapshots."""
+    dest = ROOT / "data"
+    design = data_design()
     if (dest / "completed").exists():
-        if read_json(dest / "design.json") != design:
-            raise ValueError("Prepared data does not match the source registry")
+        for exp in experiment_configs:
+            validate_data(exp)
         return
     if dest.exists():
         raise RuntimeError("Partial data preparation exists; inspect before retry")
@@ -103,10 +145,12 @@ def prepare_data():
             dict(
                 source=exp["source"],
                 revision=exp["revision"],
-                targets_sha256=hashlib.sha256(str(encoded["input_ids"]).encode()).hexdigest(),
+                targets_sha256=target_digest(encoded),
                 document_hashes=[r["sha256"] for r in cohorts],
             ),
         )
+    for exp in experiment_configs:
+        validate_data(exp, require_complete=False)
     (dest / "completed").touch()
 
 
@@ -127,12 +171,9 @@ def train_shard(exp, offset, count, output, *, smoke=False):
             max_optimization_steps_per_token=PREFLIGHT["steps"],
             warmup_steps=0,
         )
+    data, data_manifest = validate_data(exp)
     model, tokenizer = model_and_tokenizer(exp)
     bos = existing_bos(model, tokenizer)
-    data = load_from_disk(str(ROOT / "data" / exp["family"]))
-    data_manifest = read_json(ROOT / "data" / (exp["family"] + ".json"))
-    if hashlib.sha256(str(list(data["input_ids"])).encode()).hexdigest() != data_manifest["targets_sha256"]:
-        raise ValueError("Pinned target cache changed after preparation")
     data = data.select(range(offset, offset + count))
     if smoke:
         data = Dataset.from_dict({k: [row[k][: PREFLIGHT["tokens"]] for row in data] for k in ("input_ids", "attention_mask")})
@@ -193,11 +234,10 @@ def train_shard(exp, offset, count, output, *, smoke=False):
 
 def parity(exp):
     """Reference input-ID logits/gradients and independent ordinary-history scoring."""
+    data, _ = validate_data(exp)
     model, tokenizer = model_and_tokenizer(exp)
     model.cuda()
-    ids = torch.tensor(
-        load_from_disk(str(ROOT / "data" / exp["family"]))[0]["input_ids"][: PREFLIGHT["tokens"]], device="cuda"
-    )[None]
+    ids = torch.tensor(data[0]["input_ids"][: PREFLIGHT["tokens"]], device="cuda")[None]
     x = model.get_input_embeddings()(ids).detach().requires_grad_(True)
     z = model.prediction.detach().view(1, 1, -1).clone().requires_grad_(True)
     actual = model(inputs_embeds=x, **(dict(predict_embeddings=z) if model.sps else {})).logits
