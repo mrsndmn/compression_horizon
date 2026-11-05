@@ -207,6 +207,12 @@ New durable group `4ac4f9c8421a45309c365b1ecb2903a1`, key
 `pretrained-sps-smol-ar-retry1-9603ad849360-20261105`, observes these replacement
 jobs. Original failed IDs are excluded from the new group.
 
+The user subsequently instructed that the series artifacts must return to NFS2
+once the current jobs finish. This return is pending; current writers retain
+NFS1 until all active jobs are terminal. Later waves must wait for the verified
+return and adequate NFS2 space. On future storage-exhaustion failures, wait for
+cleanup rather than autonomously relocating artifacts.
+
 ## Conclusions
 
 Compare variants within each tokenizer family. Original autoregressive controls
@@ -247,3 +253,5 @@ teacher-forced horizon than original AR. Interpretation must preserve both metri
   shard; copy and checksum the series artifacts on NFS1 and re-audit all Qwen cohorts.
 - 2026-11-05: Archive all failed attempts, requeue SmolLM AR with the same
   scientific protocol on recovered storage, and register a new durable group.
+- 2026-11-05: Record the user's storage policy: return current artifacts to
+  NFS2 after the running jobs finish; wait for cleanup on future ENOSPC failures.

@@ -12,6 +12,20 @@ and native initialization only. Run the matched cohort as independent single-GPU
 shards with batch one, then merge the complete cohort; legacy CE/random registries
 remain for provenance and reproduction, not the current launch plan.
 
+# Artifact storage policy
+
+User instruction (2026-11-05): never relocate experiment artifacts to another
+volume on your own when jobs fail because storage is full. Wait for storage
+cleanup; do not requeue affected jobs while the storage condition remains.
+
+The already-running pretrained SmolLM AR retry may finish on NFS1. Once all its
+current jobs are terminal and no workers are writing this artifact tree, return
+the series artifacts to their original physical NFS2 location. This return is
+explicitly authorized. Verify the copy before switching paths or removing the
+NFS1 copy. If NFS2 has insufficient space, wait for cleanup. Complete this return
+before launching later model waves. Future relocation requires an explicit user
+instruction; lack of space does not authorize it.
+
 # Project conventions
 
 ## Building the paper
