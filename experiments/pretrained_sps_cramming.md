@@ -187,6 +187,26 @@ move, reproducing the same metrics. Training code, data identities and code
 fingerprints remain unchanged. The failed SmolLM attempts are kept separately
 for diagnosis rather than counted as successful samples.
 
+### Active original SmolLM AR retry
+
+After archiving every failed attempt, the normal launcher submitted a replacement
+wave from `41e9014e3c1a62f83b87453175b7d568ee073850`. Each canonical shard output
+now resolves to NFS1. Payloads, disjoint replacement IDs, registered offsets and
+archived training fingerprints were verified. Full identifiers in shard order:
+
+- `lm-mpi-job-a1255737-5d83-408f-8b75-337165b2d4a7`.
+- `lm-mpi-job-cc70dd00-9afa-45da-b2ab-f58be9d556c6`.
+- `lm-mpi-job-ad8e6355-c254-4132-ae27-0ec458128fe1`.
+- `lm-mpi-job-7c88385c-d1ed-4654-ac10-c64a2513d28d`.
+- `lm-mpi-job-166481de-3772-4c03-9bfa-a9c6f97db74b`.
+- `lm-mpi-job-785231e4-e3aa-4339-88d7-e9ab0fbfdb81`.
+- `lm-mpi-job-a1f07ebf-4fd5-478c-91b2-0325e98d0d5b`.
+- `lm-mpi-job-7d961476-de66-42e9-ab60-caeede1bf86b`.
+
+New durable group `4ac4f9c8421a45309c365b1ecb2903a1`, key
+`pretrained-sps-smol-ar-retry1-9603ad849360-20261105`, observes these replacement
+jobs. Original failed IDs are excluded from the new group.
+
 ## Conclusions
 
 Compare variants within each tokenizer family. Original autoregressive controls
@@ -225,3 +245,5 @@ teacher-forced horizon than original AR. Interpretation must preserve both metri
   verifying its complete job set and immutable source payloads.
 - 2026-11-05: Diagnose shared-storage exhaustion in every original SmolLM AR
   shard; copy and checksum the series artifacts on NFS1 and re-audit all Qwen cohorts.
+- 2026-11-05: Archive all failed attempts, requeue SmolLM AR with the same
+  scientific protocol on recovered storage, and register a new durable group.

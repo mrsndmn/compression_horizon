@@ -97,3 +97,17 @@ and commit/push the result. Do not report job submission as measurement.
 The branch is `feat/pretrained-sps-cramming`. Push works, but GitHub rejected PR
 creation with HTTP 403, `Resource not accessible by personal access token`.
 No PR was created and server CI is unverified. This does not block the MLS jobs.
+
+## Active SmolLM AR retry
+
+All replacement shards were submitted from
+`41e9014e3c1a62f83b87453175b7d568ee073850`; complete job UUIDs are in the experiment
+file and external manifests. Every payload, offset, source archive and physical
+output path was verified. Replacement IDs are disjoint from the failed attempt.
+
+Active durable group: `4ac4f9c8421a45309c365b1ecb2903a1`;
+key: `pretrained-sps-smol-ar-retry1-9603ad849360-20261105`.
+On success, audit `smol_ar`, then advance SmolLM CE using the normal launcher and
+the proxy exception above. Register a NEW group for the returned complete IDs.
+Keep the existing storage links and failed-attempt archive; do not repeat the
+storage migration or any completed Qwen/preflight jobs.
