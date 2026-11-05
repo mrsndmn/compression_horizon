@@ -80,7 +80,7 @@ All 48 texts terminate at the total update budget; no capacity ceiling is
 established. Worker times range from 5524.35 to 6035.49 seconds per shard;
 they exclude scheduler waiting and container startup.
 
-The next main wave, Qwen SPS adapted with CE, was submitted from
+The completed Qwen SPS adapted with CE wave was submitted from
 `d30039f3c7ff19f1fd2b829b3f3c91c5e4732980`. Its reconstruction objective is still
 the registered hinge; CE names the upstream adaptation recipe. Job identifiers:
 
@@ -94,8 +94,27 @@ the registered hinge; CE names the upstream adaptation recipe. Job identifiers:
 - `lm-mpi-job-efdb9585-ad24-4f6b-9ffb-8dc2b4453cf6`.
 
 Arkhip group `a5f9a4cc7568462c8450dea4bbc7f477`, key
-`pretrained-sps-qwen-ce-9603ad849360-20261105`, observes this wave. No SPS-versus-AR
-comparison is reported before the matching SPS measurements are complete.
+`pretrained-sps-qwen-ce-9603ad849360-20261105`, resolved with all jobs completed.
+
+### Completed Qwen SPS-CE cohort
+
+`python -m scripts.analyze_pretrained_sps --experiment qwen_ce` audits all 48
+texts and writes the external JSON/CSV alongside the AR audit. Their ordered
+raw-document hashes match exactly. Both cohorts use the same native tokenizer.
+
+Mean teacher-forced horizon is 280.0208 tokens (median 279). All 48 selected
+prefixes replay exactly under teacher forcing. Mean initial correct greedy
+prefix is 106.9583 tokens; exact generation of the selected prefix succeeds on
+5/48 texts. Every text exhausts the total update budget. Worker times range from
+6085.51 to 6508.34 seconds per shard, excluding scheduler waiting and startup.
+
+At the registered budget, CE-adapted SPS therefore achieves 15.0417 fewer
+teacher-forced tokens on average than original Qwen AR (5.10% lower), and its
+initial correct greedy prefix is 61.7083 tokens shorter (36.59% lower). The latter
+scores generation from the selected teacher-forced vector; it is not a search
+over all saved vectors for a maximal greedy horizon. No capacity ceiling or
+cause of the gap is established by these budget-limited measurements. KD and
+the complete SmolLM comparison are pending.
 
 ## Conclusions
 
@@ -103,6 +122,8 @@ Compare variants within each tokenizer family. Original autoregressive controls
 use a different conditioning site and initialization from SPS; achieved lengths
 alone cannot isolate architecture, adaptation or a universal capacity limit.
 Historical SmolLM CE results are separate from the new matched protocol.
+The completed Qwen CE/AR comparison currently favors original AR under the
+registered protocol, including its distinct conditioning site and initialization.
 
 ## Changelog
 
@@ -121,3 +142,5 @@ Historical SmolLM CE results are separate from the new matched protocol.
 - 2026-11-05: Address independent-review findings in the cohort auditor: recognize
   successful final measurements at a stage limit and reject continuation after
   either stopping budget. Training code and completed measurements are unchanged.
+- 2026-11-05: Audit the complete Qwen SPS-CE cohort and verify paired raw texts
+  against original Qwen AR; record teacher-forced and greedy measurements separately.

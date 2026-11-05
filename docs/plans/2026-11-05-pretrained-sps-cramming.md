@@ -83,7 +83,7 @@ Its successful outcome and complete saved sample set were audited below. Do not
 repeat either completed preflight or this completed model wave. Continue through
 all registered model waves before the final paired analysis and article integration.
 
-## Qwen AR audit and active SPS-CE wave
+## Completed Qwen AR and SPS-CE audits
 
 The original Qwen AR durable group resolved with all jobs completed. Reusable
 `analyze_pretrained_sps` audits the full cohort against source revisions, code
@@ -92,13 +92,16 @@ budgets and exact saved target/generated IDs. Qwen AR results are recorded in
 `experiments/pretrained_sps_cramming.md` and external JSON/CSV. All texts exhausted
 the total budget. Teacher-forcing success does not imply exact greedy generation.
 
-Current active main wave: Qwen SPS-CE, submitted from
+Completed main wave: Qwen SPS-CE, submitted from
 `d30039f3c7ff19f1fd2b829b3f3c91c5e4732980`.
-Durable group: `a5f9a4cc7568462c8450dea4bbc7f477`;
+Resolved durable group: `a5f9a4cc7568462c8450dea4bbc7f477`;
 key: `pretrained-sps-qwen-ce-9603ad849360-20261105`.
-On its successful outcome, run the auditor with `--experiment qwen_ce`, then
-advance the next model from the registry and register a NEW group. The remaining
-paired analysis and article integration still wait for all requested cohorts.
+The auditor with `--experiment qwen_ce` passed for all expected texts and saved
+stages; its JSON/CSV outputs are complete. A separate CSV check confirmed identical
+ordered document hashes across AR and CE. Both exhaust their total budgets;
+teacher-forced and greedy results are recorded separately in the experiment file.
+The next registered model is Qwen SPS-KD. The remaining paired analysis and
+article integration still wait for all requested cohorts.
 
 The cohort auditor and its stopping-boundary fixes passed 61 focused tests across
 analysis, pretrained-model compatibility and existing SPS-paper replay. A fresh
@@ -106,3 +109,8 @@ independent adversarial review returned `APPROVE` after checking the real comple
 cohort, JSON/CSV consistency and refusal to export missing inputs. The committed
 auditor is `a95c70284a0b399b8ed8bef6e99f00ec61380651`; the training fingerprint
 remains unchanged. This verification performs no new inference or optimization.
+
+Operational note: the inherited HTTP proxy timed out before authentication when
+submitting the next wave. Direct verified TLS and HTTP to `api.ai.cloud.ru` work.
+Use the normal launcher with `NO_PROXY=api.ai.cloud.ru` in this environment. No
+job submission intents or job records were created by either failed auth attempt.
