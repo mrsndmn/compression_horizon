@@ -33,7 +33,8 @@ historical memory run. Shared prediction uses `PredictEmbeddingTrainer` through
    each snapshot. Compare the change in that difference against the earliest
    snapshot with paired bootstrap intervals over texts. Plot achieved horizons
    at common optimizer-step cutoffs from saved converged stages. Report the
-   greedy prefix to first error and greedy success at common target lengths.
+   greedy prefix to first error and greedy success when truncating the selected
+   vectors' decoded outputs to a common length.
 
 ## Results
 

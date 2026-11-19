@@ -11,10 +11,11 @@ from datasets import load_from_disk
 from scripts import analyze_sps_cramming as jobs
 from scripts import analyze_sps_predict_embedding as predict
 from scripts.activation_distillation import load_or_create_tokenized_dataset
+from scripts.analyze_pretrained_sps import audit_sample
 from scripts.analyze_sps_predict_shards import check_raw, checked_samples
 from scripts.sps_mechanism_common import source_commit
 from scripts.validation.validate_sps_batch1_run import validate_run
-from sps_paper.reproduce import STAGE_FIELDS, _job, _stages, json_read, load_snapshot, paired_interval, score_sample
+from sps_paper.reproduce import STAGE_FIELDS, _job, digest, json_read, load_snapshot, paired_interval
 from transformers import DataCollatorForLanguageModeling
 
 from compression_horizon.models.sps_causal_lm import load_sps_checkpoint, load_sps_tokenizer
@@ -67,6 +68,39 @@ def memory_initializations():
     if sorted(row["sample_id"] for row in initial_rows) != list(range(COHORT_SIZE)):
         raise ValueError("Historical memory control has incomplete initializations")
     return {row["sample_id"]: row["initialization_embedding"] for row in initial_rows}
+
+
+def historical_controls(cache):
+    snapshot = load_snapshot(jobs.REPO / "sps_paper/data")
+    if snapshot["cohort"] != [dict(sample_id=sid, input_ids=cache[sid]["input_ids"]) for sid in range(COHORT_SIZE)]:
+        raise ValueError("The experiment cache differs from the audited cohort")
+    anchors = []
+    for site, path in (("memory", CONTROL["baseline"]), ("predict", predict.ROOT / CONTROL["name"])):
+        run = snapshot["runs"][SITES[site]]
+        job = _job(path)
+        report_path = path / "single_sample_validation.json"
+        report = json_read(report_path)
+        relative_report = str(report_path.relative_to(jobs.ROOT))
+        if (
+            not (path / "completed").is_file()
+            or run["source"] != str(path.relative_to(jobs.ROOT))
+            or run["model"] != "sps"
+            or run["site"] != {"memory": "ordinary_memory", "predict": "shared_predict"}[site]
+            or run["source_commit"] != report.get("training_commit", report.get("source_commit"))
+            or [job] != [{key: record[key] for key in job} for record in run["jobs"]]
+            or digest(report_path) != snapshot["manifest"]["artifact_sha256"][relative_report]
+            or (
+                site == "predict"
+                and (
+                    run["selector"] != CONTROL["name"]
+                    or report["embedding_role"] != "shared_predict"
+                    or report.get("training_args", CONTROL_SETTINGS) != CONTROL_SETTINGS
+                )
+            )
+        ):
+            raise ValueError(f"Historical control provenance mismatch for {path}")
+        anchors.append(dict(site=site, checkpoint=str(predict.CHECKPOINT), **job))
+    return snapshot, anchors
 
 
 class PairedMemoryTrainer(ProgressiveCrammingTrainer):
@@ -134,6 +168,9 @@ def submit(*, dry=False):
     commit = source_commit()
     if not dry and (len(earlier_commits) > 1 or (not all(p.is_file() for p in records) and earlier_commits - {commit})):
         raise ValueError("Existing shards use a different source snapshot")
+    if not dry:
+        historical_controls(load_from_disk(CONTROL_SETTINGS["tokenized_dataset_path"]))
+        memory_initializations()
     for exp, record in zip(experiment_configs, records, strict=True):
         if record.exists() and not dry:
             continue
@@ -182,6 +219,30 @@ def audit_shard(exp, output, cache, initializations, commit):
     return samples, [dict(row, sample_id=start + row["sample_id"]) for row in raw.select_columns(STAGE_FIELDS)]
 
 
+def audit_run(samples, stages, cache, settings):
+    grouped = defaultdict(list)
+    for row in stages:
+        grouped[row["sample_id"]].append(row)
+    if sorted(grouped) != sorted(s["sample_id"] for s in samples):
+        raise ValueError("Stage IDs differ from the validated samples")
+    scores = []
+    for sample in sorted(samples, key=lambda s: s["sample_id"]):
+        sid = sample["sample_id"]
+        rows = sorted(grouped[sid], key=lambda r: r["stage_index"])
+        converged = [r for r in rows if r["final_convergence"] >= r["convergence_threshold"]]
+        selected = (converged or rows)[-1]
+        targets = cache[sid]
+        replay = dict(
+            sample,
+            selected_length=len(sample["target_ids"]),
+            steps_taken=selected["steps_taken"],
+            stored_convergence=sample.get("stored_convergence", sample.get("stored_teacher_accuracy")),
+        )
+        replay.setdefault("teacher_replay_correct_tokens", round(sample["teacher_replay_accuracy"] * len(sample["target_ids"])))
+        scores.append(audit_sample(rows, replay, targets["input_ids"], settings, valid_length=sum(targets["attention_mask"])))
+    return scores
+
+
 def summary_record(memory, shared, first_gaps):
     memory_scores, shared_scores = memory["scores"], shared["scores"]
     gaps = np.asarray([b["horizon"] - a["horizon"] for a, b in zip(memory_scores, shared_scores, strict=True)])
@@ -195,16 +256,16 @@ def summary_record(memory, shared, first_gaps):
     per_site = dict(memory=memory, predict=shared)
     for site, run in per_site.items():
         scores = run["scores"]
-        updates = [r["steps"] for r in run["stops"]]
+        # Use the saved final vectors and truncate their greedy outputs to a shared length.
         comparable = [(s, length) for s, length in zip(scores, common_lengths, strict=True) if length]
         result[site] = dict(
             mean_horizon=float(np.mean([s["horizon"] for s in scores])),
             mean_greedy_prefix=float(np.mean([min(s["greedy_initial_prefix"], s["horizon"]) for s in scores])),
             greedy_exact_at_common_length=sum(s["greedy_initial_prefix"] >= length for s, length in comparable),
             n_common_lengths=len(comparable),
-            mean_updates=float(np.mean(updates)),
-            total_budget_stops=run["total_budget_hit"],
-            stage_budget_stops=run["exclusive_stage_cap"],
+            mean_updates=float(np.mean([s["total_steps"] for s in scores])),
+            total_budget_stops=sum(s["stop_reason"] == "total_budget" for s in scores),
+            stage_budget_stops=sum(s["stop_reason"] == "stage_budget" for s in scores),
         )
     result["paired_gain_at_update_cutoff"] = {}
     for cutoff in UPDATE_CUTOFFS:
@@ -224,10 +285,8 @@ def summary_record(memory, shared, first_gaps):
 
 
 def merge():
-    snapshot = load_snapshot(jobs.REPO / "sps_paper/data")
     cache = load_from_disk(CONTROL_SETTINGS["tokenized_dataset_path"])
-    if snapshot["cohort"] != [dict(sample_id=sid, input_ids=cache[sid]["input_ids"]) for sid in range(COHORT_SIZE)]:
-        raise ValueError("The experiment cache differs from the audited cohort")
+    snapshot, anchors = historical_controls(cache)
     limits = dict(
         total_updates=CONTROL_SETTINGS["max_optimization_steps_per_sample"],
         stage_updates=CONTROL_SETTINGS["max_optimization_steps_per_token"],
@@ -251,20 +310,13 @@ def merge():
         samples = sorted(run["samples"], key=lambda s: s["sample_id"])
         if [s["sample_id"] for s in samples] != list(range(COHORT_SIZE)) or run["measurement_limits"] != limits:
             raise ValueError("Misaligned cohort or cramming budget")
-        for sample in samples:
-            sample.setdefault(
-                "teacher_replay_correct_tokens", round(sample["teacher_replay_accuracy"] * len(sample["target_ids"]))
-            )
-        scores = [score_sample(s) for s in samples]
-        if any(s["horizon"] and not s["teacher_exact"] for s in scores):
-            raise ValueError("A converged prefix failed teacher-forced replay")
-        run.update(_stages(run, dict(enumerate(scores))), scores=scores)
+        run["scores"] = audit_run(samples, run["stages"], cache, CONTROL_SETTINGS)
     first_gaps = None
     rows = []
     for tokens in PRETRAINING_TOKENS:
         row, first_gaps = summary_record(runs[tokens, "memory"], runs[tokens, "predict"], first_gaps)
         rows.append(dict(pretraining_tokens=tokens, **row))
-    jobs.write_json(ROOT / "summary.json", dict(rows=rows, jobs=provenance, merge_commit=source_commit()))
+    jobs.write_json(ROOT / "summary.json", dict(rows=rows, jobs=provenance, anchors=anchors, merge_commit=source_commit()))
     plot(rows)
 
 
@@ -313,7 +365,8 @@ def smoke():
             exp = dict(exp, training_args=settings)
             probe(exp, Path(directory))
             cache = load_from_disk(CONTROL_SETTINGS["tokenized_dataset_path"])
-            audit_shard(exp, Path(directory) / exp["name"], cache, memory_initializations(), source_commit())
+            samples, stages = audit_shard(exp, Path(directory) / exp["name"], cache, memory_initializations(), source_commit())
+            audit_run(samples, stages, cache, predict.resolved_training_args(exp))
 
 
 if __name__ == "__main__":
