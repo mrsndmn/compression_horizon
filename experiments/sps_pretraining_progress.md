@@ -38,18 +38,32 @@ historical memory run. Shared prediction uses `PredictEmbeddingTrainer` through
 
 ## Results
 
-The registered intermediate runs were submitted successfully. The submission
-manifest in the sweep output directory contains the full job IDs. The immutable
-training source is `d6f7e3da944b2944a7ef4ffd7607514cfeb95917`. Durable wait group
-`61ebf51355e74a9684de9a2b58fa267e` covers the full sweep. Run the launcher's
-`merge` phase after the group succeeds.
+All 24 intermediate shards completed and passed the merge audit. Every selected
+prefix replays exactly under teacher forcing. Shared prediction reaches a longer
+teacher-forced prefix on every paired text at every snapshot. From the earliest
+snapshot to the final anchor, the mean paired gap grows from 71.15 to 100.58
+tokens, an increase of 29.44 tokens (paired 95% text-bootstrap interval
+24.98–33.90). The ratio of mean horizons falls from 8.41 to 4.19. The absolute
+gap also grows at the common cutoffs from 2,500 updates onward. At 1,000 updates
+it falls from 17.44 to 13.29 tokens between those endpoints.
+
+The mean shared-prediction greedy prefix rises from 80.75 tokens to 109.40 at the
+last intermediate snapshot and 110.23 at the final anchor. The complete selected
+shared-prediction prefix decodes exactly on 48/48 texts at the earliest snapshot
+and 38/48 at the final anchor, where selected prefixes are longer.
+
+`artifacts/sps_cramming/pretraining_progress_20261120/` contains the merged
+`summary.json`, `comparison.png`, and submission manifest with the full job IDs.
+The immutable training source is `d6f7e3da944b2944a7ef4ffd7607514cfeb95917`.
+Durable wait group `61ebf51355e74a9684de9a2b58fa267e` resolved successfully.
 
 ## Conclusions
 
-A growing gap supports dependence on pretraining progress along this run.
-Parallel gains in both interfaces indicate a shared improvement in reconstruction.
-The native initialization also evolves with the checkpoint. This comparison
-estimates the effect of pretraining progress on the full cramming protocol.
+The conditioning-site effect is already large at the earliest measured snapshot.
+Both modes improve over pretraining. Shared prediction gains more tokens in
+absolute terms, and ordinary memory improves faster relative to its early
+horizon. The comparison follows one training trajectory, including changes in
+native initialization, and the intervals describe variability over texts.
 
 ## Changelog
 
@@ -57,3 +71,4 @@ estimates the effect of pretraining progress on the full cramming protocol.
 - 2026-11-20 — Add the checkpoint sweep and offset-aware replay.
 - 2026-11-20 — Submit the sweep and register durable observation. Verify the
   archived memory initialization hashes and the historical prediction design.
+- 2026-11-20 — Audit all completed shards and record the paired outcomes.
