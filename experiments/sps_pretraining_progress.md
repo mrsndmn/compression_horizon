@@ -38,7 +38,11 @@ historical memory run. Shared prediction uses `PredictEmbeddingTrainer` through
 
 ## Results
 
-Pending.
+The registered intermediate runs were submitted successfully. The submission
+manifest in the sweep output directory contains the full job IDs. The immutable
+training source is `d6f7e3da944b2944a7ef4ffd7607514cfeb95917`. Durable wait group
+`61ebf51355e74a9684de9a2b58fa267e` covers the full sweep. Run the launcher's
+`merge` phase after the group succeeds.
 
 ## Conclusions
 
@@ -51,3 +55,5 @@ estimates the effect of pretraining progress on the full cramming protocol.
 
 - 2026-11-19 — Record the hypothesis, implementation plan, and comparisons.
 - 2026-11-20 — Add the checkpoint sweep and offset-aware replay.
+- 2026-11-20 — Submit the sweep and register durable observation. Verify the
+  archived memory initialization hashes and the historical prediction design.

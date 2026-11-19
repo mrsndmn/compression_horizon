@@ -1,6 +1,9 @@
 """Submit and analyze matched memory/shared-prediction cramming across SPS checkpoints."""
 
 import argparse
+import json
+import subprocess
+import sys
 import tempfile
 from collections import defaultdict
 from pathlib import Path
@@ -30,6 +33,7 @@ SHARD_SIZE = 12
 PRETRAINING_TOKENS = (250085376, 500170752, 750256128, 1000341504)
 UPDATE_CUTOFFS = (1000, 2500, 5000, 7500, CONTROL_SETTINGS["max_optimization_steps_per_sample"])
 SITES = {"memory": "sps_hinge_strict", "predict": "predict_hinge_native"}
+PAPER_DATA = jobs.REPO / "sps_paper/data"
 experiment_configs = [
     dict(
         name=f"pretraining_{tokens}_{site}_{offset:02d}",
@@ -61,7 +65,13 @@ def memory_initializations():
         or design["commit"] != _job(baseline)["source_commit"]
     ):
         raise ValueError("Historical memory control does not match the pilot settings")
-    raw = load_from_disk(str(baseline / "progressive_prefixes"))
+    dataset_path = baseline / "progressive_prefixes"
+    prefix = str(dataset_path.relative_to(jobs.ROOT)) + "/"
+    manifest = json_read(PAPER_DATA / "manifest.json")["artifact_sha256"]
+    expected_files = {name: sha for name, sha in manifest.items() if name.startswith(prefix)}
+    if not expected_files or any(digest(jobs.ROOT / name) != sha for name, sha in expected_files.items()):
+        raise ValueError("Historical memory initialization source differs from the frozen manifest")
+    raw = load_from_disk(str(dataset_path))
     initial_rows = [
         row for row in raw.select_columns(["sample_id", "stage_index", "initialization_embedding"]) if row["stage_index"] == 0
     ]
@@ -70,8 +80,24 @@ def memory_initializations():
     return {row["sample_id"]: row["initialization_embedding"] for row in initial_rows}
 
 
+def archived_predict_design(commit, selector):
+    archive = jobs.ROOT / "code" / commit
+    code = """
+import json
+import sys
+from pathlib import Path
+sys.path.insert(0, "src")
+from scripts import analyze_sps_predict_embedding as predict
+exp = next(e for e in predict.experiment_configs if e["name"] == sys.argv[1])
+settings = dict(predict.TRAINING_ARGS, **exp["training_args"])
+settings["tokenized_dataset_path"] = str(predict.jobs.CACHE_ROOT / Path(settings["tokenized_dataset_path"]).name)
+print(json.dumps(dict(settings=settings, checkpoint=str(predict.CHECKPOINT), init=exp["init"])))
+"""
+    return json.loads(subprocess.check_output([sys.executable, "-c", code, selector], cwd=archive, text=True))
+
+
 def historical_controls(cache):
-    snapshot = load_snapshot(jobs.REPO / "sps_paper/data")
+    snapshot = load_snapshot(PAPER_DATA)
     if snapshot["cohort"] != [dict(sample_id=sid, input_ids=cache[sid]["input_ids"]) for sid in range(COHORT_SIZE)]:
         raise ValueError("The experiment cache differs from the audited cohort")
     anchors = []
@@ -94,12 +120,21 @@ def historical_controls(cache):
                 and (
                     run["selector"] != CONTROL["name"]
                     or report["embedding_role"] != "shared_predict"
-                    or report.get("training_args", CONTROL_SETTINGS) != CONTROL_SETTINGS
+                    or archived_predict_design(job["source_commit"], run["selector"])
+                    != dict(settings=CONTROL_SETTINGS, checkpoint=str(predict.CHECKPOINT), init=CONTROL["init"])
                 )
             )
         ):
             raise ValueError(f"Historical control provenance mismatch for {path}")
-        anchors.append(dict(site=site, checkpoint=str(predict.CHECKPOINT), **job))
+        anchors.append(
+            dict(
+                site=site,
+                checkpoint=str(predict.CHECKPOINT),
+                selector=run["selector"],
+                evidence_manifest_sha256=digest(PAPER_DATA / "manifest.json"),
+                **job,
+            )
+        )
     return snapshot, anchors
 
 
@@ -260,7 +295,7 @@ def summary_record(memory, shared, first_gaps):
         comparable = [(s, length) for s, length in zip(scores, common_lengths, strict=True) if length]
         result[site] = dict(
             mean_horizon=float(np.mean([s["horizon"] for s in scores])),
-            mean_greedy_prefix=float(np.mean([min(s["greedy_initial_prefix"], s["horizon"]) for s in scores])),
+            mean_greedy_prefix=float(np.mean([s["greedy_initial_prefix"] for s in scores])),
             greedy_exact_at_common_length=sum(s["greedy_initial_prefix"] >= length for s, length in comparable),
             n_common_lengths=len(comparable),
             mean_updates=float(np.mean([s["total_steps"] for s in scores])),
@@ -326,20 +361,35 @@ def plot(rows):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig, (horizon, progress) = plt.subplots(1, 2, figsize=(10, 4))
+    fig, (horizon, absolute, progress) = plt.subplots(1, 3, figsize=(15, 4))
     tokens = [row["pretraining_tokens"] / 1e6 for row in rows]
     for site, label in (("memory", "Ordinary memory"), ("predict", "Shared prediction")):
         horizon.plot(tokens, [row[site]["mean_horizon"] for row in rows], marker="o", label=label)
     horizon.set(xlabel="Pretraining tokens (millions)", ylabel="Mean teacher-forced horizon (tokens)")
     horizon.legend()
-    for row, count in zip(rows, tokens, strict=True):
+    for index, (row, count) in enumerate(zip(rows, tokens, strict=True)):
         values = row["paired_gain_at_update_cutoff"]
+        color = f"C{index}"
+        for site, style in (("predict", "-"), ("memory", "--")):
+            absolute.plot(
+                UPDATE_CUTOFFS,
+                [values[steps]["mean_horizons"][site] for steps in UPDATE_CUTOFFS],
+                linestyle=style,
+                color=color,
+                marker="o",
+            )
         progress.plot(
             UPDATE_CUTOFFS,
             [values[steps]["paired_gain"]["mean"] for steps in UPDATE_CUTOFFS],
             marker="o",
             label=f"{count:.0f}M",
+            color=color,
         )
+    absolute.set(
+        xlabel="Optimizer updates",
+        ylabel="Mean teacher-forced horizon (tokens)",
+        title="Shared prediction (solid), ordinary memory (dashed)",
+    )
     progress.set(xlabel="Optimizer updates", ylabel="Shared prediction minus memory (tokens)")
     progress.legend()
     fig.tight_layout()
