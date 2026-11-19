@@ -138,6 +138,7 @@ PNG preview, and `poster/print_report.json`. All assets render offline.
 - `scripts/analyze_sps_objective_factorial.py` → completed objective comparison and bootstrap; `tests/test_objective_factorial_analysis.py`.
 - `scripts/analyze_sps_predict_embedding.py --suite baseline|budget --phase dry|submit|probe|summary` → `PredictEmbeddingTrainer`; predict tests.
 - `scripts/analyze_sps_predict_shards.py --suite budget|fixed_schedule --phase dry|submit|probe|merge` → native hinge shards; shard/optimization tests.
+- `scripts/analyze_sps_pretraining.py --phase dry|smoke|submit|probe|merge` → native SPS checkpoint sweep and paired stage analysis.
 - `train.loss` squared-margin objective → `BaseTrainer.compute_loss/compute_convergence`; `tests/test_squared_margin_objective.py`.
 - `analysis.information_gain.compute_information_gain` → embedding-based native/HF memory-context analysis.
 

@@ -175,7 +175,10 @@ def probe(exp, *, output_root=None):
     output = (ROOT if output_root is None else Path(output_root)) / exp["name"]
     settings = resolved_training_args(exp)
     args = MyTrainingArguments(
-        **settings, model_checkpoint=jobs.cluster_path(CHECKPOINT), output_dir=str(output), logging_dir=str(output / "logs")
+        **settings,
+        model_checkpoint=jobs.cluster_path(exp.get("checkpoint", CHECKPOINT)),
+        output_dir=str(output),
+        logging_dir=str(output / "logs"),
     )
     model = load_sps_checkpoint(args.model_checkpoint, torch_dtype=torch.bfloat16)
     tokenizer = load_sps_tokenizer()
@@ -238,6 +241,8 @@ def probe(exp, *, output_root=None):
         teacher_replay_exact_samples=sum(s["teacher_replay_correct_tokens"] == len(s["target_ids"]) for s in samples),
         samples=samples,
     )
+    if "checkpoint" in exp:
+        report["model_checkpoint"] = args.model_checkpoint
     jobs.write_json(output / "single_sample_validation.json", report)
     (output / "completed").touch()
     print(json.dumps({k: v for k, v in report.items() if k != "samples"}), flush=True)

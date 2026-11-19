@@ -62,12 +62,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", type=Path, required=True)
     args = parser.parse_args()
-    design = json.loads((args.run_dir / "design.json").read_text())
+    validate_run(args.run_dir)
+
+
+def validate_run(run_dir):
+    design = json.loads((run_dir / "design.json").read_text())
     settings = design["training_args"]
     if settings["per_device_train_batch_size"] != 1:
         raise ValueError("This audit requires a single-sample training run")
-    rows = select_rows(load_from_disk(str(args.run_dir / "progressive_prefixes")), "progr")
+    rows = select_rows(load_from_disk(str(run_dir / "progressive_prefixes")), "progr")
     expected = settings["limit_dataset_items"]
+    offset = settings.get("offset_dataset_items") or 0
     if len(rows) != expected or {r["sample_id"] for r in rows} != set(range(expected)):
         raise ValueError("Incomplete or mismatched sample set")
     checkpoint = rows[0]["model_checkpoint"]
@@ -85,6 +90,7 @@ def main():
         model_checkpoint=checkpoint,
         no_bos_token=settings["no_bos_token"],
         limit_dataset_items=expected,
+        offset_dataset_items=settings.get("offset_dataset_items"),
         tokenized_dataset_path=pinned,
     )
     samples = []
@@ -96,7 +102,7 @@ def main():
         memory = torch.tensor(row["embedding"], dtype=torch.float32)[None]
         result = check_sample(model, tokenizer, ids, memory)
         result.update(
-            sample_id=sample,
+            sample_id=offset + sample,
             horizon=length if row["final_convergence"] >= row["convergence_threshold"] else 0,
             stored_teacher_accuracy=row["final_convergence"],
         )
@@ -112,7 +118,7 @@ def main():
         teacher_replay_exact_samples=sum(r["teacher_replay_correct_tokens"] == len(r["target_ids"]) for r in samples),
         samples=samples,
     )
-    target = args.run_dir / "single_sample_validation.json"
+    target = run_dir / "single_sample_validation.json"
     temporary = target.with_suffix(".tmp")
     temporary.write_text(json.dumps(result, indent=2))
     temporary.replace(target)

@@ -182,7 +182,7 @@ def check_raw(raw, report, exp, samples):
             or row["predict_init"] != "native"
             or row["hidden_size"] != report["trainable_scalars"]
             or row["num_compression_tokens"] != 1
-            or jobs.cluster_path(row["model_checkpoint"]) != jobs.cluster_path(predict.CHECKPOINT)
+            or jobs.cluster_path(row["model_checkpoint"]) != jobs.cluster_path(exp.get("checkpoint", predict.CHECKPOINT))
             or not math.isfinite(row["final_convergence"])
         ):
             raise ValueError("Raw embedding role/model metadata mismatch")

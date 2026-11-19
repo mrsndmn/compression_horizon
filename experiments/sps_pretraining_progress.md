@@ -9,9 +9,11 @@ trajectory, including the learned prediction embedding at each snapshot.
 
 ## Setup
 
-Ordinary memory uses `ProgressiveCrammingTrainer` through
-`scripts.activation_distillation`. Shared prediction uses
-`PredictEmbeddingTrainer` through `scripts.analyze_sps_predict_embedding.probe`.
+The registry and launcher are in `scripts.analyze_sps_pretraining`. Ordinary
+memory uses `PairedMemoryTrainer`, a specialization of
+`ProgressiveCrammingTrainer` that restores each text's initial vector from the
+historical memory run. Shared prediction uses `PredictEmbeddingTrainer` through
+`scripts.analyze_sps_predict_embedding.probe`.
 
 1. Add an `experiment_configs` sweep to the native SPS launcher. Pair the two
    conditioning interfaces at each intermediate snapshot and reuse the audited
@@ -47,3 +49,4 @@ estimates the effect of pretraining progress on the full cramming protocol.
 ## Changelog
 
 - 2026-11-19 — Record the hypothesis, implementation plan, and comparisons.
+- 2026-11-20 — Add the checkpoint sweep and offset-aware replay.
