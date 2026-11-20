@@ -34,7 +34,10 @@ The checkpoint metadata matches the registered Qwen source and revision. The
 ordered document hashes and digest of target IDs and attention masks match the
 archived Qwen SPS-CE shard reports. The checkpoint-specific GPU preflight was
 submitted from `e1c08f8` as `lm-mpi-job-f0e7c1a9-757e-415b-922f-43ed7d4e3e96`.
-Reconstruction results are pending.
+This preflight passed, with zero maximum logit error against the reference.
+After the registry correction, the matching-code GPU preflight was submitted
+from `2b5014b` as `lm-mpi-job-8323f42d-32bc-495f-81a0-54ccce0c4f3d`.
+Full-cohort reconstruction results are pending.
 
 ## Conclusions
 
