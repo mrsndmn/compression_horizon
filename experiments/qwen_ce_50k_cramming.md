@@ -37,7 +37,18 @@ submitted from `e1c08f8` as `lm-mpi-job-f0e7c1a9-757e-415b-922f-43ed7d4e3e96`.
 This preflight passed, with zero maximum logit error against the reference.
 After the registry correction, the matching-code GPU preflight was submitted
 from `2b5014b` as `lm-mpi-job-8323f42d-32bc-495f-81a0-54ccce0c4f3d`.
-Full-cohort reconstruction results are pending.
+The matching-code preflight passed. MLS accepted the full cohort from
+`f3704ef`. Arkhip group `aa49f348d0af449bbb0be5dffe31ae7e` watches these
+jobs in shard order. Full-cohort reconstruction results are pending.
+
+- `lm-mpi-job-3104d6bd-89e3-41e9-bc25-59f260938cf9`
+- `lm-mpi-job-a1a090ba-b499-4d49-8604-8de55a5d45cb`
+- `lm-mpi-job-ad1da02f-f609-4fef-b0ef-bd8edb5dc43e`
+- `lm-mpi-job-25fdea15-bcde-4a21-895c-5ce98dfba925`
+- `lm-mpi-job-0438fa40-af45-4f77-93c6-fe505b491b5e`
+- `lm-mpi-job-00e1ad6d-0606-4aab-ad3a-0aa80e8d1c84`
+- `lm-mpi-job-7fc7d5c6-22f5-455e-ac43-91f6ff81223b`
+- `lm-mpi-job-d1e09dab-f542-463a-a59b-af8eebd3491a`
 
 ## Conclusions
 
