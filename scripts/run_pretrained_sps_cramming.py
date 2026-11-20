@@ -21,8 +21,8 @@ from scripts.pretrained_sps_experiments import (
     PYTHON,
     ROOT,
     SHARD_SIZE,
-    all_experiments,
     code_digest,
+    default_experiments,
     experiment_configs,
     read_json,
     write_json,
@@ -122,7 +122,7 @@ def submit(phase, name=None):
     if not (ROOT / "data/completed").exists():
         raise RuntimeError("Prepare the pinned model-native data first")
     targets = [name] if name else list(FAMILIES)
-    cohort = [e for e in all_experiments if e["name"] == name] if name else experiment_configs
+    cohort = [e for e in experiment_configs if e["name"] == name] if name else default_experiments
     if name and not cohort:
         raise ValueError("Targeted submission requires an experiment name")
     if phase == "preflight":
@@ -164,13 +164,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--phase", choices=("dry", "prepare", "preflight", "advance", "probe"), required=True)
     parser.add_argument("--kind", choices=("preflight", "runs"), default="preflight")
-    parser.add_argument("--name", choices=tuple(FAMILIES) + tuple(e["name"] for e in all_experiments))
+    parser.add_argument("--name", choices=tuple(FAMILIES) + tuple(e["name"] for e in experiment_configs))
     parser.add_argument("--offset", type=int, default=0)
     args = parser.parse_args()
     if args.name in FAMILIES and (args.phase in {"preflight", "advance"} or args.kind == "runs"):
         parser.error("Targeted submission and shard runs require an experiment name")
     if args.phase == "dry":
-        names = list(FAMILIES) if args.kind == "preflight" else [e["name"] for e in experiment_configs]
+        names = list(FAMILIES) if args.kind == "preflight" else [e["name"] for e in default_experiments]
         if args.name:
             names = [args.name]
         for name in names:
@@ -192,7 +192,7 @@ def main():
     else:
         if args.offset not in range(0, COHORT, SHARD_SIZE):
             parser.error("offset must be a registered shard boundary")
-        exp = next((e for e in all_experiments if e["name"] == args.name), None)
+        exp = next((e for e in experiment_configs if e["name"] == args.name), None)
         if exp is None:
             parser.error("runs requires an experiment")
         train_shard(exp, args.offset, SHARD_SIZE, output_path("runs", args.name, args.offset))

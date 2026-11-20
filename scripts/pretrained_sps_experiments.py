@@ -51,7 +51,7 @@ TRAINING_ARGS = dict(
     dataset_name="LarryLovestein/pg19_1k",
     dataloader_num_workers=0,
 )
-experiment_configs = [
+default_experiments = [
     dict(
         name=f"{family}_{arm}",
         family=family,
@@ -68,14 +68,13 @@ experiment_configs = [
 ]
 # Follow-up runs are opt-in so the original six-model suite and paper export
 # retain their registered membership.
-followup_experiment_configs = [
+experiment_configs = default_experiments + [
     dict(
-        next(exp for exp in experiment_configs if exp["name"] == "qwen_ce"),
+        next(exp for exp in default_experiments if exp["name"] == "qwen_ce"),
         name="qwen_ce_50k",
         checkpoint=str(SOURCE_ROOT / "qwen3-base-1.7b-ce-50k/runs/out/qwen3_base_staged_sps_ce_50k/final.pt"),
     )
 ]
-all_experiments = experiment_configs + followup_experiment_configs
 JOB_CONFIG = dict(
     instance_type="a100.1gpu",
     queue_name="fusionbrainlab-job",

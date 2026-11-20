@@ -143,9 +143,10 @@ def test_progressive_worker_trainer_save_offset_and_freeze(tmp_path, monkeypatch
 
 def test_registry_and_launcher_dry_are_side_effect_free(monkeypatch, capsys, tmp_path):
     from scripts import run_pretrained_sps_cramming as launcher
-    from scripts.pretrained_sps_experiments import COHORT, SHARD_SIZE, TRAINING_ARGS, experiment_configs
+    from scripts.pretrained_sps_experiments import COHORT, SHARD_SIZE, TRAINING_ARGS, default_experiments, experiment_configs
 
-    assert len(experiment_configs) == 6 and COHORT // SHARD_SIZE == 8
+    assert [exp["name"] for exp in experiment_configs if exp not in default_experiments] == ["qwen_ce_50k"]
+    assert len(default_experiments) == 6 and COHORT // SHARD_SIZE == 8
     assert TRAINING_ARGS["per_device_train_batch_size"] == 1
     assert TRAINING_ARGS["max_optimization_steps_per_sample"] == 10000
     monkeypatch.setattr(launcher, "ROOT", tmp_path / "absent")

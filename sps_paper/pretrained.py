@@ -43,7 +43,7 @@ def export(destination=HERE / "data"):
     families, runs, sources = {}, {}, {}
     # Full raw-stage auditing is mandatory before producing publication evidence.
     with tempfile.TemporaryDirectory() as temporary:
-        for exp in experiment_configs:
+        for exp in (entry for entry in experiment_configs if entry["name"] in NAMES):
             summary = audit_experiment(exp, output_dir=Path(temporary) / exp["name"])
             family = exp["family"]
             if family not in families:

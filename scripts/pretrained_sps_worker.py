@@ -17,8 +17,8 @@ from scripts.pretrained_sps_experiments import (
     ROOT,
     TRAINING_ARGS,
     UPSTREAM_COMMIT,
-    all_experiments,
     code_digest,
+    default_experiments,
     experiment_configs,
     read_json,
     write_json,
@@ -76,7 +76,7 @@ def data_design():
         cohort=COHORT,
         sequence_cap=TRAINING_ARGS["max_sequence_length"],
         dataset=TRAINING_ARGS["dataset_name"],
-        sources={e["family"]: [e["source"], e["revision"]] for e in experiment_configs},
+        sources={e["family"]: [e["source"], e["revision"]] for e in default_experiments},
     )
 
 
@@ -116,7 +116,7 @@ def prepare_data():
     dest = ROOT / "data"
     design = data_design()
     if (dest / "completed").exists():
-        for exp in experiment_configs:
+        for exp in default_experiments:
             validate_data(exp)
         return
     if dest.exists():
@@ -126,7 +126,7 @@ def prepare_data():
     cohorts = [dict(sample_id=i, text=text, sha256=hashlib.sha256(text.encode()).hexdigest()) for i, text in enumerate(texts)]
     write_json(dest / "design.json", design)
     write_json(dest / "raw.json", cohorts)
-    for exp in experiment_configs:
+    for exp in default_experiments:
         target = dest / exp["family"]
         if target.exists():
             continue
@@ -150,7 +150,7 @@ def prepare_data():
                 document_hashes=[r["sha256"] for r in cohorts],
             ),
         )
-    for exp in experiment_configs:
+    for exp in default_experiments:
         validate_data(exp, require_complete=False)
     (dest / "completed").touch()
 
@@ -284,7 +284,9 @@ def preflight(target, output):
     if not torch.cuda.is_available():
         raise RuntimeError("Preflight must execute on the submitted GPU")
     results = []
-    selected = [e for e in all_experiments if e["name"] == target] or [e for e in experiment_configs if e["family"] == target]
+    selected = [e for e in experiment_configs if e["name"] == target] or [
+        e for e in default_experiments if e["family"] == target
+    ]
     if not selected:
         raise ValueError(f"Unknown preflight target {target}")
     for exp in selected:
