@@ -66,6 +66,16 @@ experiment_configs = [
     for family, spec in FAMILIES.items()
     for arm in ("ar", "ce", "kd")
 ]
+# Follow-up runs are opt-in so the original six-model suite and paper export
+# retain their registered membership.
+followup_experiment_configs = [
+    dict(
+        next(exp for exp in experiment_configs if exp["name"] == "qwen_ce"),
+        name="qwen_ce_50k",
+        checkpoint=str(SOURCE_ROOT / "qwen3-base-1.7b-ce-50k/runs/out/qwen3_base_staged_sps_ce_50k/final.pt"),
+    )
+]
+all_experiments = experiment_configs + followup_experiment_configs
 JOB_CONFIG = dict(
     instance_type="a100.1gpu",
     queue_name="fusionbrainlab-job",

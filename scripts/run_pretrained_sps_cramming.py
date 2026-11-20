@@ -21,6 +21,7 @@ from scripts.pretrained_sps_experiments import (
     PYTHON,
     ROOT,
     SHARD_SIZE,
+    all_experiments,
     code_digest,
     experiment_configs,
     read_json,
@@ -112,7 +113,7 @@ def submit_one(kind, name, offset, client, options, active):
     return job
 
 
-def submit(phase):
+def submit(phase, name=None):
     if subprocess.check_output(["git", "diff", "HEAD", "--"], cwd=REPO):
         raise RuntimeError("Commit tracked changes before launching immutable code")
     untracked = subprocess.check_output(["git", "ls-files", "--others", "-z", "--", "src"], cwd=REPO)
@@ -120,15 +121,19 @@ def submit(phase):
         raise RuntimeError("Commit or move untracked source Python files before snapshot submission")
     if not (ROOT / "data/completed").exists():
         raise RuntimeError("Prepare the pinned model-native data first")
+    targets = [name] if name else list(FAMILIES)
+    cohort = [e for e in all_experiments if e["name"] == name] if name else experiment_configs
+    if name and not cohort:
+        raise ValueError("Targeted submission requires an experiment name")
     if phase == "preflight":
-        specs = [("preflight", family, 0) for family in FAMILIES]
+        specs = [("preflight", family, 0) for family in targets]
     else:
-        for family in FAMILIES:
+        for family in targets:
             gate = output_path("preflight", family)
             if not (gate / "completed").exists() or read_json(gate / "preflight.json")["code_digest"] != code_digest(REPO):
                 raise RuntimeError("Successful matching-code preflights required before main training")
         specs = []
-        for exp in experiment_configs:
+        for exp in cohort:
             pending = [
                 ("runs", exp["name"], i)
                 for i in range(0, COHORT, SHARD_SIZE)
@@ -146,12 +151,12 @@ def submit(phase):
         if j.get("job_desc", "").startswith("CH: pretrained_sps_")
     }
     jobs = []
-    for kind, name, offset in specs:
-        job = submit_one(kind, name, offset, client, options, active)
+    for kind, target, offset in specs:
+        job = submit_one(kind, target, offset, client, options, active)
         if job:
             jobs.append(job)
     record = dict(phase=phase, code_digest=code_digest(REPO), jobs=jobs)
-    write_json(ROOT / f"latest-{phase}.json", record)
+    write_json(ROOT / f"latest-{phase}{'-' + name if name else ''}.json", record)
     print(json.dumps(record), flush=True)
 
 
@@ -159,17 +164,21 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--phase", choices=("dry", "prepare", "preflight", "advance", "probe"), required=True)
     parser.add_argument("--kind", choices=("preflight", "runs"), default="preflight")
-    parser.add_argument("--name", choices=tuple(FAMILIES) + tuple(e["name"] for e in experiment_configs))
+    parser.add_argument("--name", choices=tuple(FAMILIES) + tuple(e["name"] for e in all_experiments))
     parser.add_argument("--offset", type=int, default=0)
     args = parser.parse_args()
+    if args.name in FAMILIES and (args.phase in {"preflight", "advance"} or args.kind == "runs"):
+        parser.error("Targeted submission and shard runs require an experiment name")
     if args.phase == "dry":
         names = list(FAMILIES) if args.kind == "preflight" else [e["name"] for e in experiment_configs]
+        if args.name:
+            names = [args.name]
         for name in names:
             for offset in [0] if args.kind == "preflight" else range(0, COHORT, SHARD_SIZE):
                 print(json.dumps(payload(args.kind, name, offset)[0]))
         return
     if args.phase in {"preflight", "advance"}:
-        submit(args.phase)
+        submit(args.phase, args.name)
         return
     from scripts.pretrained_sps_worker import preflight, prepare_data, train_shard
 
@@ -179,13 +188,11 @@ def main():
     if args.name is None:
         parser.error("probe requires --name")
     if args.kind == "preflight":
-        if args.name not in FAMILIES:
-            parser.error("preflight requires a family")
         preflight(args.name, output_path("preflight", args.name))
     else:
         if args.offset not in range(0, COHORT, SHARD_SIZE):
             parser.error("offset must be a registered shard boundary")
-        exp = next((e for e in experiment_configs if e["name"] == args.name), None)
+        exp = next((e for e in all_experiments if e["name"] == args.name), None)
         if exp is None:
             parser.error("runs requires an experiment")
         train_shard(exp, args.offset, SHARD_SIZE, output_path("runs", args.name, args.offset))

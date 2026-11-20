@@ -17,6 +17,7 @@ from scripts.pretrained_sps_experiments import (
     ROOT,
     TRAINING_ARGS,
     UPSTREAM_COMMIT,
+    all_experiments,
     code_digest,
     experiment_configs,
     read_json,
@@ -278,16 +279,19 @@ def parity(exp):
     return result
 
 
-def preflight(family, output):
+def preflight(target, output):
     torch.set_num_threads(8)
     if not torch.cuda.is_available():
         raise RuntimeError("Preflight must execute on the submitted GPU")
     results = []
-    for exp in [e for e in experiment_configs if e["family"] == family]:
+    selected = [e for e in all_experiments if e["name"] == target] or [e for e in experiment_configs if e["family"] == target]
+    if not selected:
+        raise ValueError(f"Unknown preflight target {target}")
+    for exp in selected:
         results.append(parity(exp))
         train_shard(exp, 0, 1, output / exp["name"], smoke=True)
     write_json(
         output / "preflight.json",
-        dict(family=family, results=results, code_digest=code_digest(Path(__file__).resolve().parents[1])),
+        dict(family=selected[0]["family"], results=results, code_digest=code_digest(Path(__file__).resolve().parents[1])),
     )
     (output / "completed").touch()

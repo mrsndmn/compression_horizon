@@ -20,8 +20,8 @@ from scripts.pretrained_sps_experiments import (
     ROOT,
     SHARD_SIZE,
     TRAINING_ARGS,
+    all_experiments,
     code_digest,
-    experiment_configs,
     read_json,
     write_json,
 )
@@ -281,10 +281,10 @@ def audit_experiment(exp, *, output_dir=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--experiment", choices=[exp["name"] for exp in experiment_configs], required=True)
+    parser.add_argument("--experiment", choices=[exp["name"] for exp in all_experiments], required=True)
     parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args()
-    result = audit_experiment(next(e for e in experiment_configs if e["name"] == args.experiment), output_dir=args.output_dir)
+    result = audit_experiment(next(e for e in all_experiments if e["name"] == args.experiment), output_dir=args.output_dir)
     print(json.dumps({k: v for k, v in result.items() if k not in {"samples", "source_shards"}}, indent=2))
 
 
