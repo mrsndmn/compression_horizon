@@ -38,8 +38,8 @@ This preflight passed, with zero maximum logit error against the reference.
 After the registry correction, the matching-code GPU preflight was submitted
 from `2b5014b` as `lm-mpi-job-8323f42d-32bc-495f-81a0-54ccce0c4f3d`.
 The matching-code preflight passed. MLS accepted the full cohort from
-`f3704ef`. Arkhip group `aa49f348d0af449bbb0be5dffe31ae7e` watches these
-jobs in shard order. Full-cohort reconstruction results are pending.
+`f3704ef`. All eight jobs in Arkhip group `aa49f348d0af449bbb0be5dffe31ae7e`
+completed. Their IDs follow in shard order.
 
 - `lm-mpi-job-3104d6bd-89e3-41e9-bc25-59f260938cf9`
 - `lm-mpi-job-a1a090ba-b499-4d49-8604-8de55a5d45cb`
@@ -50,13 +50,32 @@ jobs in shard order. Full-cohort reconstruction results are pending.
 - `lm-mpi-job-7fc7d5c6-22f5-455e-ac43-91f6ff81223b`
 - `lm-mpi-job-d1e09dab-f542-463a-a59b-af8eebd3491a`
 
+The raw-stage audit covered all 48 documents exactly once. Every selected
+prefix replayed exactly under teacher forcing. The mean horizon was 210.40
+tokens (median 219), compared with 280.02 (279) for the previous SPS-CE run.
+Matching by document hash gave a mean change of −69.625 tokens and a median
+change of −52.5. The horizon fell on 47 documents. The total update limit
+stopped 46 texts. The per-stage limit stopped texts 31 and 40 at horizons of
+5 and 7 tokens, respectively.
+
+The mean initial correct greedy prefix increased from 106.96 to 159.17 tokens,
+with gains on 33 documents. Greedy decoding reproduced the entire selected
+prefix on 30/48 texts, up from 5/48. Original Qwen AR reached a mean horizon
+of 295.06 and a mean greedy prefix of 168.67, with 15/48 exact greedy prefixes.
+The audit outputs and the document-level paired comparison are under
+`analysis/932925bc7978/qwen_ce_50k/` in the pretrained cramming artifact root.
+
 ## Conclusions
 
-A positive mean paired horizon change would support the hypothesis for this
-cohort and budget. Report greedy recovery separately so that any discrepancy
-between teacher-forced and free-running reconstruction is visible.
+The longer-horizon hypothesis failed on this cohort at the tested budget.
+The 50k checkpoint had a shorter teacher-forced horizon and generated more
+correct consecutive tokens on average than the previous SPS-CE checkpoint.
+Each model decoded its own selected prefix, so exact greedy counts refer to
+different target lengths. A fixed-length comparison would isolate greedy
+recovery at equal target length.
 
 ## Changelog
 
 - 2026-11-20: Plan the paired comparison and checkpoint-specific preflight.
 - 2026-11-20: Verify paired inputs and submit the targeted GPU preflight.
+- 2026-11-20: Audit all shards and record the paired CE comparison and original AR reference.
