@@ -30,8 +30,11 @@ Training function: `scripts.pretrained_sps_worker.train_shard`.
 
 ## Results
 
-Pending. The checkpoint exists and the producer's completion record identifies
-it as the final artifact. GPU compatibility and reconstruction remain untested.
+The checkpoint metadata matches the registered Qwen source and revision. The
+ordered document hashes and digest of target IDs and attention masks match the
+archived Qwen SPS-CE shard reports. The checkpoint-specific GPU preflight was
+submitted from `e1c08f8` as `lm-mpi-job-f0e7c1a9-757e-415b-922f-43ed7d4e3e96`.
+Reconstruction results are pending.
 
 ## Conclusions
 
@@ -42,3 +45,4 @@ between teacher-forced and free-running reconstruction is visible.
 ## Changelog
 
 - 2026-11-20: Plan the paired comparison and checkpoint-specific preflight.
+- 2026-11-20: Verify paired inputs and submit the targeted GPU preflight.
