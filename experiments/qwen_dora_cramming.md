@@ -25,12 +25,26 @@ MLS accepted the full cohort from `eab916b`. The jobs in shard order are
 - `lm-mpi-job-23f110bd-0326-46db-bae4-2a9a61cd44e4`
 - `lm-mpi-job-156e8e53-38a4-4604-9fea-9fd5c6bb4b86`
 
-Cohort results are pending.
+All eight shards completed. The audit confirmed exact teacher-forced replay of
+the selected prefix on all 48 texts. All 48 exhausted the total update budget.
+The mean horizon was 265.98 tokens (median 265.5). The mean initial correct
+greedy prefix was 155.125 tokens, with exact greedy recovery on 12/48 texts.
+
+Pairing by document hash, DoRA gained 55.58 horizon tokens on average over
+SPS-CE 50k, with gains on every text (median difference +43). Its mean greedy
+prefix was 4.04 tokens shorter, with gains on 25/48 texts. Against the earlier
+SPS-CE checkpoint, DoRA lost 14.04 horizon tokens on average and gained 48.17
+greedy tokens, with greedy gains on 34/48 texts. The per-document comparison
+is saved alongside the audit in `analysis/7559610b05d5/qwen_dora_standard_1e_4/`.
 
 ## Conclusions
 
-Compare the audited results by document with the earlier Qwen SPS-CE runs.
+The DoRA checkpoint recovered longer teacher-forced prefixes than SPS-CE 50k
+at the tested budget. Their mean free-running prefix lengths were close on
+this cohort. Exact greedy counts score each checkpoint at its own selected
+prefix length.
 
 ## Changelog
 
 - 2026-11-21: Register the merged checkpoint for shared-prediction cramming.
+- 2026-11-21: Audit the completed cohort and compare both SPS-CE checkpoints by document.
