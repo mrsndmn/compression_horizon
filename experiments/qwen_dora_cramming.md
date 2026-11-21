@@ -12,7 +12,8 @@ experiment is `qwen_dora_standard_1e_4` in `scripts/pretrained_sps_experiments.p
 
 ## Results
 
-Pending.
+MLS accepted the checkpoint-specific GPU preflight from `fbffd06` as
+`lm-mpi-job-46f835e8-6fc0-4e74-b905-f882b4d6e5b7`. Cohort results are pending.
 
 ## Conclusions
 
