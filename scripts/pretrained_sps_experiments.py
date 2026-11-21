@@ -73,7 +73,13 @@ experiment_configs = default_experiments + [
         next(exp for exp in default_experiments if exp["name"] == "qwen_ce"),
         name="qwen_ce_50k",
         checkpoint=str(SOURCE_ROOT / "qwen3-base-1.7b-ce-50k/runs/out/qwen3_base_staged_sps_ce_50k/final.pt"),
-    )
+    ),
+    dict(
+        next(exp for exp in default_experiments if exp["name"] == "qwen_ce"),
+        name="qwen_dora_standard_1e_4",
+        arm="dora",
+        checkpoint=str(SOURCE_ROOT / "qwen3-base-adapters/runs/out/dora-standard-1e-4/merged-full.pt"),
+    ),
 ]
 JOB_CONFIG = dict(
     instance_type="a100.1gpu",
