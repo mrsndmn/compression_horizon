@@ -257,7 +257,7 @@ def test_prepared_data_identity_and_mask_integrity(monkeypatch, tmp_path, corrup
 
 @pytest.mark.parametrize("family", ["llama", "qwen3"])
 def test_fixed_shape_codec_roundtrip_and_rejection(tmp_path, family):
-    from compression_horizon.inference.sps_codec import certify, decompress
+    from scripts.sps_fixed_shape import certify, decompress
 
     torch.manual_seed(101)
     model = tiny(family)
@@ -276,3 +276,46 @@ def test_fixed_shape_codec_roundtrip_and_rejection(tmp_path, family):
         certify(model, z, [(target[0] + 1) % 32, *target[1:]])
     with pytest.raises(ValueError, match="integrity"):
         decompress(model, dict(packet, sha256="corrupt"))
+
+
+def test_codec_probe_archived_generation_policy():
+    from unittest.mock import MagicMock
+
+    from scripts.sps_codec import first_error_probe
+
+    model = tiny("qwen3")
+    tokenizer = MagicMock()
+    tokenizer.__len__.return_value = 30
+    tokenizer.eos_token_id = 29
+    z = model.prediction.view(1, 1, -1)
+    result = first_error_probe(model, tokenizer, z, dict(target_ids=[29, 4], generated_ids=[29]))
+    assert result["first_mismatch"] == 1 and result["truncated"]
+    with torch.no_grad():
+        model.backbone.lm_head.weight.zero_()
+        model.backbone.lm_head.weight[31].copy_(
+            model(input_ids=torch.tensor([[29]]), output_hidden_states=True).hidden_states[-1][0, 0]
+        )
+    result = first_error_probe(model, tokenizer, z, dict(target_ids=[1], generated_ids=[0]))
+    assert result["scores"]["growing"]["argmax"] == 31
+    assert result["scores"]["growing"]["generation_argmax"] == 0
+
+
+def test_codec_accepts_alternate_shard_mount(tmp_path, monkeypatch):
+    import json
+    from unittest.mock import MagicMock
+
+    from datasets import Dataset
+    from scripts import sps_codec
+
+    exp = sps_codec.resolve_experiment("qwen_ce")
+    archived = dict(exp, source_path="/workspace-SR004.nfs2/d.tarasov/model")
+    local = dict(exp, source_path="/mnt/virtual_ai0001053-00054_SR004-nfs2/d.tarasov/model")
+    sample = dict(sample_id=0, horizon=1, target_ids=[1])
+    (tmp_path / "single_sample_validation.json").write_text(
+        json.dumps(dict(experiment=archived, embedding_role="shared_predict", samples=[sample]))
+    )
+    monkeypatch.setattr(sps_codec, "resolve_experiment", lambda _: local)
+    monkeypatch.setattr(sps_codec, "model_and_tokenizer", lambda _: (MagicMock(), None))
+    stages = Dataset.from_dict(dict(sample_id=[0], num_input_tokens=[1], embedding=[[[1.0]]]))
+    monkeypatch.setattr(sps_codec, "load_from_disk", lambda path: stages)
+    assert sps_codec.load_stage(tmp_path, 0)[-1] == sample

@@ -8,16 +8,18 @@ from tempfile import NamedTemporaryFile
 
 import torch
 from datasets import load_from_disk
+from scripts.analyze_pretrained_sps import canonical
 from scripts.pretrained_sps_experiments import experiment_configs
 from scripts.pretrained_sps_worker import model_and_tokenizer
+from scripts.sps_fixed_shape import certify, decompress
 
-from compression_horizon.inference.sps_codec import certify, decompress
+from compression_horizon.inference.generation import mask_native_generation_logits
 
 
 def load_stage(shard, sample_id):
     report = json.loads((shard / "single_sample_validation.json").read_text())
     exp = resolve_experiment(report["experiment"]["name"])
-    if report["experiment"] != exp or report["embedding_role"] != "shared_predict":
+    if canonical(report["experiment"]) != canonical(exp) or report["embedding_role"] != "shared_predict":
         raise ValueError("Shard does not match the registered shared-prediction experiment")
     (sample,) = (r for r in report["samples"] if r["sample_id"] == sample_id)
     length = sample["horizon"]
@@ -27,19 +29,23 @@ def load_stage(shard, sample_id):
     (index,) = (
         i for i, (sid, n) in enumerate(zip(stages["sample_id"], stages["num_input_tokens"])) if sid == sample_id and n == length
     )
-    model, _ = model_and_tokenizer(exp)
+    model, tokenizer = model_and_tokenizer(exp)
     model.cuda()
     z = torch.tensor(stages[index]["embedding"])[None]
-    return exp, model, z, sample
+    return exp, model, tokenizer, z, sample
 
 
 @torch.inference_mode()
-def first_error_probe(model, vector, sample):
+def first_error_probe(model, tokenizer, vector, sample):
     target = sample["target_ids"]
     observed = sample["generated_ids"]
     pos = next((i for i, (a, b) in enumerate(zip(target, observed)) if a != b), None)
     if pos is None:
-        return {"first_mismatch": None, "generated_length": len(observed)}
+        return {
+            "first_mismatch": len(observed) if len(observed) < len(target) else None,
+            "truncated": len(observed) < len(target),
+            "generated_length": len(observed),
+        }
     bos = model.config.bos_token_id
     prefix = [bos] + target[:pos]
     cases = {
@@ -57,6 +63,7 @@ def first_error_probe(model, vector, sample):
         )
         scores[case] = {
             "argmax": int(logits.argmax()),
+            "generation_argmax": int(mask_native_generation_logits(model, tokenizer, logits).argmax()),
             "target_minus_observed": float(logits[target[pos]] - logits[observed[pos]]),
         }
     return dict(first_mismatch=pos, target=target[pos], observed=observed[pos], scores=scores)
@@ -83,13 +90,13 @@ def main():
     decode.add_argument("packet", type=Path)
     args = parser.parse_args()
     if args.command == "probe":
-        _, model, z, sample = load_stage(args.shard, args.sample_id)
-        print(json.dumps(first_error_probe(model, z, sample)))
+        _, model, tokenizer, z, sample = load_stage(args.shard, args.sample_id)
+        print(json.dumps(first_error_probe(model, tokenizer, z, sample)))
         return
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     torch.use_deterministic_algorithms(True)
     if args.command == "certify":
-        exp, model, z, sample = load_stage(args.shard, args.sample_id)
+        exp, model, _, z, sample = load_stage(args.shard, args.sample_id)
         packet = certify(model, z, sample["target_ids"])
         packet["experiment"] = exp["name"]
         with NamedTemporaryFile(dir=args.packet.parent) as f:
