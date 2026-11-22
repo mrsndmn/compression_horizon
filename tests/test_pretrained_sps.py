@@ -253,3 +253,26 @@ def test_prepared_data_identity_and_mask_integrity(monkeypatch, tmp_path, corrup
         Dataset.from_dict(data).save_to_disk(str(dest / exp["family"]))
     with pytest.raises(ValueError):
         worker.validate_data(exp)
+
+
+@pytest.mark.parametrize("family", ["llama", "qwen3"])
+def test_fixed_shape_codec_roundtrip_and_rejection(tmp_path, family):
+    from compression_horizon.inference.sps_codec import certify, decompress
+
+    torch.manual_seed(101)
+    model = tiny(family)
+    z = model.prediction.detach().view(1, 1, -1)
+    ids = [model.config.bos_token_id]
+    for _ in range(5):
+        logits = model(input_ids=torch.tensor([ids]), predict_embeddings=z).logits
+        ids.append(int(logits[0, -1].argmax()))
+    target = ids[1:]
+    model.config.eos_token_id = target[0]
+    packet = certify(model, z, target)
+    path = tmp_path / "packet.pt"
+    torch.save(packet, path)
+    assert decompress(model, torch.load(path, weights_only=True)) == target
+    with pytest.raises(ValueError, match="differs"):
+        certify(model, z, [(target[0] + 1) % 32, *target[1:]])
+    with pytest.raises(ValueError, match="integrity"):
+        decompress(model, dict(packet, sha256="corrupt"))
