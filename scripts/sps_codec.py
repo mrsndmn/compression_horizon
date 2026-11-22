@@ -8,6 +8,7 @@ from tempfile import NamedTemporaryFile
 
 import torch
 from datasets import load_from_disk
+from scripts import sps_growing_codec
 from scripts.analyze_pretrained_sps import canonical
 from scripts.pretrained_sps_experiments import experiment_configs
 from scripts.pretrained_sps_worker import model_and_tokenizer
@@ -83,6 +84,9 @@ def main():
     encode.add_argument("shard", type=Path)
     encode.add_argument("sample_id", type=int)
     encode.add_argument("packet", type=Path)
+    encode.add_argument(
+        "--growing", action="store_true", help="refine if needed and certify for ordinary growing-prefix generation"
+    )
     probe = commands.add_parser("probe", help="compare forward shapes at the first archived greedy mismatch")
     probe.add_argument("shard", type=Path)
     probe.add_argument("sample_id", type=int)
@@ -96,8 +100,11 @@ def main():
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     torch.use_deterministic_algorithms(True)
     if args.command == "certify":
-        exp, model, _, z, sample = load_stage(args.shard, args.sample_id)
-        packet = certify(model, z, sample["target_ids"])
+        exp, model, tokenizer, z, sample = load_stage(args.shard, args.sample_id)
+        if args.growing:
+            packet = sps_growing_codec.certify_growing(model, tokenizer, z, sample["target_ids"])
+        else:
+            packet = certify(model, z, sample["target_ids"])
         packet["experiment"] = exp["name"]
         with NamedTemporaryFile(dir=args.packet.parent) as f:
             torch.save(packet, f)
@@ -105,8 +112,12 @@ def main():
             os.link(f.name, args.packet)
     else:
         packet = torch.load(args.packet, weights_only=True, map_location="cpu")
-        model, _ = model_and_tokenizer(resolve_experiment(packet["experiment"]))
-        print(json.dumps(decompress(model.cuda(), packet)))
+        model, tokenizer = model_and_tokenizer(resolve_experiment(packet["experiment"]))
+        if packet["codec"] == sps_growing_codec.CODEC:
+            ids = sps_growing_codec.decompress_growing(model.cuda(), tokenizer, packet)
+        else:
+            ids = decompress(model.cuda(), packet)
+        print(json.dumps(ids))
 
 
 if __name__ == "__main__":

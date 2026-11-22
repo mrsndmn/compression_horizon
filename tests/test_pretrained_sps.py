@@ -319,3 +319,44 @@ def test_codec_accepts_alternate_shard_mount(tmp_path, monkeypatch):
     stages = Dataset.from_dict(dict(sample_id=[0], num_input_tokens=[1], embedding=[[[1.0]]]))
     monkeypatch.setattr(sps_codec, "load_from_disk", lambda path: stages)
     assert sps_codec.load_stage(tmp_path, 0)[-1] == sample
+
+
+def test_growing_repair_roundtrip_and_eos():
+    from types import SimpleNamespace
+
+    from scripts.sps_growing_codec import certify_growing, decompress_growing, growing_ids
+    from tests.test_sps_generation_semantics import SmallTokenizer
+
+    class MarginModel(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.config = SimpleNamespace(sps=True, bos_token_id=2)
+            self.embedding = torch.nn.Embedding(3, 1)
+            self.device = self.embedding.weight.device
+            self.decode_shapes = []
+
+        def get_input_embeddings(self):
+            return self.embedding
+
+        def forward(self, *, attention_mask, predict_embeddings, inputs_embeds=None, input_ids=None):
+            if inputs_embeds is not None:
+                self.decode_shapes.append(inputs_embeds.shape[1])
+            score = predict_embeddings.expand(*attention_mask.shape, 1)
+            return SimpleNamespace(logits=torch.cat((torch.zeros_like(score), score, torch.full_like(score, -1)), -1))
+
+    model = MarginModel()
+    tokenizer = SmallTokenizer()
+    initial = torch.zeros(1, 1, 1)
+    assert growing_ids(model, tokenizer, initial, 3) == [0, 0, 0]
+    packet = certify_growing(model, tokenizer, initial, [1, 1, 1])
+    assert initial.item() == 0 and packet["prediction"].item() > 0
+    model.decode_shapes.clear()
+    assert decompress_growing(model, tokenizer, packet) == [1, 1, 1]
+    assert model.decode_shapes == [1, 2, 3]
+    with pytest.raises(ValueError, match="integrity"):
+        decompress_growing(model, tokenizer, dict(packet, sha256="bad"))
+    tokenizer.eos_token_id = 1
+    with pytest.raises(ValueError, match="interior EOS"):
+        certify_growing(model, tokenizer, initial, [1, 1])
+    with pytest.raises(ValueError, match="after refinement"):
+        certify_growing(model, tokenizer, initial, [0, 1])
