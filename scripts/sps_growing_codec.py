@@ -3,7 +3,7 @@
 import torch
 from scripts.sps_fixed_shape import token_digest
 
-from compression_horizon.inference.generation import generate_from_compression
+from compression_horizon.inference.generation import generate_from_compression, mask_native_generation_logits
 
 CODEC = "sps-growing-greedy-v1"
 experiment_configs = [
@@ -49,7 +49,8 @@ def certify_growing(model, tokenizer, prediction, target_ids):
                 .logits[0, :-1]
                 .float()
             )
-            strongest = logits.detach().scatter(1, target, -torch.inf).argmax(1, keepdim=True)
+            eligible = mask_native_generation_logits(model, tokenizer, logits.detach())
+            strongest = eligible.scatter_(1, target, -torch.inf).argmax(1, keepdim=True)
             margin = logits.gather(1, target) - logits.gather(1, strongest)
             if margin.min().item() >= settings["stop_margin"]:
                 break

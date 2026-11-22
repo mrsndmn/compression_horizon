@@ -330,7 +330,7 @@ def test_growing_repair_roundtrip_and_eos():
     class MarginModel(torch.nn.Module):
         def __init__(self):
             super().__init__()
-            self.config = SimpleNamespace(sps=True, bos_token_id=2)
+            self.config = SimpleNamespace(sps=True, bos_token_id=2, pad_token_id=2)
             self.embedding = torch.nn.Embedding(3, 1)
             self.device = self.embedding.weight.device
             self.decode_shapes = []
@@ -342,7 +342,7 @@ def test_growing_repair_roundtrip_and_eos():
             if inputs_embeds is not None:
                 self.decode_shapes.append(inputs_embeds.shape[1])
             score = predict_embeddings.expand(*attention_mask.shape, 1)
-            return SimpleNamespace(logits=torch.cat((torch.zeros_like(score), score, torch.full_like(score, -1)), -1))
+            return SimpleNamespace(logits=torch.cat((torch.zeros_like(score), score, 5 + 2 * score), -1))
 
     model = MarginModel()
     tokenizer = SmallTokenizer()
