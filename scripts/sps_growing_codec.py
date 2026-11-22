@@ -67,6 +67,6 @@ def decompress_growing(model, tokenizer, packet):
     if packet["codec"] != CODEC:
         raise ValueError("Unknown growing codec")
     ids = growing_ids(model, tokenizer, packet["prediction"], packet["length"])
-    if token_digest(ids) != packet["sha256"]:
+    if len(ids) != packet["length"] or token_digest(ids) != packet["sha256"]:
         raise ValueError("Decoded tokens failed the integrity check")
     return ids

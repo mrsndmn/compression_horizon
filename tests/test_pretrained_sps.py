@@ -356,6 +356,10 @@ def test_growing_repair_roundtrip_and_eos():
     with pytest.raises(ValueError, match="integrity"):
         decompress_growing(model, tokenizer, dict(packet, sha256="bad"))
     tokenizer.eos_token_id = 1
+    terminal = certify_growing(model, tokenizer, packet["prediction"], [1])
+    assert decompress_growing(model, tokenizer, terminal) == [1]
+    with pytest.raises(ValueError, match="integrity"):
+        decompress_growing(model, tokenizer, dict(terminal, length=2))
     with pytest.raises(ValueError, match="interior EOS"):
         certify_growing(model, tokenizer, initial, [1, 1])
     with pytest.raises(ValueError, match="after refinement"):
