@@ -29,14 +29,39 @@ gradient parity and growing-prefix forward parity, including padding.
 MLSpace accepted all eight shards from commit
 `1bb5d346ed1ec05dff6c7a4af50cce3516a5f308`. Full job IDs are in
 `artifacts/sps_cramming/fixed_attention_cramming_v1/submission_manifest.json`.
-Arkhip wait group `6eb89864f71e4a6fab6d91a008bded79` tracks the cohort.
+Arkhip wait group `6eb89864f71e4a6fab6d91a008bded79` resolved with all eight shards completed.
+
+Both models converged and replayed the selected prefix exactly under teacher
+forcing on all 48 texts. The paired results below use each run's own selected
+horizon. Exact logits count texts for which every vocabulary logit agreed at
+every scored position between full and growing true-prefix forwards.
+
+| Model | Mean TF horizon, old → new | Exact greedy, old → new | Mean correct greedy prefix, old → new | Exact logits, new |
+|---|---:|---:|---:|---:|
+| Standard | 54.83 → 55.29 | 44/48 → 48/48 | 52.50 → 55.29 | 13/48 |
+| SPS | 132.10 → 130.73 | 38/48 → 45/48 | 110.23 → 128.02 | 0/48 |
+
+On SPS, nine formerly inexact samples became exact and two formerly exact
+samples became inexact. A fresh replay of the three failures (sample IDs 7,
+18 and 46) reproduced the archived greedy token at the first mismatch after
+95, 91 and 26 correct tokens respectively. In every case the target beat the
+observed competitor by 0.0625 in the full pass and tied it in the short pass.
+Comparing the shared rows layer by layer first found a difference at the
+attention output of zero-based layers 3, 0 and 6 respectively, with equal
+shared Q/K/V rows entering that attention call. This localizes the observed
+divergence within the probed operations; its kernel-level cause remains open.
+The per-text comparison and failure probes are in `paired_results.csv` and
+`sps_first_errors.json` in the run directory.
 
 ## Conclusions
 
-The paired cohort will measure horizon, exact greedy recovery and logit
-agreement on the trained vectors. Native greedy replay recomputes the growing
-prefix with the historical adapter.
+On this paired cohort fixed-order cramming improved exact blind recovery in
+both models. Standard recovered every selected prefix; SPS retained three
+counterexamples to a general reconstruction guarantee. Further diagnosis
+should isolate the masked attention forward at the first differing layer of
+those saved SPS vectors.
 
 ## Changelog
 
 - 2026-11-23. Implement and smoke-test matched Standard and SPS cramming.
+- 2026-11-24. Audit all 96 selected prefixes and reproduce the three SPS greedy failures.
