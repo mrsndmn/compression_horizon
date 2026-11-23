@@ -1,11 +1,16 @@
 import pytest
 import torch
-from scripts.probe_qwen_fixed_attention import fixed_causal
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA experiment")
+@pytest.mark.skipif(
+    not torch.cuda.is_available() or not torch.cuda.is_bf16_supported(including_emulation=False),
+    reason="Requires a BF16-capable CUDA GPU",
+)
 @torch.inference_mode()
 def test_fixed_attention_causal_gqa_and_cache():
+    pytest.importorskip("triton")
+    from scripts.probe_qwen_fixed_attention import fixed_causal
+
     generator = torch.Generator(device="cuda").manual_seed(17)
 
     def rand(heads):

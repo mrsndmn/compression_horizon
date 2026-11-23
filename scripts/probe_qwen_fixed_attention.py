@@ -8,6 +8,7 @@ import argparse
 import json
 import math
 from contextlib import nullcontext
+from importlib.metadata import version
 from pathlib import Path
 from unittest.mock import patch
 
@@ -167,6 +168,7 @@ def run(output):
         checkpoint=exp["revision"],
         torch=torch.__version__,
         triton=triton.__version__,
+        transformers=version("transformers"),
         gpu=torch.cuda.get_device_name(),
         comparisons=[],
     )
