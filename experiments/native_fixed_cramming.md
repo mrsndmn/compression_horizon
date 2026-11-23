@@ -26,6 +26,10 @@ tokenizer snapshot identified in the registry.
 Both real-checkpoint A100 smokes trained a vector and recovered its selected
 prefix after serialization. The CUDA regression checks native visibility,
 gradient parity and growing-prefix forward parity, including padding.
+MLSpace accepted all eight shards from commit
+`1bb5d346ed1ec05dff6c7a4af50cce3516a5f308`. Full job IDs are in
+`artifacts/sps_cramming/fixed_attention_cramming_v1/submission_manifest.json`.
+Arkhip wait group `6eb89864f71e4a6fab6d91a008bded79` tracks the cohort.
 
 ## Conclusions
 
