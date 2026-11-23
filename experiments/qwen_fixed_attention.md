@@ -25,7 +25,12 @@ outputs at aligned and unaligned boundaries.
 ## Results
 
 On the original frozen Qwen checkpoint, the fixed-order forward reproduced
-every logit of its own full pass for all three tested cached splits. Both
+every logit of its own full pass for all three tested cached splits. The
+first attention layer also matched exactly on every position. The final 32
+positions, processed one token at a time with the ground-truth history and a
+growing cache, reproduced every full-pass logit. The default SDPA and math
+backends changed 3,602,909 and 3,581,841 logits respectively in the same
+one-token comparison, with no change of the winning token on those positions. Both
 built-in attention backends had logit differences when split. The fixed-order
 and default full passes differed in the winning token at 145 positions.
 
