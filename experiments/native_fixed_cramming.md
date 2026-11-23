@@ -74,16 +74,41 @@ and 79/79 correct tokens. All vocabulary logits matched bitwise at every
 one of the 342 scored positions in full versus growing true-prefix replay.
 This intervention used the original saved vectors without retraining.
 
+MLSpace running-to-completed durations and TensorBoard training timestamps
+give the following paired A100 costs for the original fixed-order backend
+with its FP32 row sum. Each historical job processed the whole cohort.
+The new jobs processed it in four parallel single-GPU shards per family.
+
+| Model | Total GPU hours, old → new | New elapsed, first start to last finish | Logged training steps, old → new | Training ms/step, old → new |
+|---|---:|---:|---:|---:|
+| Standard | 2.18 → 3.66 | 1 h 06 min | 259,545 → 269,826 | 29.76 → 47.74 |
+| SPS | 3.97 → 6.55 | 1 h 44 min | 474,784 → 465,070 | 29.79 → 49.75 |
+
+GPU hours include worker startup and validation. Training ms/step divides
+the summed time between the first and last logged training losses by the
+summed global-step differences. The logged step counts also match the
+final per-sample counters. Per-job measurements and provider timestamps
+are in `historical_job_timing.csv` in the run directory.
+
+The later FP64 sum has a separate paired A100 measurement using the frozen
+models, margin loss, gradient to the compression vector and an optimizer
+update. The median change in step time was −0.28% and −0.09% for Standard
+at 32 and 64 target tokens, and +0.08% and +0.04% for SPS at 64 and 128.
+Those differences were within run-to-run variation. The benchmark source
+is in the run directory under `softmax_step_benchmark/`. Individual block
+timings are in `softmax_sum_training_step_timing.json`.
+
 ## Conclusions
 
 On this paired cohort fixed-order cramming improved exact blind recovery in
 both models. Standard recovered every selected prefix; SPS retained three
 counterexamples to a general reconstruction guarantee. The wider softmax
 sum resolved all three observed SPS failures on A100. Its replay accuracy
-on the rest of the cohort and its throughput remain unmeasured.
+on the rest of the cohort and its full-job cost remain unmeasured.
 
 ## Changelog
 
 - 2026-11-23. Implement and smoke-test matched Standard and SPS cramming.
 - 2026-11-24. Audit all 96 selected prefixes and reproduce the three SPS greedy failures.
 - 2026-11-24. Isolate the softmax row reduction and verify blind recovery on the three saved failures.
+- 2026-11-24. Compare historical job and training-step durations and time the FP64 sum on matched steps.
