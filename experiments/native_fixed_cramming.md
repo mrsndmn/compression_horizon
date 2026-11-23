@@ -48,20 +48,42 @@ samples became inexact. A fresh replay of the three failures (sample IDs 7,
 observed competitor by 0.0625 in the full pass and tied it in the short pass.
 Comparing the shared rows layer by layer first found a difference at the
 attention output of zero-based layers 3, 0 and 6 respectively, with equal
-shared Q/K/V rows entering that attention call. This localizes the observed
-divergence within the probed operations; its kernel-level cause remains open.
+shared Q/K/V rows entering that attention call.
 The per-text comparison and failure probes are in `paired_results.csv` and
 `sps_first_errors.json` in the run directory.
+
+The softmax denominator diverged in the row-wise FP32 sum of the unnormalized
+weights, `tl.sum(p, 1)`. The shared visibility entries were identical. Triton
+specialized the reduction layout on alignment, so the full and short kernels
+grouped the FP32 additions differently. Changing only the physical row stride
+of an otherwise identical mask could switch the BF16 output. Zeroing future
+values had no effect on the shared outputs.
+
+To measure the difference without changing the reduction layout, the probe
+read the operands of the final division from each compiled PTX variant.
+Reassembling the original PTX reproduced the captured attention outputs.
+The numerators matched across every shared element of the first affected
+attention call. Denominators differed on 653, 553 and 164 head/query pairs
+for samples 7, 18 and 46, respectively. After division and BF16 rounding,
+one, two and three shared output elements differed. Per-element operands and
+quotients are in `sps_softmax_reduction_probe.json` in the run directory.
+
+Widening only the per-block row sum to FP64 and casting its result back to
+FP32 recovered all three saved prefixes blindly, with 128/128, 135/135
+and 79/79 correct tokens. All vocabulary logits matched bitwise at every
+one of the 342 scored positions in full versus growing true-prefix replay.
+This intervention used the original saved vectors without retraining.
 
 ## Conclusions
 
 On this paired cohort fixed-order cramming improved exact blind recovery in
 both models. Standard recovered every selected prefix; SPS retained three
-counterexamples to a general reconstruction guarantee. Further diagnosis
-should isolate the masked attention forward at the first differing layer of
-those saved SPS vectors.
+counterexamples to a general reconstruction guarantee. The wider softmax
+sum resolved all three observed SPS failures on A100. Its replay accuracy
+on the rest of the cohort and its throughput remain unmeasured.
 
 ## Changelog
 
 - 2026-11-23. Implement and smoke-test matched Standard and SPS cramming.
 - 2026-11-24. Audit all 96 selected prefixes and reproduce the three SPS greedy failures.
+- 2026-11-24. Isolate the softmax row reduction and verify blind recovery on the three saved failures.
