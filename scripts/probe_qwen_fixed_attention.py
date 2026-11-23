@@ -31,6 +31,10 @@ def _fixed_attention(
     K,
     V,
     OUT,
+    MASK,
+    mask_q_stride,
+    mask_k_stride,
+    HAS_MASK: tl.constexpr,
     nq,
     nk,
     sqh,
@@ -64,13 +68,26 @@ def _fixed_attention(
         k = tl.load(K + kvhead * skh + kpos[:, None] * skt + d[None, :], mask=kpos[:, None] < nk, other=0)
         v = tl.load(V + kvhead * svh + kpos[:, None] * svt + d[None, :], mask=kpos[:, None] < nk, other=0)
         score = tl.dot(q, tl.trans(k)) * SCALE
-        score = tl.where((kpos[None, :] <= qpos[:, None]) & (kpos[None, :] < nk), score, -float("inf"))
+        visible = (kpos[None, :] <= qpos[:, None]) & (kpos[None, :] < nk)
+        if HAS_MASK:
+            allowed = tl.load(
+                MASK + (qpos[:, None] - cached) * mask_q_stride + kpos[None, :] * mask_k_stride,
+                mask=active[:, None] & (kpos[None, :] < nk),
+                other=0,
+            )
+            visible = visible & allowed
+        score = tl.where(visible, score, -float("inf"))
         newmax = tl.maximum(maximum, tl.max(score, 1))
+        if HAS_MASK:
+            # A padding/document mask may hide the entire first key tile.
+            newmax = tl.where(newmax == -float("inf"), -1.0e30, newmax)
         rescale = tl.exp(maximum - newmax)
         p = tl.exp(score - newmax[:, None])
         acc = acc * rescale[:, None] + tl.dot(p.to(tl.bfloat16), v)
         denom = denom * rescale + tl.sum(p, 1)
         maximum = newmax
+    if HAS_MASK:
+        denom = tl.where(denom == 0, 1.0, denom)
     tl.store(OUT + head * soh + (qpos[:, None] - cached) * sot + d[None, :], acc / denom[:, None], mask=active[:, None])
 
 
@@ -103,6 +120,13 @@ def fixed_causal(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False, scale=
             raise ValueError("Only right-aligned causal attention is supported")
     elif not ((is_causal and nq == nk) or (not is_causal and nq == 1)):
         raise ValueError("Missing causal visibility information")
+    return fixed_forward(q, k, v, scale)
+
+
+def fixed_forward(q, k, v, scale=None, visibility=None):
+    """Shared launch after the caller has validated its attention contract."""
+    _, h, nq, d = q.shape
+    nk = k.shape[2]
     o = torch.empty_like(q, memory_format=torch.contiguous_format)
     bm, bn = 32, 64
     grid = (triton.cdiv((nk - nq) % bm + nq, bm), h)
@@ -111,6 +135,10 @@ def fixed_causal(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False, scale=
         k,
         v,
         o,
+        visibility if visibility is not None else q,
+        visibility.stride(-2) if visibility is not None else 0,
+        visibility.stride(-1) if visibility is not None else 0,
+        visibility is not None,
         nq,
         nk,
         *q.stride()[1:3],
