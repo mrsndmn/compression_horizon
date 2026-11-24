@@ -9,7 +9,9 @@ from datasets import load_from_disk
 from scripts import run_native_fixed_cramming as fixed
 from scripts.run_native_fixed_cramming import jobs, load_sps_checkpoint
 
-ROOT = jobs.ROOT / "natural_constraints_v1"
+ARCHIVE = jobs.ROOT / "natural_constraints_v1"
+ARCHIVE_COMMIT = "0f4bbe7156b3cbb30bbda86acae5ffbea0794051"
+ROOT = jobs.ROOT / "natural_constraints_v2"
 experiment_configs = [
     dict(
         name=f"shard{i:02d}",
@@ -69,7 +71,7 @@ def fit(model, context, start, ids, selected, cfg):
         optimizer.step()
 
 
-def matched_pair(ids, margins, cfg, vulnerable):
+def matched_pair(ids, margins, cfg):
     """Anchor a,b with shared ending, replace b by c with the same target as b."""
     candidates = []
     for a in range(1, len(ids)):
@@ -83,9 +85,8 @@ def matched_pair(ids, margins, cfg, vulnerable):
                 gap = abs(margins[b] - margins[c])
                 if ids[c] != ids[b] or ids[c - 1] == ids[a - 1] or gap > cfg["caliper"]:
                     continue
-                boundary_conflict = (a == len(ids) - 1 and b in vulnerable) or (b == len(ids) - 1 and a in vulnerable)
-                rank = (not boundary_conflict, -suffix, gap, abs(c - b), a, b, c)
-                candidates.append((rank, dict(a=a, b=b, c=c, suffix=suffix, gap=gap, boundary_conflict=boundary_conflict)))
+                rank = (-suffix, gap, abs(c - b), a, b, c)
+                candidates.append((rank, dict(a=a, b=b, c=c, suffix=suffix, gap=gap)))
     return min(candidates, key=lambda x: x[0])[1] if candidates else None
 
 
@@ -120,20 +121,31 @@ def probe(cfg):
             context = model.get_input_embeddings()(inputs)
             start = torch.tensor([saved["embedding"]], device="cuda", dtype=context.dtype)
             prior, _ = evaluate(model, context[:, :-1].contiguous(), start, ids[:-1])
-            arms = {}
-            for seed in cfg["seeds"]:
-                order = list(range(h))
-                random.Random(seed + sid).shuffle(order)
-                for k in cfg["protected"]:
-                    if k in (0, "all") and seed != cfg["seeds"][0]:
-                        continue
-                    subset = order[:k] if isinstance(k, int) else order
-                    arms[f"{seed}_{k}"] = fit(model, context, start, ids, sorted(subset) + [h], cfg)
-            alone = arms[f"{cfg['seeds'][0]}_0"]
+            archive = ARCHIVE / cfg["name"]
+            archived = None
+            if (archive / "completed").is_file() and json.loads((archive / "job.json").read_text())["commit"] == ARCHIVE_COMMIT:
+                archived = json.loads((archive / f"sample_{sid:02d}.json").read_text())
+                if archived["tokens"] != tokens or archived["previous"] != prior.tolist():
+                    raise ValueError(f"Boundary replay changed for {sid}")
+                arms = archived["arms"]
+            else:
+                arms = {}
+                for seed in cfg["seeds"]:
+                    order = list(range(h))
+                    random.Random(seed + sid).shuffle(order)
+                    for k in cfg["protected"]:
+                        if k in (0, "all") and seed != cfg["seeds"][0]:
+                            continue
+                        subset = order[:k] if isinstance(k, int) else order
+                        arms[f"{seed}_{k}"] = fit(model, context, start, ids, sorted(subset) + [h], cfg)
             natural, _ = evaluate(model, context, native, ids)
-            pair = matched_pair(tokens, natural.tolist(), cfg, alone["first_lost"])
+            pair = matched_pair(tokens, natural.tolist(), cfg)
             paired = {}
-            if pair:
+            if pair and archived and archived["pair"] and all(archived["pair"][key] == pair[key] for key in "abc"):
+                if archived["paired"]["a"]["initial"] != natural.tolist():
+                    raise ValueError(f"Native replay changed for {sid}")
+                paired = archived["paired"]
+            elif pair:
                 a, b, c = (pair[key] for key in "abc")
                 for name, selected in dict(a=[a], b=[b], c=[c], shared=[a, b], control=[a, c]).items():
                     paired[name] = fit(model, context, native, ids, selected, cfg)
