@@ -5,13 +5,6 @@ import json
 import torch
 from datasets import load_from_disk
 from scripts.analyze_sps_predict_embedding import fixed_bos
-from scripts.run_native_fixed_cramming import (
-    DEPENDENCIES,
-    GPT2_REV,
-    ROOT,
-    experiment_configs,
-    fixed_backend,
-)
 from transformers import AutoTokenizer
 
 from compression_horizon.inference.generation import generate_from_compression
@@ -74,6 +67,14 @@ def replay(model, tokenizer, target, vector):
 
 
 def main():
+    from scripts.run_native_fixed_cramming import (
+        DEPENDENCIES,
+        GPT2_REV,
+        ROOT,
+        experiment_configs,
+        fixed_backend,
+    )
+
     configs = [e for e in experiment_configs if e["family"] == "sps"]
     model = load_sps_checkpoint(configs[0]["checkpoint"], torch_dtype=torch.bfloat16).cuda()
     tokenizer = AutoTokenizer.from_pretrained(DEPENDENCIES / GPT2_REV, local_files_only=True)

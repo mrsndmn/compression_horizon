@@ -19,6 +19,7 @@ from scripts import analyze_sps_predict_embedding as predict
 from scripts.analyze_sps_objective_factorial import leading_correct
 from scripts.greedy_reconstruction_eval import select_rows
 from scripts.native_fixed_attention import native_fixed_attention
+from scripts.probe_sps_kv_replay import replay
 from scripts.sps_mechanism_common import source_commit
 from scripts.validation.validate_sps_batch1_run import check_sample
 from transformers import AutoTokenizer, DataCollatorForLanguageModeling
@@ -51,6 +52,13 @@ experiment_configs = [
     ]
     for shard in range(4)
 ]
+
+
+wide_experiment_configs = [dict(exp, wide_sum=True) for exp in experiment_configs if exp["family"] == "sps"]
+SUITES = {
+    "original": (ROOT, experiment_configs),
+    "wide": (jobs.ROOT / "sps_wide_cramming_v1", wide_experiment_configs),
+}
 
 
 @contextmanager
@@ -186,7 +194,8 @@ def train(exp, output, smoke=False):
         if is_sps
         else StandardTrainer(**common, initial_vectors=initial)
     )
-    with fixed_backend():
+    wide_sum = exp.get("wide_sum", False)
+    with fixed_backend(wide_sum=wide_sum):
         path = trainer.train()
         chosen = select_rows(load_from_disk(path), "progr")
         if sorted(r["sample_id"] for r in chosen) != list(sample_ids):
@@ -201,10 +210,24 @@ def train(exp, output, smoke=False):
             stored = torch.tensor([row["embedding"]], device=model.device, dtype=model.dtype)
             memory = predict.fixed_bos(model, 1, tokenizer.bos_token_id) if is_sps else stored
             forward_kwargs = {"predict_embeddings": stored} if is_sps else {}
-            sample = check_sample(model, tokenizer, tokens, memory, **forward_kwargs)
-            sample.update(growing_difference(model, tokens, memory, forward_kwargs))
+            if wide_sum:
+                target = tokens[0].tolist()
+                result = replay(model, tokenizer, target, stored)
+                cached = result["generated"]["cached"]
+                sample = dict(
+                    target_ids=target,
+                    generated_ids=cached,
+                    greedy_exact=cached == target,
+                    uncached_exact=result["generated"]["uncached"] == target,
+                    replay=result,
+                    teacher_replay_correct_tokens=result["teacher_correct"],
+                    unequal_logits=result["comparisons"]["cache_vs_full"]["unequal_logits"],
+                )
+            else:
+                sample = check_sample(model, tokenizer, tokens, memory, **forward_kwargs)
+                sample.update(growing_difference(model, tokens, memory, forward_kwargs))
             horizon = n if row["final_convergence"] >= row["convergence_threshold"] else 0
-            if horizon and sample["teacher_replay_correct_tokens"] != horizon:
+            if not wide_sum and horizon and sample["teacher_replay_correct_tokens"] != horizon:
                 raise RuntimeError("Stored converged vector failed teacher replay")
             sample.update(
                 sample_id=sid,
@@ -230,12 +253,12 @@ def train(exp, output, smoke=False):
     (output / "completed").touch()
 
 
-def summarize():
-    for family in ("standard", "sps"):
+def summarize(root=ROOT, configs=experiment_configs):
+    for family in dict.fromkeys(exp["family"] for exp in configs):
         rows = []
-        for exp in experiment_configs:
+        for exp in configs:
             if exp["family"] == family:
-                p = ROOT / exp["name"]
+                p = root / exp["name"]
                 if not (p / "completed").exists():
                     raise RuntimeError(f"Incomplete shard: {p}")
                 rows.extend(json.loads((p / "validation.json").read_text())["samples"])
@@ -253,7 +276,15 @@ def summarize():
             new_leading=statistics.mean(leading_correct(r["target_ids"], r["generated_ids"]) for r in rows),
             old_leading=statistics.mean(r["old_leading"] for r in rows),
         )
-        jobs.write_json(ROOT / (family + "_summary.json"), summary)
+        if "replay" in rows[0]:
+            summary.update(
+                teacher_exact=sum(r["teacher_replay_correct_tokens"] == len(r["target_ids"]) for r in rows),
+                uncached_exact=sum(r["uncached_exact"] for r in rows),
+                identical_blind_sequences=sum(r["generated_ids"] == r["replay"]["generated"]["uncached"] for r in rows),
+                scored_positions=sum(len(r["target_ids"]) for r in rows),
+                cache_vs_full_unequal_logits=sum(r["unequal_logits"] for r in rows),
+            )
+        jobs.write_json(root / (family + "_summary.json"), summary)
         print(family, summary)
 
 
@@ -262,11 +293,13 @@ if __name__ == "__main__":
     parser.add_argument("--phase", choices=["submit", "dry", "probe", "smoke", "summary"], required=True)
     parser.add_argument("--experiment", choices=[e["name"] for e in experiment_configs])
     parser.add_argument("--smoke-output", type=Path)
+    parser.add_argument("--suite", choices=SUITES, default="original")
     opts = parser.parse_args()
+    root, configs = SUITES[opts.suite]
     if opts.phase in ("submit", "dry"):
         commit = source_commit()
-        for exp in experiment_configs:
-            jobs.OUTPUT = ROOT / exp["name"]
+        for exp in configs:
+            jobs.OUTPUT = root / exp["name"]
             record = jobs.OUTPUT / "job.json"
             if opts.phase == "submit" and record.exists():
                 if json.loads(record.read_text())["commit"] != commit:
@@ -275,18 +308,20 @@ if __name__ == "__main__":
             jobs.submit(
                 dry=opts.phase == "dry",
                 entrypoint="scripts/run_native_fixed_cramming.py",
-                job_kind="fixed_" + exp["name"],
-                probe_args=("--experiment", exp["name"]),
+                job_kind=("wide_" if opts.suite == "wide" else "fixed_") + exp["name"],
+                probe_args=("--experiment", exp["name"], "--suite", opts.suite),
                 snapshot_commit=commit,
             )
     elif opts.phase == "summary":
-        summarize()
+        summarize(root, configs)
     else:
-        exp = next(e for e in experiment_configs if e["name"] == opts.experiment)
+        exp = next((e for e in configs if e["name"] == opts.experiment), None)
+        if exp is None:
+            parser.error("Select an experiment from the requested suite")
         if opts.phase == "smoke" and opts.smoke_output is None:
             parser.error("--smoke-output required for smoke")
         train(
             exp,
-            (opts.smoke_output / exp["name"] if opts.phase == "smoke" else ROOT / exp["name"]),
+            (opts.smoke_output / exp["name"] if opts.phase == "smoke" else root / exp["name"]),
             opts.phase == "smoke",
         )
