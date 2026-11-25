@@ -14,10 +14,16 @@ from torch.nn import functional as F
 from transformers import PretrainedConfig
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
-from .sps_vendor.components import Block, CausalSelfAttention, RMSNorm, apply_rotary_emb, precompute_freqs_cis
+from .sps_vendor.components import (
+    Block,
+    CausalSelfAttention,
+    RMSNorm,
+    apply_rotary_emb,
+    precompute_freqs_cis,
+)
 
 
-def attention_visibility(attention_mask, *, sps=False, window_size=0, document_ids=None):
+def attention_visibility(attention_mask, *, sps=False, window_size=0, document_ids=None, query_start=0):
     """True means visible. SPS input keys persist; predict keys expire after w tokens."""
     valid = attention_mask.bool()
     if sps:
@@ -25,7 +31,7 @@ def attention_visibility(attention_mask, *, sps=False, window_size=0, document_i
         if document_ids is not None:
             document_ids = document_ids.repeat_interleave(2, dim=1)
     n = valid.shape[1]
-    q = torch.arange(n, device=valid.device)[:, None]
+    q = torch.arange(query_start, n, device=valid.device)[:, None]
     k = torch.arange(n, device=valid.device)[None, :]
     allowed = q >= k
     if sps:
@@ -38,23 +44,25 @@ def attention_visibility(attention_mask, *, sps=False, window_size=0, document_i
 
 class SDPAAttention(CausalSelfAttention):
     def forward(self, x, freqs_cis, attn_block_mask=None, past_key_values=None):
-        if past_key_values is not None:
-            raise NotImplementedError("SPS cramming adapter uses full forwards, without KV caching")
         b, t, c = x.shape
         q, k, v = self.c_attn(x).split(self.hidden_size, dim=2)
         q = q.view(b, t, self.n_head, c // self.n_head)
         k = k.view(b, t, self.n_head, c // self.n_head)
         q, k = apply_rotary_emb(q, k, freqs_cis)
         v = v.view(b, t, self.n_head, c // self.n_head).transpose(1, 2)
+        k = k.transpose(1, 2)
+        if past_key_values is not None:
+            k = torch.cat((past_key_values[0], k), dim=2)
+            v = torch.cat((past_key_values[1], v), dim=2)
         y = F.scaled_dot_product_attention(
             q.transpose(1, 2),
-            k.transpose(1, 2),
+            k,
             v,
             attn_mask=attn_block_mask,
             dropout_p=self.dropout if self.training else 0.0,
         )
         y = y.transpose(1, 2).contiguous().view(b, t, c)
-        return self.resid_dropout(self.c_proj(y)), None
+        return self.resid_dropout(self.c_proj(y)), (k, v)
 
 
 class SPSCausalLM(nn.Module):
@@ -80,7 +88,9 @@ class SPSCausalLM(nn.Module):
         self.lm_head = nn.Linear(cfg.hidden_size, cfg.vocab_size, bias=False)
         self.transformer.wte.weight = self.lm_head.weight
         self.register_buffer(
-            "freqs_cis", precompute_freqs_cis(cfg.hidden_size // cfg.n_head, cfg.block_size + 1), persistent=False
+            "freqs_cis",
+            precompute_freqs_cis(cfg.hidden_size // cfg.n_head, cfg.block_size + 1),
+            persistent=False,
         )
 
     def _apply(self, fn, recurse=True):
@@ -114,8 +124,16 @@ class SPSCausalLM(nn.Module):
         past_key_values=None,
         predict_embeddings=None,
     ):
-        if use_cache or past_key_values is not None:
-            raise NotImplementedError("KV caching is not supported by the SPS cramming adapter")
+        if past_key_values is not None and not use_cache:
+            raise ValueError("Pass use_cache=True when continuing a native KV cache")
+        if use_cache and (inputs_embeds is None or document_ids is not None or position_ids is not None):
+            raise ValueError("Native cramming cache expects unpadded inputs_embeds with consecutive positions in one document")
+        cached_slots = 0
+        if past_key_values is not None:
+            if len(past_key_values) != len(self.transformer.h):
+                raise ValueError("Expected one KV pair per transformer layer")
+            cached_slots = past_key_values[0][0].shape[2]
+        cached_tokens = cached_slots // (2 if self.config.sps else 1)
         if (input_ids is None) == (inputs_embeds is None):
             raise ValueError("Supply exactly one of input_ids and inputs_embeds")
         if inputs_embeds is None:
@@ -127,19 +145,30 @@ class SPSCausalLM(nn.Module):
                 document_ids = F.pad(eos[:, :-1].long().cumsum(1), (1, 0))
         b, t, _ = inputs_embeds.shape
         if predict_embeddings is not None:
-            if not self.config.sps or predict_embeddings.shape != (b, 1, inputs_embeds.shape[-1]):
+            if not self.config.sps or predict_embeddings.shape != (
+                b,
+                1,
+                inputs_embeds.shape[-1],
+            ):
                 raise ValueError("predict_embeddings requires SPS and shape [batch, 1, hidden]")
+        if use_cache and attention_mask is not None:
+            if attention_mask.shape != (b, cached_tokens + t) or not attention_mask.bool().all():
+                raise ValueError("Native cramming cache requires an all-valid attention mask covering past and current tokens")
         if attention_mask is None:
-            attention_mask = torch.ones((b, t), device=inputs_embeds.device, dtype=torch.bool)
+            attention_mask = torch.ones((b, cached_tokens + t), device=inputs_embeds.device, dtype=torch.bool)
         if position_ids is None:
-            position_ids = (attention_mask.long().cumsum(1) - 1).clamp_min(0)
+            position_ids = (attention_mask.long().cumsum(1)[:, cached_tokens:] - 1).clamp_min(0)
         if position_ids.min() < 0:
             raise ValueError("Negative RoPE positions are unsupported")
         needed = int(position_ids.max()) + 1
         if needed > self.freqs_cis.shape[0]:
             self.freqs_cis = precompute_freqs_cis(self.config.hidden_size // self.config.n_head, needed).to(self.device)
         mask = attention_visibility(
-            attention_mask, sps=self.config.sps, window_size=getattr(self.config, "window_size", 0), document_ids=document_ids
+            attention_mask,
+            sps=self.config.sps,
+            window_size=getattr(self.config, "window_size", 0),
+            document_ids=document_ids,
+            query_start=cached_slots,
         )
         if self.config.sps:
             predicts = (
@@ -156,21 +185,32 @@ class SPSCausalLM(nn.Module):
         def readout(hidden):
             return hidden[:, 1::2] if self.config.sps else hidden
 
-        for block in self.transformer.h:
+        present = []
+        for layer, block in enumerate(self.transformer.h):
             if output_hidden_states:
                 states.append(readout(x))
-            x, _ = block(x, freqs, attn_block_mask=mask)
+            past = past_key_values[layer] if past_key_values is not None else None
+            x, kv = block(x, freqs, attn_block_mask=mask, past_key_values=past)
+            if use_cache:
+                present.append(kv)
         x = readout(self.transformer.output_norm(x))
         if output_hidden_states:
             states.append(x)
-        return CausalLMOutputWithPast(logits=self.lm_head(x), hidden_states=tuple(states) if output_hidden_states else None)
+        return CausalLMOutputWithPast(
+            logits=self.lm_head(x),
+            past_key_values=tuple(present) if use_cache else None,
+            hidden_states=tuple(states) if output_hidden_states else None,
+        )
 
 
 def load_sps_checkpoint(path, *, torch_dtype=torch.float32):
     """Strict native load; select model family from checkpoint metadata, never filename."""
     checkpoint = torch.load(Path(path), map_location="cpu", weights_only=False, mmap=True)
     target = checkpoint["config"]["model"]["_target_"]
-    if target not in {"modeling.models.sps.SPSModel", "modeling.models.full_attention_model.Model"}:
+    if target not in {
+        "modeling.models.sps.SPSModel",
+        "modeling.models.full_attention_model.Model",
+    }:
         raise ValueError(f"Unsupported SPS model target: {target}")
     model = SPSCausalLM(checkpoint["model_args"], sps=target == "modeling.models.sps.SPSModel")
     state = {key.removeprefix("_orig_mod."): value for key, value in checkpoint["model"].items()}

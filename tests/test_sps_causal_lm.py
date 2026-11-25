@@ -6,7 +6,11 @@ import pytest
 import torch
 from torch.nn import functional as F
 
-from compression_horizon.models.sps_causal_lm import SPSCausalLM, attention_visibility, load_sps_checkpoint
+from compression_horizon.models.sps_causal_lm import (
+    SPSCausalLM,
+    attention_visibility,
+    load_sps_checkpoint,
+)
 
 
 def tiny_args():
@@ -110,7 +114,11 @@ def test_attention_matches_independent_explicit_softmax(sps):
 def test_strict_native_loading_and_rope_dtype(tmp_path, sps):
     model = SPSCausalLM(tiny_args(), sps=sps)
     target = "modeling.models.sps.SPSModel" if sps else "modeling.models.full_attention_model.Model"
-    ckpt = dict(model_args=tiny_args(), model=model.state_dict(), config={"model": {"_target_": target}})
+    ckpt = dict(
+        model_args=tiny_args(),
+        model=model.state_dict(),
+        config={"model": {"_target_": target}},
+    )
     path = tmp_path / "model.pt"
     torch.save(ckpt, path)
     loaded = load_sps_checkpoint(path, torch_dtype=torch.bfloat16)
@@ -176,3 +184,25 @@ def test_information_gain_without_memory_is_zero_across_eos(sps):
         compression_attention_mask=mask[:, :0],
     )
     assert gain == [0.0]
+
+
+@pytest.mark.parametrize("sps,window", [(False, 0), (True, 0), (True, 2)])
+def test_cached_chunks_preserve_positions_and_visibility(sps, window):
+    torch.manual_seed(42)
+    args = dict(tiny_args(), window_size=window)
+    model = SPSCausalLM(args, sps=sps).eval()
+    x = torch.randn(2, 8, args["hidden_size"])
+    kwargs = {"predict_embeddings": torch.randn_like(x[:, :1])} if sps else {}
+    full = model(inputs_embeds=x, **kwargs).logits
+    past = None
+    for start, end in [(0, 3), (3, 4), (4, 8)]:
+        out = model(
+            inputs_embeds=x[:, start:end],
+            use_cache=True,
+            past_key_values=past,
+            **kwargs,
+        )
+        past = out.past_key_values
+        assert len(past) == args["n_layer"]
+        assert all(k.shape == v.shape and k.shape[2] == end * (2 if sps else 1) for k, v in past)
+        torch.testing.assert_close(out.logits, full[:, start:end], atol=1e-5, rtol=1e-5)

@@ -7,6 +7,7 @@ import statistics
 import subprocess
 import sys
 from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
 from unittest.mock import patch
 
@@ -24,7 +25,9 @@ from transformers import AutoTokenizer, DataCollatorForLanguageModeling
 
 from compression_horizon.models.sps_causal_lm import load_sps_checkpoint
 from compression_horizon.train.arguments import MyTrainingArguments
-from compression_horizon.train.trainers.progressive_cramming import ProgressiveCrammingTrainer
+from compression_horizon.train.trainers.progressive_cramming import (
+    ProgressiveCrammingTrainer,
+)
 
 ROOT = jobs.ROOT / "fixed_attention_cramming_v1"
 BI_REV = "f22b1fbe534b1fe045080f44a970a441caaf3c4f"
@@ -51,18 +54,25 @@ experiment_configs = [
 
 
 @contextmanager
-def fixed_backend():
+def fixed_backend(*, wide_sum=False):
     dep = DEPENDENCIES / BI_REV
     if subprocess.check_output(
         ["git", "-C", str(dep), "rev-parse", "HEAD"], text=True
     ).strip() != BI_REV or subprocess.check_output(["git", "-C", str(dep), "diff", "HEAD", "--", "batch_invariant_ops"]):
         raise ValueError("Wrong batch-invariant dependency revision")
     sys.path.insert(0, str(dep))
-    from batch_invariant_ops import disable_batch_invariant_mode, enable_batch_invariant_mode
+    from batch_invariant_ops import (
+        disable_batch_invariant_mode,
+        enable_batch_invariant_mode,
+    )
 
     enable_batch_invariant_mode()
     try:
-        with patch.object(F, "scaled_dot_product_attention", native_fixed_attention):
+        with patch.object(
+            F,
+            "scaled_dot_product_attention",
+            partial(native_fixed_attention, wide_sum=wide_sum),
+        ):
             yield
     finally:
         disable_batch_invariant_mode()
@@ -107,7 +117,9 @@ def growing_difference(model, tokens, memory, forward_kwargs):
 
     def score(x):
         return model(
-            inputs_embeds=x, attention_mask=torch.ones(x.shape[:2], device=x.device, dtype=torch.long), **forward_kwargs
+            inputs_embeds=x,
+            attention_mask=torch.ones(x.shape[:2], device=x.device, dtype=torch.long),
+            **forward_kwargs,
         ).logits
 
     full = score(inputs)[0, :-1]
@@ -141,7 +153,10 @@ def train(exp, output, smoke=False):
     if smoke:
         dataset = dataset.map(lambda row: {k: row[k][:12] for k in ("input_ids", "attention_mask")})
         settings.update(
-            max_sequence_length=12, max_optimization_steps_per_sample=160, max_optimization_steps_per_token=80, warmup_steps=1
+            max_sequence_length=12,
+            max_optimization_steps_per_sample=160,
+            max_optimization_steps_per_token=80,
+            warmup_steps=1,
         )
     settings.update(
         limit_dataset_items=count,
@@ -205,7 +220,11 @@ def train(exp, output, smoke=False):
     jobs.write_json(
         output / "validation.json",
         dict(
-            config=exp, training_args=settings, source_commit=source_commit(), batch_invariant_revision=BI_REV, samples=records
+            config=exp,
+            training_args=settings,
+            source_commit=source_commit(),
+            batch_invariant_revision=BI_REV,
+            samples=records,
         ),
     )
     (output / "completed").touch()
@@ -266,4 +285,8 @@ if __name__ == "__main__":
         exp = next(e for e in experiment_configs if e["name"] == opts.experiment)
         if opts.phase == "smoke" and opts.smoke_output is None:
             parser.error("--smoke-output required for smoke")
-        train(exp, (opts.smoke_output / exp["name"] if opts.phase == "smoke" else ROOT / exp["name"]), opts.phase == "smoke")
+        train(
+            exp,
+            (opts.smoke_output / exp["name"] if opts.phase == "smoke" else ROOT / exp["name"]),
+            opts.phase == "smoke",
+        )

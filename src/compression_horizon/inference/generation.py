@@ -35,6 +35,7 @@ def generate_from_compression(
     random_position_ids: bool = False,
     return_generated_ids: bool = False,
     predict_embeddings: torch.Tensor | None = None,
+    use_cache: bool = False,
 ) -> list[str] | tuple[list[str], torch.Tensor]:
     """Generates a sequence starting from compressed embeddings."""
     # Cast to the same device
@@ -69,44 +70,33 @@ def generate_from_compression(
     input_embeddings = model.get_input_embeddings()
     torch_dtype = input_embeddings.weight.dtype
 
-    for _ in range(max_new_tokens):
-        # Embeddings
-        if generated_token_ids.size(1) == 0:
-            generated_embeddings = torch.empty((batch_size, 0, hidden_size), device=device)  # [batch, 0, hidden]
+    if use_cache and random_position_ids:
+        raise ValueError("Cached generation requires stable position IDs")
+    past = None
+    for step in range(max_new_tokens):
+        if step == 0:
+            inputs = compression_token_embeddings
+        elif use_cache:
+            inputs = input_embeddings(generated_token_ids[:, -1:])
         else:
-            generated_embeddings = input_embeddings(generated_token_ids)  # [batch, sequence, hidden]
-        united_token_embeddings = torch.cat(
-            (compression_token_embeddings, generated_embeddings), dim=1
-        )  # [batch, compression + sequence, hidden]
-        united_token_embeddings = united_token_embeddings.to(torch_dtype)
-
-        # Attention mask
-        compression_attention_mask = torch.ones(
-            (batch_size, num_compression_tokens), dtype=torch.long, device=device
-        )  # [batch, compression]
-        attention_mask = torch.ones(
-            (batch_size, generated_embeddings.size(1)), dtype=torch.long, device=device
-        )  # [batch, sequence]
-        united_attention_mask = torch.cat(
-            (compression_attention_mask, attention_mask), dim=1
-        )  # [batch, compression + sequence]
-
+            inputs = torch.cat(
+                (compression_token_embeddings, input_embeddings(generated_token_ids)),
+                dim=1,
+            )
+        attention_mask = torch.ones((batch_size, num_compression_tokens + step), dtype=torch.long, device=device)
         if random_position_ids:
-            position_ids = (
-                torch.randperm(united_token_embeddings.size(1), device=device).unsqueeze(dim=0).repeat(batch_size, 1)
-            )  # [batch, compression + sequence]
-            outputs = model(
-                inputs_embeds=united_token_embeddings,
-                attention_mask=united_attention_mask,
-                position_ids=position_ids,
-                **forward_kwargs,
-            )
-        else:
-            outputs = model(
-                inputs_embeds=united_token_embeddings,
-                attention_mask=united_attention_mask,
-                **forward_kwargs,
-            )
+            forward_kwargs["position_ids"] = torch.randperm(inputs.size(1), device=device).expand(batch_size, -1)
+        if use_cache:
+            forward_kwargs.update(use_cache=True, past_key_values=past)
+        outputs = model(
+            inputs_embeds=inputs.to(torch_dtype),
+            attention_mask=attention_mask,
+            **forward_kwargs,
+        )
+        if use_cache:
+            past = outputs.past_key_values
+            if past is None:
+                raise ValueError("Decoder returned no requested KV cache")
         logits = outputs.logits[:, -1, :]  # [batch, vocabulary]
         logits = mask_native_generation_logits(model, tokenizer, logits)
         next_token_ids = torch.argmax(logits, dim=-1)  # [batch]

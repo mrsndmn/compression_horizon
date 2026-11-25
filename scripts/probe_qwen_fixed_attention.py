@@ -50,6 +50,7 @@ def _fixed_attention(
     D: tl.constexpr,
     BM: tl.constexpr,
     BN: tl.constexpr,
+    WIDE_SUM: tl.constexpr = False,
 ):
     head = tl.program_id(1)
     cached = nk - nq
@@ -58,15 +59,27 @@ def _fixed_attention(
     qpos = tile * BM + tl.arange(0, BM)
     d = tl.arange(0, D)
     active = (qpos >= cached) & (qpos < nk)
-    q = tl.load(Q + head * sqh + (qpos[:, None] - cached) * sqt + d[None, :], mask=active[:, None], other=0)
+    q = tl.load(
+        Q + head * sqh + (qpos[:, None] - cached) * sqt + d[None, :],
+        mask=active[:, None],
+        other=0,
+    )
     kvhead = head // GROUP
     maximum = tl.full((BM,), -float("inf"), tl.float32)
     denom = tl.full((BM,), 0, tl.float32)
     acc = tl.full((BM, D), 0, tl.float32)
     for block in range(0, tl.cdiv((tile + 1) * BM, BN)):
         kpos = block * BN + tl.arange(0, BN)
-        k = tl.load(K + kvhead * skh + kpos[:, None] * skt + d[None, :], mask=kpos[:, None] < nk, other=0)
-        v = tl.load(V + kvhead * svh + kpos[:, None] * svt + d[None, :], mask=kpos[:, None] < nk, other=0)
+        k = tl.load(
+            K + kvhead * skh + kpos[:, None] * skt + d[None, :],
+            mask=kpos[:, None] < nk,
+            other=0,
+        )
+        v = tl.load(
+            V + kvhead * svh + kpos[:, None] * svt + d[None, :],
+            mask=kpos[:, None] < nk,
+            other=0,
+        )
         score = tl.dot(q, tl.trans(k)) * SCALE
         visible = (kpos[None, :] <= qpos[:, None]) & (kpos[None, :] < nk)
         if HAS_MASK:
@@ -84,14 +97,31 @@ def _fixed_attention(
         rescale = tl.exp(maximum - newmax)
         p = tl.exp(score - newmax[:, None])
         acc = acc * rescale[:, None] + tl.dot(p.to(tl.bfloat16), v)
-        denom = denom * rescale + tl.sum(p, 1)
+        if WIDE_SUM:
+            block_sum = tl.sum(p.to(tl.float64), 1).to(tl.float32)
+        else:
+            block_sum = tl.sum(p, 1)
+        denom = denom * rescale + block_sum
         maximum = newmax
     if HAS_MASK:
         denom = tl.where(denom == 0, 1.0, denom)
-    tl.store(OUT + head * soh + (qpos[:, None] - cached) * sot + d[None, :], acc / denom[:, None], mask=active[:, None])
+    tl.store(
+        OUT + head * soh + (qpos[:, None] - cached) * sot + d[None, :],
+        acc / denom[:, None],
+        mask=active[:, None],
+    )
 
 
-def fixed_causal(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, enable_gqa=False):
+def fixed_causal(
+    q,
+    k,
+    v,
+    attn_mask=None,
+    dropout_p=0.0,
+    is_causal=False,
+    scale=None,
+    enable_gqa=False,
+):
     if torch.is_grad_enabled() and any(t.requires_grad for t in (q, k, v)):
         raise ValueError("Inference only")
     b, h, nq, d = q.shape
@@ -123,7 +153,7 @@ def fixed_causal(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False, scale=
     return fixed_forward(q, k, v, scale)
 
 
-def fixed_forward(q, k, v, scale=None, visibility=None):
+def fixed_forward(q, k, v, scale=None, visibility=None, wide_sum=False):
     """Shared launch after the caller has validated its attention contract."""
     _, h, nq, d = q.shape
     nk = k.shape[2]
@@ -150,6 +180,7 @@ def fixed_forward(q, k, v, scale=None, visibility=None):
         d,
         bm,
         bn,
+        wide_sum,
         num_warps=4,
         num_stages=2,
     )
@@ -168,7 +199,12 @@ def compare(a, b):
         if not math.isfinite(delta):
             raise ValueError("Non-finite output")
         maximum = max(maximum, delta)
-    return dict(positions=len(a), unequal_logits=diffs, top1_changes=flips, max_abs_delta=maximum)
+    return dict(
+        positions=len(a),
+        unequal_logits=diffs,
+        top1_changes=flips,
+        max_abs_delta=maximum,
+    )
 
 
 @torch.inference_mode()
@@ -184,7 +220,12 @@ def run(output):
         raise ValueError("Source text too short")
     tokens = torch.tensor([ids], device="cuda")
     model = (
-        AutoModelForCausalLM.from_pretrained(location, dtype=torch.bfloat16, attn_implementation="sdpa", local_files_only=True)
+        AutoModelForCausalLM.from_pretrained(
+            location,
+            dtype=torch.bfloat16,
+            attn_implementation="sdpa",
+            local_files_only=True,
+        )
         .eval()
         .requires_grad_(False)
         .cuda()
@@ -200,7 +241,11 @@ def run(output):
         gpu=torch.cuda.get_device_name(),
         comparisons=[],
     )
-    from batch_invariant_ops import disable_batch_invariant_mode, enable_batch_invariant_mode, is_batch_invariant_mode_enabled
+    from batch_invariant_ops import (
+        disable_batch_invariant_mode,
+        enable_batch_invariant_mode,
+        is_batch_invariant_mode_enabled,
+    )
 
     already_enabled = is_batch_invariant_mode_enabled()
     if not already_enabled:
@@ -225,9 +270,18 @@ def run(output):
                 report.setdefault("full_vs_sdpa", {})[mode] = cross
                 for s in cfg["splits"]:
                     first = model(input_ids=tokens[:, :s], use_cache=True)
-                    second = model(input_ids=tokens[:, s:], past_key_values=first.past_key_values, use_cache=True)
+                    second = model(
+                        input_ids=tokens[:, s:],
+                        past_key_values=first.past_key_values,
+                        use_cache=True,
+                    )
                     delta = compare(second.logits[0], full[s:])
-                    entry = dict(mode=mode, split=s, suffix=delta, prefix=compare(first.logits[0], full[:s]))
+                    entry = dict(
+                        mode=mode,
+                        split=s,
+                        suffix=delta,
+                        prefix=compare(first.logits[0], full[:s]),
+                    )
                     print(entry, flush=True)
                     report["comparisons"].append(entry)
                     entry["first_attention_unequal_elements"] = int((torch.cat(captured) != first_layer_full).sum())
@@ -238,7 +292,11 @@ def run(output):
                 cache = model(input_ids=tokens[:, :start], use_cache=True, logits_to_keep=1).past_key_values
                 decoded = []
                 for i in range(start, len(ids)):
-                    step = model(input_ids=tokens[:, i : i + 1], past_key_values=cache, use_cache=True)
+                    step = model(
+                        input_ids=tokens[:, i : i + 1],
+                        past_key_values=cache,
+                        use_cache=True,
+                    )
                     cache = step.past_key_values
                     decoded.append(step.logits[0])
                 report.setdefault("one_token_steps", {})[mode] = compare(torch.cat(decoded), full[start:])
