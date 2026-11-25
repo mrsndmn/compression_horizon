@@ -98,13 +98,26 @@ Those differences were within run-to-run variation. The benchmark source
 is in the run directory under `softmax_step_benchmark/`. Individual block
 timings are in `softmax_sum_training_step_timing.json`.
 
+The cached replay entry point is `python -m scripts.probe_sps_kv_replay`.
+With the FP64 sum, it compared full, growing uncached, and incremental cached
+forwards on the same target histories. All 315,657,600 vocabulary logits
+matched across the three paths at 6,275 positions. Blind decoding with and
+without cache produced identical token sequences on all 48 saved SPS vectors.
+Both recovered 38 target texts exactly, including the three prior failures.
+The other ten had 12 incorrect teacher-forced top-1 decisions under the wider
+sum. The original FP32 training backend still reproduced every target on
+full teacher-forced replay. Per-text results are in `sps_kv_replay.json`
+and `sps_kv_full_kernel_comparison.json` in the run directory.
+
 ## Conclusions
 
 On this paired cohort fixed-order cramming improved exact blind recovery in
 both models. Standard recovered every selected prefix; SPS retained three
 counterexamples to a general reconstruction guarantee. The wider softmax
-sum resolved all three observed SPS failures on A100. Its replay accuracy
-on the rest of the cohort and its full-job cost remain unmeasured.
+sum resolved the three original SPS failures on A100 and changed the full-pass
+predictions for ten other archived vectors. Every vector that still passed
+full teacher-forced replay under the wider sum recovered its complete target
+with KV caching. Training new vectors with the wider sum remains untested.
 
 ## Changelog
 
@@ -112,3 +125,4 @@ on the rest of the cohort and its full-job cost remain unmeasured.
 - 2026-11-24. Audit all 96 selected prefixes and reproduce the three SPS greedy failures.
 - 2026-11-24. Isolate the softmax row reduction and verify blind recovery on the three saved failures.
 - 2026-11-24. Compare historical job and training-step durations and time the FP64 sum on matched steps.
+- 2026-11-25. Compare blind and teacher-history cached replay on the entire saved SPS cohort.
