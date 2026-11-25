@@ -38,7 +38,7 @@ def attention_visibility(attention_mask, *, sps=False, window_size=0, document_i
         allowed = allowed & ((k % 2 == 0) | (q // 2 - k // 2 <= window_size))
     allowed = allowed[None, None] & valid[:, None, None, :]
     if document_ids is not None:
-        allowed = allowed & (document_ids[:, None, :, None] == document_ids[:, None, None, :])
+        allowed = allowed & (document_ids[:, None, query_start:, None] == document_ids[:, None, None, :])
     return allowed
 
 

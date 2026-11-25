@@ -206,3 +206,13 @@ def test_cached_chunks_preserve_positions_and_visibility(sps, window):
         assert len(past) == args["n_layer"]
         assert all(k.shape == v.shape and k.shape[2] == end * (2 if sps else 1) for k, v in past)
         torch.testing.assert_close(out.logits, full[:, start:end], atol=1e-5, rtol=1e-5)
+
+
+@pytest.mark.parametrize("sps", [False, True])
+def test_document_visibility_of_suffix_matches_full_mask(sps):
+    mask = torch.ones(1, 3)
+    docs = torch.tensor([[0, 0, 1]])
+    full = attention_visibility(mask, document_ids=docs, sps=sps)
+    for start in range(full.shape[-1]):
+        actual = attention_visibility(mask, document_ids=docs, sps=sps, query_start=start)
+        assert torch.equal(actual, full[:, :, start:])
