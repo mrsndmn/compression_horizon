@@ -221,7 +221,7 @@ def train(exp, output, smoke=False):
                     uncached_exact=result["generated"]["uncached"] == target,
                     replay=result,
                     teacher_replay_correct_tokens=result["teacher_correct"],
-                    unequal_logits=result["comparisons"]["cache_vs_full"]["unequal_logits"],
+                    unequal_logits=result["comparisons"]["growing_vs_full"]["unequal_logits"],
                 )
             else:
                 sample = check_sample(model, tokenizer, tokens, memory, **forward_kwargs)
@@ -282,7 +282,10 @@ def summarize(root=ROOT, configs=experiment_configs):
                 uncached_exact=sum(r["uncached_exact"] for r in rows),
                 identical_blind_sequences=sum(r["generated_ids"] == r["replay"]["generated"]["uncached"] for r in rows),
                 scored_positions=sum(len(r["target_ids"]) for r in rows),
-                cache_vs_full_unequal_logits=sum(r["unequal_logits"] for r in rows),
+                cache_vs_full_unequal_logits=sum(r["replay"]["comparisons"]["cache_vs_full"]["unequal_logits"] for r in rows),
+                cache_vs_growing_unequal_logits=sum(
+                    r["replay"]["comparisons"]["cache_vs_growing"]["unequal_logits"] for r in rows
+                ),
             )
         jobs.write_json(root / (family + "_summary.json"), summary)
         print(family, summary)
