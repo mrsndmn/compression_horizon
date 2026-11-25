@@ -14,9 +14,9 @@ from compression_horizon.models.sps_causal_lm import load_sps_checkpoint
 @torch.inference_mode()
 def replay(model, tokenizer, target, vector):
     ids = torch.tensor([target], device=model.device)
-    memory = fixed_bos(model, 1, tokenizer.bos_token_id)
+    memory = fixed_bos(model, 1, tokenizer.bos_token_id) if model.config.sps else vector
     inputs = torch.cat((memory, model.get_input_embeddings()(ids)), dim=1)
-    kwargs = {"predict_embeddings": vector}
+    kwargs = {"predict_embeddings": vector} if model.config.sps else {}
     full = model(inputs_embeds=inputs, **kwargs).logits
     comparisons = {
         name: dict(unequal_logits=0, top1_changes=0, max_abs=0.0)

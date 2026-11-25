@@ -57,6 +57,10 @@ experiment_configs = [
 wide_experiment_configs = [dict(exp, wide_sum=True) for exp in experiment_configs if exp["family"] == "sps"]
 SUITES = {
     "original": (ROOT, experiment_configs),
+    "wide_standard": (
+        jobs.ROOT / "standard_wide_cramming_v1",
+        [dict(exp, wide_sum=True) for exp in experiment_configs if exp["family"] == "standard"],
+    ),
     "wide": (jobs.ROOT / "sps_wide_cramming_v1", wide_experiment_configs),
 }
 
@@ -311,7 +315,7 @@ if __name__ == "__main__":
             jobs.submit(
                 dry=opts.phase == "dry",
                 entrypoint="scripts/run_native_fixed_cramming.py",
-                job_kind=("wide_" if opts.suite == "wide" else "fixed_") + exp["name"],
+                job_kind=("wide_" if exp.get("wide_sum") else "fixed_") + exp["name"],
                 probe_args=("--experiment", exp["name"], "--suite", opts.suite),
                 snapshot_commit=commit,
             )
