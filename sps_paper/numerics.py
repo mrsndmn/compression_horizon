@@ -55,6 +55,9 @@ def render():
         )
     table("numerics_length", ["Length", "Flips", "MAE", "Top-3", "Top-5", "Top-10", "Step", "Split", "Split vs. 32k"], rows)
     fixed = data["fixed"]
+    cfg = fixed["config"]
+    if (cfg["length"], cfg["splits"], cfg["decode_steps"]) != (8192, [64, 65, 8191], 32):
+        raise ValueError("Attention probe dimensions differ from the published comparisons")
     rows = []
     for mode, name in [("sdpa", "Default SDPA"), ("math", "Math SDPA"), ("fixed", "Fixed tiles")]:
         splits = {r["split"]: r["suffix"] for r in fixed["comparisons"] if r["mode"] == mode}

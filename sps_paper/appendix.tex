@@ -265,7 +265,7 @@ All three arms ran on an A100 using PyTorch 2.8.0 and Triton 3.4.0.
 \end{table*}
 
 \paragraph{Native SPS cramming.}
-Using fixed tiles with an FP32 softmax row sum improved blind recovery from 38/48 to 45/48 texts for SPS and from 44/48 to 48/48 for Standard, at each run's own selected horizon.
+The combined training backend used the Thinking Machines operators, fixed-tile attention with an FP32 row sum, and an analytical attention backward pass. Relative to the stock backend, exact blind recovery increased from 38/48 to 45/48 texts for SPS and from 44/48 to 48/48 for Standard, at each run's own selected horizon.
 For the three remaining SPS failures, a change in mask-stride alignment changed how Triton grouped the FP32 additions in the softmax denominator.
 At the first affected layer, the attention numerators agreed on every shared element.
 Widening just the per-block sum to FP64 and casting it back to FP32 recovered these three archived vectors.
