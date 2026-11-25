@@ -273,3 +273,14 @@ Across all 48 archived SPS vectors, this change also moved ten other vectors acr
 With the wider sum, full, growing and cached evaluation agreed on all 315,657,600 logits at 6,275 target positions. All 38 vectors with exact teacher-forced replay under that arithmetic recovered their targets in blind cached decoding.
 The weights remained BF16 throughout.
 On the original and fixed-tile FP32-sum training runs, mean wall time per logged optimization step rose from 29.76 to 47.74 ms for Standard and from 29.79 to 49.75 ms for SPS. These timings include the training loop and the attention backward pass.
+
+\paragraph{Training and decoding with the same row sum.}
+We repeated progressive cramming from the original per-text initializations with the FP64 softmax row sum active from the first optimization step. Standard learned an ordinary memory embedding and SPS learned a shared prediction embedding. For each text we reloaded the saved vector for the deepest converged stage and generated blindly, first by recomputing the growing prefix and then by updating a KV cache one token at a time.
+Both models recovered all 48 selected prefixes in both modes (\cref{tab:numerics-native-replay}). The targets comprised 2,578 tokens for Standard and 6,313 for SPS. On the true token histories, the two decoding paths also reproduced every vocabulary logit from the full teacher-forced pass. This experiment measures recovery at each model's own converged horizon on these texts, with batch size one on A100.
+
+\begin{table*}[htbp]
+ \centering\small
+ \input{tables/numerics_native_replay}
+ \caption{Fresh cramming with a matched FP64 softmax row sum. Mean horizon is measured in target tokens per text. Teacher, Greedy, and Greedy + KV count texts with exact reconstruction of the entire selected prefix. The last column compares cached and full-pass logits on identical token histories.}
+ \label{tab:numerics-native-replay}
+\end{table*}

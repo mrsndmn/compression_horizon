@@ -117,7 +117,7 @@ counterexamples to a general reconstruction guarantee. The wider softmax
 sum resolved the three original SPS failures on A100 and changed the full-pass
 predictions for ten other archived vectors. Every vector that still passed
 full teacher-forced replay under the wider sum recovered its complete target
-with KV caching. Training new vectors with the wider sum remains untested.
+with KV caching. Fresh training results for both families are reported in [the matched wide-sum experiment](sps_clean_wide_cramming.md).
 
 ## Changelog
 
