@@ -10,7 +10,7 @@ Use the wide (SPS) and wide_standard suites in `scripts.run_native_fixed_crammin
 
 ## Results
 
-Pending cohort validation.
+All 48 Standard vectors met the convergence criterion and survived full teacher-forced replay after serialization. Both blind decoders recovered every selected prefix, spanning 2,578 target tokens in total (53.71 per text). Full, growing and cached forwards agreed on all 129,683,712 vocabulary logits scored on identical histories. The per-text counts are versioned in `sps_paper/data/standard_wide_cache.csv`. The matched SPS cohort is pending.
 
 ## Conclusions
 
@@ -20,3 +20,4 @@ Compare the selected horizon, full teacher-forced exact recovery, blind cached a
 
 - 2026-11-25. Register fresh training and matched cached replay.
 - 2026-11-25. Add the matched ordinary-memory Standard arm for the appendix comparison.
+- 2026-11-25. Audit all four completed Standard shards against serialized targets and blind outputs.
