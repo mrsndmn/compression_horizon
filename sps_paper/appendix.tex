@@ -226,3 +226,50 @@ Diagnostic accounting treats one scalar-loss backward as one vector--Jacobian pr
 Equal derivative budgets are not equal wall-clock budgets.
 Squared-margin Adam reaches all four FP32 solutions in 20--55 gradients, but only three retain both exact criteria in BF16.
 No result here is a rescue attempt at the final shared-prediction frontier.
+
+\section{Numerical stability across prefix lengths and cached decoding}
+\label{app:numerics}
+
+Causal masking makes the next-token distribution a function of the preceding tokens.
+In floating-point arithmetic, evaluating those tokens in a longer tensor can change the order of a reduction.
+A change in the winning logit at one position is sufficient for blind greedy replay to depart from the target.
+We therefore measure two quantities separately: the number of unequal vocabulary logits on identical token histories, and the number of positions at which the highest-scoring token changes.
+All comparisons below use batch size one. Teacher-forced comparisons always feed the same tokens to both paths.
+
+\paragraph{Prefix length and cache boundaries.}
+We evaluated the frozen BF16 Qwen3-1.7B-Base model on a single PG-19 passage of 32,768 tokens using PyTorch SDPA.
+For a prefix of length $L$, we compared its first $L$ output positions with those same positions in the longer pass.
+At $L=2{,}048$, the winner changed at 44 positions. At $L=8{,}192$ the shared logits agreed throughout, yet splitting that same 8,192-token input into a 64-token prefill and a cached suffix changed 159 winners relative to a single pass (\cref{tab:numerics-length}).
+Thus agreement between two uncached lengths did not predict agreement across a cache boundary on the same text.
+
+\begin{table*}[htbp]
+ \centering\small
+ \input{tables/numerics_length}
+ \caption{Prefix and cache effects on Qwen with default SDPA. The first five metrics compare an uncached prefix with the corresponding rows of an uncached 32,768-token pass. Flips count changed winners, MAE averages absolute logit differences over positions and vocabulary, and top-$k$ reports mean set overlap as a percentage of $k$ (token ID breaks ties). The last three columns count changed winners. Step compares the last 32 positions decoded one at a time with the same-length uncached pass. Split compares all $L-64$ suffix positions following a 64-token prefill with the same-length uncached pass. Split vs.\ 32k compares the shared suffix rows of two cached passes with the same split point. The 32,768-token row includes the reference self-comparisons.}
+ \label{tab:numerics-length}
+\end{table*}
+
+\paragraph{Batch-invariant operations and attention.}
+On the first 8,192 tokens of the same passage, we enabled the \href{https://github.com/thinking-machines-lab/batch_invariant_ops/tree/f22b1fbe534b1fe045080f44a970a441caaf3c4f}{Thinking Machines batch-invariant PyTorch operations} \citep{he2025batchinvariance} in every arm and varied the attention implementation.
+For the split after 64 tokens, default SDPA changed 159 suffix winners with the stock operators and 144 with the batch-invariant operators. In the latter run, the first layer's shared queries, keys and values agreed exactly. Default SDPA changed 1,208,280 elements of that layer's suffix attention output.
+Our Triton forward anchors query tiles to absolute positions and visits key blocks in a fixed order across prefill and decode.
+It reproduced its own full-pass logits at each tested split and in the one-token test (\cref{tab:numerics-attention}).
+Changing the kernel also changed the full-pass reference: fixed tiles and default SDPA selected different winners at 145 of 8,192 positions.
+All three arms ran on an A100 using PyTorch 2.8.0 and Triton 3.4.0.
+
+\begin{table*}[htbp]
+ \centering\small
+ \input{tables/numerics_attention}
+ \caption{Unequal vocabulary logits / positions with a changed top-1 token. Each cell compares cached outputs with the same backend's full pass. The split columns score 8,128, 8,127 and one suffix position, respectively. The final column scores 32 successive single-token forwards on the true history. Each row includes the Thinking Machines operators.}
+ \label{tab:numerics-attention}
+\end{table*}
+
+\paragraph{Native SPS cramming.}
+Using fixed tiles with an FP32 softmax row sum improved blind recovery from 38/48 to 45/48 texts for SPS and from 44/48 to 48/48 for Standard, at each run's own selected horizon.
+For the three remaining SPS failures, a change in mask-stride alignment changed how Triton grouped the FP32 additions in the softmax denominator.
+At the first affected layer, the attention numerators agreed on every shared element.
+Widening just the per-block sum to FP64 and casting it back to FP32 recovered these three archived vectors.
+Across all 48 archived SPS vectors, this change also moved ten other vectors across a greedy decision boundary in the full teacher-forced pass.
+With the wider sum, full, growing and cached evaluation agreed on all 315,657,600 logits at 6,275 target positions. All 38 vectors with exact teacher-forced replay under that arithmetic recovered their targets in blind cached decoding.
+The weights remained BF16 throughout.
+On the original and fixed-tile FP32-sum training runs, mean wall time per logged optimization step rose from 29.76 to 47.74 ms for Standard and from 29.79 to 49.75 ms for SPS. These timings include the training loop and the attention backward pass.

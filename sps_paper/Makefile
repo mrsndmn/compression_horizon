@@ -8,6 +8,7 @@ all: pdf
 assets:
 	$(PYTHON) reproduce.py render
 	$(PYTHON) pretrained.py render
+	$(PYTHON) numerics.py
 
 check:
 	$(PYTHON) check.py

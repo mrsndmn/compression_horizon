@@ -187,3 +187,8 @@ It imports scientific settings from archived registries and relocates paths only
 existing shard outputs. CPU tests verify restored IDs/masks and archived-worker
 dispatch. A second full GPU training of all six cohorts is not claimed. This
 direct replay creates fresh worker outputs without inventing new MLspace job IDs.
+
+The numerical stability appendix uses `data/numerics.json`. Run
+`python sps_paper/numerics.py` to render the Qwen tables offline, or pass
+`--export-from artifacts/analysis` to refresh the snapshot from the length
+sweep and fixed-attention probe.
